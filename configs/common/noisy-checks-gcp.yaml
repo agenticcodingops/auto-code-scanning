@@ -1,0 +1,65 @@
+# ============================================================================
+# NOISY CHECKS EXCLUSION LIST - GCP
+# auto-code-scanning
+#
+# Curated list of Checkov and Trivy checks known to produce excessive false
+# positives or that are not applicable to most GCP Terraform configurations.
+#
+# These checks are NOT disabled by default. Teams can reference this file
+# when populating their skip-check section in .checkov.yaml.
+#
+# Review this list quarterly and remove entries as tools improve detection.
+#
+# Last reviewed: 2026-02-10
+# ============================================================================
+
+schema_version: "1.0"
+provider: "gcp"
+
+# ============================================================================
+# CHECKOV NOISY CHECKS
+# ============================================================================
+checkov:
+  - id: CKV_GCP_1
+    reason: "VM serial port - some operational workflows require serial console access for debugging"
+    false_positive_rate: "medium"
+    recommendation: "Disable serial port in production; allow in dev/staging"
+
+  - id: CKV_GCP_25
+    reason: "GKE default service account - development clusters often use default SA"
+    false_positive_rate: "high"
+    recommendation: "Create dedicated service accounts for production GKE clusters"
+
+  - id: CKV_GCP_13
+    reason: "GKE basic auth - already deprecated and disabled by default in newer GKE versions"
+    false_positive_rate: "high"
+    recommendation: "Only relevant for legacy GKE clusters on older versions"
+
+  - id: CKV_GCP_10
+    reason: "GKE client cert auth - already deprecated and disabled by default in newer versions"
+    false_positive_rate: "high"
+    recommendation: "Only relevant for legacy GKE clusters on older versions"
+
+  - id: CKV_GCP_19
+    reason: "KMS rotation period - some key types do not support automatic rotation"
+    false_positive_rate: "medium"
+    recommendation: "Enable for symmetric encryption keys; review for asymmetric keys"
+
+  - id: CKV_GCP_43
+    reason: "BigQuery CMEK encryption - Google-managed encryption is sufficient for many workloads"
+    false_positive_rate: "medium"
+    recommendation: "Enable for regulated workloads requiring customer-managed keys"
+
+# ============================================================================
+# TRIVY NOISY CHECKS
+# ============================================================================
+trivy:
+  - id: AVD-GCP-0031
+    reason: "Cloud SQL backup retention - some environments use external backup solutions"
+    false_positive_rate: "medium"
+    recommendation: "Enable for databases relying solely on Cloud SQL backups"
+
+  - id: AVD-GCP-0024
+    reason: "GCE metadata endpoint - modern GCP instances use metadata concealment by default"
+    false_positive_rate: "medium"
+    recommendation: "Verify metadata concealment is enabled on your instance templates"

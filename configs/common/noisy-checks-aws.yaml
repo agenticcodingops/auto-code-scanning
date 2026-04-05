@@ -1,0 +1,75 @@
+# ============================================================================
+# NOISY CHECKS EXCLUSION LIST - AWS
+# auto-code-scanning
+#
+# Curated list of Checkov and Trivy checks known to produce excessive false
+# positives or that are not applicable to most AWS Terraform configurations.
+#
+# These checks are NOT disabled by default. Teams can reference this file
+# when populating their skip-check section in .checkov.yaml.
+#
+# Review this list quarterly and remove entries as tools improve detection.
+#
+# Last reviewed: 2026-02-10
+# ============================================================================
+
+schema_version: "1.0"
+provider: "aws"
+
+# ============================================================================
+# CHECKOV NOISY CHECKS
+# ============================================================================
+checkov:
+  - id: CKV_AWS_144
+    reason: "Cross-region replication - often managed at organization level via AWS Config rules"
+    false_positive_rate: "high"
+    recommendation: "Enable if your compliance framework requires cross-region DR"
+
+  - id: CKV_AWS_145
+    reason: "S3 KMS encryption - SSE-S3 (AES-256) is sufficient for many workloads; KMS adds cost"
+    false_positive_rate: "medium"
+    recommendation: "Enable for regulated workloads requiring CMK encryption"
+
+  - id: CKV_AWS_18
+    reason: "S3 access logging - frequently managed centrally via AWS CloudTrail S3 data events"
+    false_positive_rate: "medium"
+    recommendation: "Enable if centralized logging is not configured"
+
+  - id: CKV_AWS_117
+    reason: "Lambda VPC - many Lambda functions legitimately run outside VPC for internet access"
+    false_positive_rate: "high"
+    recommendation: "Enable only for Lambda functions that access VPC resources"
+
+  - id: CKV_AWS_116
+    reason: "Lambda DLQ - not all Lambda functions require dead letter queues"
+    false_positive_rate: "medium"
+    recommendation: "Enable for async Lambda invocations in production"
+
+  - id: CKV_AWS_115
+    reason: "Lambda code signing - requires Code Signing Config setup; not applicable to all orgs"
+    false_positive_rate: "high"
+    recommendation: "Enable if your org has code signing infrastructure"
+
+  - id: CKV_AWS_8
+    reason: "EC2 detailed monitoring - adds cost; standard monitoring is sufficient for many workloads"
+    false_positive_rate: "medium"
+    recommendation: "Enable for production workloads requiring 1-minute metric granularity"
+
+  - id: CKV_AWS_157
+    reason: "RDS Multi-AZ - development environments typically use single-AZ"
+    false_positive_rate: "high"
+    recommendation: "Enable for production RDS instances only"
+
+# ============================================================================
+# TRIVY NOISY CHECKS
+# ============================================================================
+trivy:
+  - id: AVD-AWS-0057
+    reason: "S3 lifecycle rules - often managed at composition layer in root modules"
+    false_positive_rate: "medium"
+    recommendation: "Enable if lifecycle rules should be defined per-module"
+
+  - id: AVD-AWS-0132
+    reason: "CloudWatch log group retention - some orgs use external log management"
+    false_positive_rate: "medium"
+    recommendation: "Enable if CloudWatch is primary log destination"

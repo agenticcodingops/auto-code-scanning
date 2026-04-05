@@ -1,0 +1,45 @@
+# AI tool configuration - do not commit
+CLAUDE.md
+.claude/
+.kiro/
+.specify/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+.venv/
+venv/
+*.egg
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# Local scanning artifacts (generated at runtime in consuming repos)
+.scanning/
+.scan-baseline/
+.scan-results/
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+nul
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Test artifacts
+coverage/
+.pytest_cache/
+htmlcov/
+*.cover

@@ -1,0 +1,50 @@
+# ============================================================================
+# POLICY OVERLAY - GCP
+# auto-code-scanning
+#
+# Organization-specific policy rules separated from universal security checks.
+# Consuming repos SHOULD replace this file with their own organization's
+# policy requirements.
+#
+# This file is copied to .scanning/configs/policy-overlay.yaml during setup.
+# ============================================================================
+
+schema_version: "1.0"
+organization: "your-organization"
+
+# ============================================================================
+# LABELING RULES
+# Define required labels and format validation for GCP resources
+# (GCP uses "labels" instead of "tags")
+# ============================================================================
+tagging_rules:
+  required_tags:
+    - "environment"
+    - "owner"
+    - "cost-center"
+    - "project"
+    - "managed-by"
+  tag_format:
+    environment: "^(dev|staging|prod|sandbox)$"
+    managed-by: "^(terraform|manual)$"
+
+# ============================================================================
+# NAMING CONVENTIONS
+# Define resource naming standards per GCP naming best practices
+# ============================================================================
+naming_conventions:
+  resource_prefix: ""
+  enforce: true
+  patterns:
+    project: "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+    gcs_bucket: "^[a-z0-9][a-z0-9._-]*[a-z0-9]$"
+    compute_instance: "^[a-z][a-z0-9-]*$"
+    vpc_network: "^[a-z][a-z0-9-]*$"
+
+# ============================================================================
+# CUSTOM CHECKS
+# Organization-specific Checkov custom policies (future use)
+# ============================================================================
+custom_checks: []
+  # - name: "custom-encryption-check"
+  #   path: ".github/policies/checkov/custom-encryption.py"

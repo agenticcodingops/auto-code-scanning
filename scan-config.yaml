@@ -1,0 +1,317 @@
+# ============================================================================
+# MULTI-LANGUAGE SCANNING FRAMEWORK CONFIGURATION
+# azure-wordpress
+#
+# This file defines the scanning framework configuration for all supported
+# languages. Each language can be independently enabled/disabled.
+#
+# Usage:
+#   - Enable languages by setting enabled: true
+#   - Configure tool-specific settings in the tools section
+#   - Reference this file from scanning scripts and CI/CD
+#
+# ============================================================================
+
+# Schema version for migration compatibility
+schema_version: "1.0"
+
+# ============================================================================
+# GLOBAL SETTINGS
+# ============================================================================
+global:
+  # Output directory for all scan results
+  results_dir: ".scan-results"
+
+  # Severity levels (in order of priority)
+  severity_levels:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+    - LOW
+
+  # Default blocking severities (blocks commit/merge)
+  blocking_severities:
+    - CRITICAL
+    - HIGH
+
+  # Performance targets
+  performance:
+    pre_commit_max_seconds: 10
+    pre_push_max_seconds: 60
+    per_hook_max_seconds: 5
+
+  # Paths to exclude from all scans
+  exclude_paths:
+    - .git
+    - .terraform
+    - .scan-results
+    - node_modules
+    - __pycache__
+    - "*.tfstate*"
+
+# ============================================================================
+# LANGUAGE CONFIGURATIONS
+# ============================================================================
+languages:
+  # --------------------------------------------------------------------------
+  # TERRAFORM (Infrastructure as Code)
+  # --------------------------------------------------------------------------
+  terraform:
+    enabled: true
+    description: "Terraform infrastructure-as-code scanning"
+    file_patterns:
+      - "**/*.tf"
+      - "**/*.tfvars"
+
+    tools:
+      trivy:
+        enabled: true
+        version: ">=0.50.0"
+        config_file: ".trivyignore"
+        args:
+          - "--severity=CRITICAL,HIGH"
+          - "--exit-code=1"
+          - "--skip-dirs=.terraform"
+        stage: pre-commit  # Quick CRITICAL scan
+        full_scan_stage: pre-push  # Full scan with MEDIUM
+
+      checkov:
+        enabled: true
+        version: ">=3.0.0"
+        config_file: ".checkov.yaml"
+        args:
+          - "--framework=terraform"
+          - "--quiet"
+          - "--compact"
+        stage: pre-push  # Slow, run at push
+
+      tflint:
+        enabled: true
+        version: ">=0.50.0"
+        config_file: ".tflint.hcl"
+        args:
+          - "--config=.tflint.hcl"
+        stage: pre-commit
+
+      terraform_fmt:
+        enabled: true
+        args:
+          - "-recursive"
+        stage: pre-commit
+
+      terraform_validate:
+        enabled: true
+        stage: pre-commit
+
+  # --------------------------------------------------------------------------
+  # POWERSHELL (Scripts)
+  # --------------------------------------------------------------------------
+  powershell:
+    enabled: false  # Enable when ready
+    description: "PowerShell script scanning"
+    file_patterns:
+      - "**/*.ps1"
+      - "**/*.psm1"
+      - "**/*.psd1"
+
+    tools:
+      psscriptanalyzer:
+        enabled: true
+        version: ">=1.21.0"
+        config_file: "PSScriptAnalyzerSettings.psd1"
+        args:
+          - "-Recurse"
+          - "-EnableExit"
+        stage: pre-commit
+        security_rules:
+          - PSAvoidUsingPlainTextForPassword
+          - PSAvoidUsingConvertToSecureStringWithPlainText
+          - PSAvoidUsingUserNameAndPasswordParams
+          - PSAvoidUsingInvokeExpression
+          - PSUsePSCredentialType
+
+  # --------------------------------------------------------------------------
+  # SHELL/BASH (Scripts)
+  # --------------------------------------------------------------------------
+  shell:
+    enabled: false  # Enable when ready
+    description: "Shell and Bash script scanning"
+    file_patterns:
+      - "**/*.sh"
+      - "**/*.bash"
+
+    tools:
+      shellcheck:
+        enabled: true
+        version: ">=0.9.0"
+        config_file: ".shellcheckrc"
+        args:
+          - "--severity=warning"
+          - "--format=gcc"
+        stage: pre-commit
+
+      shfmt:
+        enabled: true
+        version: ">=3.7.0"
+        args:
+          - "-i"
+          - "2"  # 2-space indent
+          - "-ci"  # Case indent
+          - "-d"  # Diff mode (check only)
+        stage: pre-commit
+
+  # --------------------------------------------------------------------------
+  # DOCKER (Containers)
+  # --------------------------------------------------------------------------
+  docker:
+    enabled: false  # Enable when ready
+    description: "Dockerfile and container image scanning"
+    file_patterns:
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+      - "**/*.dockerfile"
+
+    tools:
+      hadolint:
+        enabled: true
+        version: ">=2.12.0"
+        config_file: ".hadolint.yaml"
+        args:
+          - "--failure-threshold=warning"
+        stage: pre-commit
+
+      trivy_image:
+        enabled: true
+        args:
+          - "--severity=CRITICAL,HIGH"
+          - "--exit-code=1"
+        stage: pre-push  # Slow, run at push
+
+  # --------------------------------------------------------------------------
+  # PYTHON (Scripts and Applications)
+  # --------------------------------------------------------------------------
+  python:
+    enabled: false  # Enable when ready
+    description: "Python security and quality scanning"
+    file_patterns:
+      - "**/*.py"
+
+    tools:
+      bandit:
+        enabled: true
+        version: ">=1.7.0"
+        config_file: "pyproject.toml"
+        args:
+          - "-r"
+          - "-ll"  # Report medium and higher
+        stage: pre-commit
+
+      pylint:
+        enabled: false  # Optional
+        args:
+          - "--errors-only"
+        stage: pre-commit
+
+      black:
+        enabled: false  # Optional formatter
+        args:
+          - "--check"
+          - "--diff"
+        stage: pre-commit
+
+  # --------------------------------------------------------------------------
+  # KUBERNETES (Manifests)
+  # --------------------------------------------------------------------------
+  kubernetes:
+    enabled: false  # Enable when ready
+    description: "Kubernetes manifest scanning"
+    file_patterns:
+      - "**/*.yaml"
+      - "**/*.yml"
+    # Exclude non-k8s YAML
+    exclude_patterns:
+      - ".pre-commit-config.yaml"
+      - ".github/**"
+      - "scan-config.yaml"
+
+    tools:
+      kubeconform:
+        enabled: true
+        version: ">=0.6.0"
+        args:
+          - "-strict"
+          - "-summary"
+        stage: pre-commit
+
+      kube_linter:
+        enabled: true
+        version: ">=0.6.0"
+        args:
+          - "lint"
+        stage: pre-commit
+
+      trivy_k8s:
+        enabled: true
+        args:
+          - "--severity=CRITICAL,HIGH"
+        stage: pre-push
+
+# ============================================================================
+# CI/CD INTEGRATION
+# ============================================================================
+ci:
+  # GitHub Actions workflow file
+  workflow_file: ".github/workflows/security-scan.yml"
+
+  # Upload results to GitHub Security tab
+  sarif_upload: true
+
+  # Fail CI on these severities
+  fail_on:
+    - CRITICAL
+    - HIGH
+
+  # Required checks for branch protection
+  required_checks:
+    - trivy-scan
+    - checkov-scan
+    - tflint-scan
+
+# ============================================================================
+# REPORTING
+# ============================================================================
+reporting:
+  # Unified results format
+  format: json
+
+  # Generate SARIF for GitHub Security integration
+  sarif: true
+
+  # Historical data retention (days)
+  retention_days: 90
+
+  # Metrics collection
+  metrics:
+    enabled: true
+    targets:
+      bypass_rate_max: 5.0
+      hook_pass_rate_min: 80.0
+      ci_failure_reduction: 40.0
+
+# ============================================================================
+# SUPPRESSION SETTINGS
+# ============================================================================
+suppressions:
+  # Centralized suppression file
+  file: ".scan-suppressions.yaml"
+
+  # Maximum suppression duration (days)
+  max_duration_days: 180
+
+  # Require approval for these severities
+  require_approval:
+    - CRITICAL
+    - HIGH
+
+  # Review frequency (days)
+  review_frequency_days: 90

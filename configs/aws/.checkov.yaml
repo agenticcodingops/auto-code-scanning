@@ -1,0 +1,64 @@
+# ============================================================================
+# CHECKOV CONFIGURATION - AWS
+# auto-code-scanning
+#
+# BLOCKLIST APPROACH: All checks run by default. Only exclusions are listed.
+# New Checkov checks auto-activate on tool update.
+#
+# Checkov validates Terraform against:
+# - AWS CIS Foundations Benchmark
+# - Security best practices
+# - Compliance requirements
+#
+# All checks run LOCALLY - no code is uploaded to Bridgecrew/Prisma Cloud.
+#
+# Manual run:
+#   checkov -d . --config-file .scanning/configs/.checkov.yaml
+#
+# Documentation:
+#   https://www.checkov.io/
+#   https://www.checkov.io/5.Policy%20Index/terraform.html
+# ============================================================================
+
+# Disable cloud integration (keep everything LOCAL)
+skip-download: true
+
+# Framework to scan
+framework:
+  - terraform
+
+# Output formats
+output:
+  - cli
+  - json
+
+# Output directory for results
+output-file-path: .scan-results
+
+# Analysis options
+deep-analysis: true
+download-external-modules: false
+evaluate-variables: true
+
+# ============================================================================
+# SKIP CHECKS (Blocklist)
+# All checks run by default. Only document and list checks that must be
+# excluded. Each exclusion MUST have a justification comment.
+# ============================================================================
+
+skip-check: []
+  # Add checks to exclude below:
+  # - CKV_AWS_XXX  # Reason: <justification>
+
+# ============================================================================
+# SKIP PATHS
+# Directories and files to exclude from scanning
+# ============================================================================
+
+skip-path:
+  - .terraform
+  - .git
+  - .scan-results
+  - examples
+  - tests
+  - "**/.terraform/**"

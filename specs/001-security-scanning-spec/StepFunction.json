@@ -1,0 +1,89 @@
+{
+  "Comment": "FDP Calculation State Machine",
+  "StartAt": "IdentifyFlightDuties",
+  "States": {
+    "Acclimatisation": {
+      "Next": "ReportTime",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-acclimatisation",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "CheckIsDiscretion": {
+      "Choices": [
+        {
+          "And": [
+            {
+              "IsPresent": true,
+              "Variable": "$.rosterDuties.isDiscretion"
+            },
+            {
+              "BooleanEquals": true,
+              "Variable": "$.rosterDuties.isDiscretion"
+            }
+          ],
+          "Next": "Discretion"
+        }
+      ],
+      "Default": "Acclimatisation",
+      "Type": "Choice"
+    },
+    "ComputeStandBy": {
+      "Next": "Discretion",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-standby",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "CrewExtension": {
+      "Next": "ComputeStandBy",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-crewext",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "Discretion": {
+      "Next": "PersistFDP",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-discretion",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "FlightRestExtension": {
+      "Next": "CrewExtension",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-flightrestext",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "IdentifyFlightDuties": {
+      "Next": "InitInputAndDefaults",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-identify-flight-duties",
+      "Type": "Task"
+    },
+    "InitInputAndDefaults": {
+      "Next": "CheckIsDiscretion",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-initialization",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "PersistFDP": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-write-process",
+      "End": true
+    },
+    "ReportTime": {
+      "Next": "RosteredExtension",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-reporttime",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "RosteredExtension": {
+      "Next": "SplitDutyExtension",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-rosterext",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    },
+    "SplitDutyExtension": {
+      "Next": "FlightRestExtension",
+      "Resource": "arn:aws:lambda:eu-west-1:976193265451:function:collab-ba-fdp-splitdutyext",
+      "ResultPath": "$.crewFDP",
+      "Type": "Task"
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# Strict Template - Full enforcement (Days 61-90)
+# All tools, all stages. Target: 90%+ adoption, <5% bypass rate.
+# Copy this to your repo as .pre-commit-config.yaml
+#
+# Adds to standard: terraform_docs, trivy-iac-full (pre-push),
+#                    checkov-strict (pre-push), validate-suppressions
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--unsafe"]
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.88.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_docs
+      - id: terraform_tflint
+        args:
+          - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
+
+  - repo: https://github.com/agenticcodingops/auto-code-scanning
+    rev: v1.0.0
+    hooks:
+      - id: trivy-secrets
+        stages: [pre-commit]
+      - id: gitleaks
+        stages: [pre-commit]
+      - id: trivy-iac-critical
+        stages: [pre-commit]
+      - id: trivy-iac-full
+        stages: [pre-push]
+      - id: checkov-strict
+        stages: [pre-push]
+      - id: validate-suppressions
+        stages: [pre-commit]
+      # ---------------------------------------------------------------
+      # OPTIONAL: Snyk IaC - requires Snyk license and SNYK_TOKEN
+      # To enable: npm install -g snyk && snyk auth
+      # Uncomment below. Hook exits 0 (fail-open) if not configured.
+      # ---------------------------------------------------------------
+      # - id: snyk-iac
+      #   stages: [pre-push]
+
+  # -----------------------------------------------------------------------
+  # OPTIONAL: Commitizen - Conventional commit message enforcement
+  # Uncomment below to enable. This enforces commit message format
+  # (feat:, fix:, etc.) which is a team workflow preference, not a
+  # security concern. Only enable if your team uses conventional commits.
+  # -----------------------------------------------------------------------
+  # - repo: https://github.com/commitizen-tools/commitizen
+  #   rev: v3.29.1
+  #   hooks:
+  #     - id: commitizen
+  #       stages: [commit-msg]

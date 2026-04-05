@@ -1,0 +1,49 @@
+# ============================================================================
+# POLICY OVERLAY - AZURE
+# auto-code-scanning
+#
+# Organization-specific policy rules separated from universal security checks.
+# Consuming repos SHOULD replace this file with their own organization's
+# policy requirements.
+#
+# This file is copied to .scanning/configs/policy-overlay.yaml during setup.
+# ============================================================================
+
+schema_version: "1.0"
+organization: "your-organization"
+
+# ============================================================================
+# TAGGING RULES
+# Define required tags and format validation for Azure resources
+# ============================================================================
+tagging_rules:
+  required_tags:
+    - "Environment"
+    - "Owner"
+    - "CostCenter"
+    - "Project"
+    - "ManagedBy"
+  tag_format:
+    Environment: "^(dev|staging|prod|sandbox)$"
+    ManagedBy: "^(terraform|manual)$"
+
+# ============================================================================
+# NAMING CONVENTIONS
+# Define resource naming standards per Azure naming best practices
+# ============================================================================
+naming_conventions:
+  resource_prefix: ""
+  enforce: true
+  patterns:
+    resource_group: "^rg-[a-z0-9-]+$"
+    storage_account: "^st[a-z0-9]{3,21}$"
+    virtual_network: "^vnet-[a-z0-9-]+$"
+    key_vault: "^kv-[a-z0-9-]+$"
+
+# ============================================================================
+# CUSTOM CHECKS
+# Organization-specific Checkov custom policies (future use)
+# ============================================================================
+custom_checks: []
+  # - name: "custom-encryption-check"
+  #   path: ".github/policies/checkov/custom-encryption.py"

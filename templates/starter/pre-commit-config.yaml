@@ -1,0 +1,26 @@
+# Starter Template - Minimal friction (Days 1-30)
+# Secrets + formatting only. Target: 3-5 advocate developers.
+# Copy this to your repo as .pre-commit-config.yaml
+#
+# Hooks: trailing-whitespace, end-of-file-fixer, check-yaml,
+#         detect-private-key, terraform_fmt, trivy-secrets
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: detect-private-key
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.88.0
+    hooks:
+      - id: terraform_fmt
+
+  - repo: https://github.com/agenticcodingops/auto-code-scanning
+    rev: v1.0.0
+    hooks:
+      - id: trivy-secrets
+        stages: [pre-commit]

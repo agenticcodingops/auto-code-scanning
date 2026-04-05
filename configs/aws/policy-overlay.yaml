@@ -1,0 +1,48 @@
+# ============================================================================
+# POLICY OVERLAY - AWS
+# auto-code-scanning
+#
+# Organization-specific policy rules separated from universal security checks.
+# Consuming repos SHOULD replace this file with their own organization's
+# policy requirements.
+#
+# This file is copied to .scanning/configs/policy-overlay.yaml during setup.
+# ============================================================================
+
+schema_version: "1.0"
+organization: "your-organization"
+
+# ============================================================================
+# TAGGING RULES
+# Define required tags and format validation for AWS resources
+# ============================================================================
+tagging_rules:
+  required_tags:
+    - "Environment"
+    - "Owner"
+    - "CostCenter"
+    - "Project"
+    - "ManagedBy"
+  tag_format:
+    Environment: "^(dev|staging|prod|sandbox)$"
+    ManagedBy: "^(terraform|manual)$"
+
+# ============================================================================
+# NAMING CONVENTIONS
+# Define resource naming standards
+# ============================================================================
+naming_conventions:
+  resource_prefix: ""
+  enforce: true
+  patterns:
+    s3_bucket: "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+    iam_role: "^[A-Za-z][A-Za-z0-9_+=,.@-]*$"
+    security_group: "^[a-z][a-z0-9-]*$"
+
+# ============================================================================
+# CUSTOM CHECKS
+# Organization-specific Checkov custom policies (future use)
+# ============================================================================
+custom_checks: []
+  # - name: "custom-encryption-check"
+  #   path: ".github/policies/checkov/custom-encryption.py"

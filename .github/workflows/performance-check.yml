@@ -1,0 +1,181 @@
+# ============================================================================
+# PERFORMANCE CHECK WORKFLOW
+# auto-code-scanning
+#
+# Runs timing tests for each hook against test fixtures.
+# Enforces per-hook 5-second threshold, 10-second total pre-commit,
+# and 60-second total pre-push.
+#
+# Trigger: PRs modifying hooks/, scripts/, or configs/
+# ============================================================================
+
+name: Performance Check
+
+on:
+  pull_request:
+    paths:
+      - "hooks/**"
+      - "scripts/**"
+      - "configs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance:
+    name: Hook Performance Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+          trivy --version
+
+      - name: Install Checkov
+        run: |
+          pip install checkov
+          checkov --version
+
+      - name: Install TFLint
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
+        with:
+          tflint_version: latest
+
+      - name: Initialize TFLint plugins
+        run: |
+          tflint --init --config=configs/aws/.tflint.hcl
+          tflint --init --config=configs/azure/.tflint.hcl
+          tflint --init --config=configs/gcp/.tflint.hcl
+
+      - name: Download Trivy DB
+        run: trivy image --download-db-only 2>/dev/null || true
+
+      - name: Time hooks against test fixtures
+        id: timing
+        run: |
+          THRESHOLD_MS=5000
+          TOTAL_PRE_COMMIT_THRESHOLD_MS=10000
+          TOTAL_PRE_PUSH_THRESHOLD_MS=60000
+          FAILED=false
+          TOTAL_PRE_COMMIT=0
+          TOTAL_PRE_PUSH=0
+
+          time_command() {
+            local name="$1"
+            local stage="$2"
+            shift 2
+            local start end elapsed
+            start=$(date +%s%N)
+            eval "$@" > /dev/null 2>&1 || true
+            end=$(date +%s%N)
+            elapsed=$(( (end - start) / 1000000 ))
+            echo "${name}: ${elapsed}ms (stage: ${stage})"
+
+            if [ "$stage" = "pre-commit" ]; then
+              TOTAL_PRE_COMMIT=$((TOTAL_PRE_COMMIT + elapsed))
+            else
+              TOTAL_PRE_PUSH=$((TOTAL_PRE_PUSH + elapsed))
+            fi
+
+            if [ $elapsed -gt $THRESHOLD_MS ]; then
+              echo "::error::${name} exceeded ${THRESHOLD_MS}ms threshold: ${elapsed}ms"
+              FAILED=true
+            fi
+          }
+
+          echo "## Performance Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Hook | Duration (ms) | Stage | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------------|-------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # trivy-iac-critical (pre-commit)
+          START=$(date +%s%N)
+          trivy config tests/fixtures/terraform-valid/ --severity CRITICAL --exit-code 1 --quiet --skip-check-update 2>/dev/null || true
+          END=$(date +%s%N)
+          ELAPSED=$(( (END - START) / 1000000 ))
+          TOTAL_PRE_COMMIT=$((TOTAL_PRE_COMMIT + ELAPSED))
+          STATUS="pass"
+          [ $ELAPSED -gt $THRESHOLD_MS ] && STATUS="FAIL" && FAILED=true
+          echo "| trivy-iac-critical | ${ELAPSED} | pre-commit | ${THRESHOLD_MS}ms | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "trivy-iac-critical: ${ELAPSED}ms"
+
+          # trivy-secrets (pre-commit)
+          START=$(date +%s%N)
+          trivy fs tests/fixtures/terraform-valid/ --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet 2>/dev/null || true
+          END=$(date +%s%N)
+          ELAPSED=$(( (END - START) / 1000000 ))
+          TOTAL_PRE_COMMIT=$((TOTAL_PRE_COMMIT + ELAPSED))
+          STATUS="pass"
+          [ $ELAPSED -gt $THRESHOLD_MS ] && STATUS="FAIL" && FAILED=true
+          echo "| trivy-secrets | ${ELAPSED} | pre-commit | ${THRESHOLD_MS}ms | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "trivy-secrets: ${ELAPSED}ms"
+
+          # trivy-iac-full (pre-push)
+          START=$(date +%s%N)
+          trivy config tests/fixtures/terraform-valid/ --severity CRITICAL,HIGH,MEDIUM --exit-code 1 --quiet --skip-check-update 2>/dev/null || true
+          END=$(date +%s%N)
+          ELAPSED=$(( (END - START) / 1000000 ))
+          TOTAL_PRE_PUSH=$((TOTAL_PRE_PUSH + ELAPSED))
+          STATUS="pass"
+          [ $ELAPSED -gt $THRESHOLD_MS ] && STATUS="FAIL" && FAILED=true
+          echo "| trivy-iac-full | ${ELAPSED} | pre-push | ${THRESHOLD_MS}ms | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "trivy-iac-full: ${ELAPSED}ms"
+
+          # checkov (pre-push)
+          START=$(date +%s%N)
+          checkov -d tests/fixtures/terraform-valid/ --config-file configs/aws/.checkov.yaml --quiet 2>/dev/null || true
+          END=$(date +%s%N)
+          ELAPSED=$(( (END - START) / 1000000 ))
+          TOTAL_PRE_PUSH=$((TOTAL_PRE_PUSH + ELAPSED))
+          STATUS="pass"
+          [ $ELAPSED -gt $THRESHOLD_MS ] && STATUS="FAIL" && FAILED=true
+          echo "| checkov | ${ELAPSED} | pre-push | ${THRESHOLD_MS}ms | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "checkov: ${ELAPSED}ms"
+
+          # tflint (pre-push)
+          START=$(date +%s%N)
+          tflint --config=configs/aws/.tflint.hcl --chdir=tests/fixtures/terraform-valid/ 2>/dev/null || true
+          END=$(date +%s%N)
+          ELAPSED=$(( (END - START) / 1000000 ))
+          TOTAL_PRE_PUSH=$((TOTAL_PRE_PUSH + ELAPSED))
+          STATUS="pass"
+          [ $ELAPSED -gt $THRESHOLD_MS ] && STATUS="FAIL" && FAILED=true
+          echo "| tflint | ${ELAPSED} | pre-push | ${THRESHOLD_MS}ms | ${STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "tflint: ${ELAPSED}ms"
+
+          # Totals
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Total | Duration (ms) | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          PRE_COMMIT_STATUS="pass"
+          [ $TOTAL_PRE_COMMIT -gt $TOTAL_PRE_COMMIT_THRESHOLD_MS ] && PRE_COMMIT_STATUS="FAIL" && FAILED=true
+          echo "| pre-commit total | ${TOTAL_PRE_COMMIT} | ${TOTAL_PRE_COMMIT_THRESHOLD_MS}ms | ${PRE_COMMIT_STATUS} |" >> $GITHUB_STEP_SUMMARY
+
+          PRE_PUSH_STATUS="pass"
+          [ $TOTAL_PRE_PUSH -gt $TOTAL_PRE_PUSH_THRESHOLD_MS ] && PRE_PUSH_STATUS="FAIL" && FAILED=true
+          echo "| pre-push total | ${TOTAL_PRE_PUSH} | ${TOTAL_PRE_PUSH_THRESHOLD_MS}ms | ${PRE_PUSH_STATUS} |" >> $GITHUB_STEP_SUMMARY
+
+          echo ""
+          echo "Pre-commit total: ${TOTAL_PRE_COMMIT}ms (threshold: ${TOTAL_PRE_COMMIT_THRESHOLD_MS}ms)"
+          echo "Pre-push total: ${TOTAL_PRE_PUSH}ms (threshold: ${TOTAL_PRE_PUSH_THRESHOLD_MS}ms)"
+
+          if [ "$FAILED" = "true" ]; then
+            echo "::error::Performance check failed - one or more hooks exceeded threshold"
+            exit 1
+          fi
+
+          echo "All hooks within performance thresholds"

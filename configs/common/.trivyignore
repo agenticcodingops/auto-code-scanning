@@ -1,0 +1,63 @@
+# ============================================================================
+# TRIVY IGNORE FILE
+# auto-code-scanning
+#
+# This file contains suppressions for Trivy security scanner findings.
+# All entries MUST have documented justifications.
+#
+# Trivy runs LOCALLY - no code is uploaded to external services.
+#
+# FORMATS:
+#   AVD-ID                           # Suppress by ID globally
+#   path/to/file AVD-ID              # Suppress by ID in specific file
+#   path/to/file:line AVD-ID         # Suppress by ID at specific line
+#
+# FINDING IDs:
+#   AVD-AWS-*                        # AWS misconfigurations
+#   AVD-GCP-*                        # GCP misconfigurations
+#   CVE-*                            # Known vulnerabilities
+#
+# Manual run:
+#   trivy config . --ignorefile .trivyignore
+#
+# Documentation:
+#   https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+# ============================================================================
+
+# ============================================================================
+# GLOBAL SUPPRESSIONS
+# These apply to all files in the repository
+# ============================================================================
+
+# Example: Suppress a specific check globally
+# AVD-AWS-0057  # Reason: S3 lifecycle rules managed at composition layer
+
+# ============================================================================
+# FILE-SPECIFIC SUPPRESSIONS
+# Format: path/to/file AVD-ID  # Reason
+# ============================================================================
+
+# Example: Suppress in specific module
+# terraform/modules/s3/main.tf AVD-AWS-0089  # Reason: Bucket policy handled separately
+
+# ============================================================================
+# LINE-SPECIFIC SUPPRESSIONS
+# Format: path/to/file:line AVD-ID  # Reason
+# ============================================================================
+
+# Example: Suppress at specific line
+# terraform/modules/vpc/main.tf:45 AVD-AWS-0101  # Reason: VPC flow logs in separate module
+
+# ============================================================================
+# NOTES
+# ============================================================================
+#
+# 1. Always document WHY a finding is being suppressed
+# 2. Review suppressions quarterly to see if they're still needed
+# 3. Prefer fixing issues over suppressing them
+# 4. For false positives, consider reporting to Trivy project
+#
+# To find finding IDs, run:
+#   trivy config . --severity CRITICAL,HIGH,MEDIUM --format json
+#
+# ============================================================================

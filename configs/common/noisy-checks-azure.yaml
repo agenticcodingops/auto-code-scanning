@@ -1,0 +1,65 @@
+# ============================================================================
+# NOISY CHECKS EXCLUSION LIST - AZURE
+# auto-code-scanning
+#
+# Curated list of Checkov and Trivy checks known to produce excessive false
+# positives or that are not applicable to most Azure Terraform configurations.
+#
+# These checks are NOT disabled by default. Teams can reference this file
+# when populating their skip-check section in .checkov.yaml.
+#
+# Review this list quarterly and remove entries as tools improve detection.
+#
+# Last reviewed: 2026-02-10
+# ============================================================================
+
+schema_version: "1.0"
+provider: "azure"
+
+# ============================================================================
+# CHECKOV NOISY CHECKS
+# ============================================================================
+checkov:
+  - id: CKV_AZURE_33
+    reason: "Storage Queue logging - duplicate of CKV_AZURE_3; triggers twice on same resource"
+    false_positive_rate: "high"
+    recommendation: "CKV_AZURE_3 provides the same coverage"
+
+  - id: CKV_AZURE_59
+    reason: "Storage Account public access - many legitimate use cases for public blob access (CDN, static sites)"
+    false_positive_rate: "medium"
+    recommendation: "Enable for storage accounts that should never serve public content"
+
+  - id: CKV_AZURE_190
+    reason: "Storage Account CMK encryption - platform-managed keys are sufficient for many workloads"
+    false_positive_rate: "medium"
+    recommendation: "Enable for regulated workloads requiring CMK encryption"
+
+  - id: CKV_AZURE_206
+    reason: "Storage Account local auth disabled - breaks many automation tools and SDKs"
+    false_positive_rate: "high"
+    recommendation: "Enable only after migrating all access to Azure AD authentication"
+
+  - id: CKV_AZURE_4
+    reason: "AKS Azure Policy - requires Azure Policy add-on; not all clusters need it"
+    false_positive_rate: "medium"
+    recommendation: "Enable for clusters in regulated environments"
+
+  - id: CKV_AZURE_115
+    reason: "AKS HTTP application routing - often needed during development"
+    false_positive_rate: "medium"
+    recommendation: "Disable HTTP routing in production only"
+
+# ============================================================================
+# TRIVY NOISY CHECKS
+# ============================================================================
+trivy:
+  - id: AVD-AZU-0049
+    reason: "App Service authentication - many apps handle auth at application layer"
+    false_positive_rate: "high"
+    recommendation: "Enable for App Services that should use platform-level auth"
+
+  - id: AVD-AZU-0016
+    reason: "SQL Server firewall all Azure services - legitimate for PaaS architectures"
+    false_positive_rate: "medium"
+    recommendation: "Tighten for production databases with specific service endpoints"

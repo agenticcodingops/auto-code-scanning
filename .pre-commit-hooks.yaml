@@ -1,0 +1,131 @@
+# .pre-commit-hooks.yaml
+# Hook definitions for auto-code-scanning
+# Consuming repos reference these via:
+#   repos:
+#     - repo: https://github.com/agenticcodingops/auto-code-scanning
+#       rev: v1.0.0
+#       hooks:
+#         - id: trivy-iac-critical
+
+# --------------------------------------------------------------------------
+# TRIVY HOOKS
+# --------------------------------------------------------------------------
+
+- id: trivy-iac-critical
+  name: "Trivy IaC (CRITICAL only)"
+  entry: hooks/dispatcher.sh trivy-iac-critical
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+- id: trivy-iac-full
+  name: "Trivy IaC (Full Scan)"
+  entry: hooks/dispatcher.sh trivy-iac-full
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+- id: trivy-secrets
+  name: "Trivy Secret Scanner"
+  entry: hooks/dispatcher.sh trivy-secrets
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# CHECKOV HOOKS
+# --------------------------------------------------------------------------
+
+- id: checkov
+  name: "Checkov Terraform Policies"
+  entry: hooks/dispatcher.sh checkov
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+- id: checkov-strict
+  name: "Checkov Terraform (Strict)"
+  entry: hooks/dispatcher.sh checkov-strict
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# VALIDATION HOOKS
+# --------------------------------------------------------------------------
+
+- id: validate-suppressions
+  name: "Validate Scan Suppressions"
+  entry: hooks/dispatcher.sh validate-suppressions
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# LINTING HOOKS
+# --------------------------------------------------------------------------
+
+- id: tflint
+  name: "TFLint Terraform Linter"
+  entry: hooks/dispatcher.sh tflint
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# SNYK HOOKS (OPTIONAL - requires Snyk license and SNYK_TOKEN)
+# --------------------------------------------------------------------------
+
+- id: snyk-iac
+  name: "Snyk IaC (Optional)"
+  entry: hooks/dispatcher.sh snyk-iac
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# SECRET DETECTION HOOKS
+# --------------------------------------------------------------------------
+
+- id: gitleaks
+  name: "Gitleaks Secret Scanner"
+  entry: hooks/dispatcher.sh gitleaks
+  language: script
+  files: ''
+  exclude: '(\.terraform/|node_modules/|\.git/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true

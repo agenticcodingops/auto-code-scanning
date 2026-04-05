@@ -1,0 +1,57 @@
+# GCP Full Template
+# Complete security scanning for GCP Terraform repositories.
+# Copy this to your repo as .pre-commit-config.yaml
+#
+# This template includes all hooks at the strict tier level,
+# configured specifically for GCP cloud provider.
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--unsafe"]
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.88.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_docs
+      - id: terraform_tflint
+        args:
+          - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
+
+  - repo: https://github.com/agenticcodingops/auto-code-scanning
+    rev: v1.0.0
+    hooks:
+      # Fast checks at pre-commit
+      - id: trivy-iac-critical
+        stages: [pre-commit]
+      - id: trivy-secrets
+        stages: [pre-commit]
+      - id: gitleaks
+        stages: [pre-commit]
+      - id: validate-suppressions
+        stages: [pre-commit]
+      # Full checks at pre-push
+      - id: trivy-iac-full
+        stages: [pre-push]
+      - id: checkov
+        stages: [pre-push]
+      - id: tflint
+        stages: [pre-push]
+      # ---------------------------------------------------------------
+      # OPTIONAL: Snyk IaC - requires Snyk license and SNYK_TOKEN
+      # To enable: npm install -g snyk && snyk auth
+      # Uncomment below. Hook exits 0 (fail-open) if not configured.
+      # ---------------------------------------------------------------
+      # - id: snyk-iac
+      #   stages: [pre-push]

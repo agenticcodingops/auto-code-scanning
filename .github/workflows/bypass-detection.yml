@@ -1,0 +1,106 @@
+# ============================================================================
+# BYPASS DETECTION WORKFLOW
+# auto-code-scanning
+#
+# Detects commits that bypassed pre-commit hooks using --no-verify.
+# Uses heuristic detection - CI re-scanning is the real enforcement gate.
+#
+# This workflow adds warning annotations but does NOT block the push.
+#
+# Target: <5% bypass rate
+# ============================================================================
+
+name: Bypass Detection
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  detect-bypass:
+    name: Detect Hook Bypass
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Check for bypass indicators
+        id: bypass-check
+        run: |
+          # Get the commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+
+          # Check for bypass indicators
+          BYPASS_DETECTED=false
+          BYPASS_REASON=""
+
+          # Check for common bypass patterns in commit message
+          if echo "$COMMIT_MSG" | grep -iE "(no-verify|skip-hook|bypass|urgent|hotfix|emergency)" > /dev/null; then
+            BYPASS_DETECTED=true
+            BYPASS_REASON="Commit message contains bypass keyword"
+          fi
+
+          # Check if commit lacks conventional commit format (may indicate --no-verify)
+          if ! echo "$COMMIT_MSG" | grep -E "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?:" > /dev/null; then
+            # Only flag if the repo uses conventional commits
+            if git log --oneline -20 | grep -E "^[a-f0-9]+ (feat|fix|docs|chore)(\(.+\))?:" > /dev/null; then
+              BYPASS_DETECTED=true
+              BYPASS_REASON="Non-conventional commit (commitizen hook may have been bypassed)"
+            fi
+          fi
+
+          echo "bypass_detected=$BYPASS_DETECTED" >> $GITHUB_OUTPUT
+          echo "bypass_reason=$BYPASS_REASON" >> $GITHUB_OUTPUT
+
+          if [ "$BYPASS_DETECTED" = "true" ]; then
+            echo "::warning::Potential hook bypass detected: $BYPASS_REASON"
+          fi
+
+      - name: Log bypass metrics
+        if: steps.bypass-check.outputs.bypass_detected == 'true'
+        run: |
+          # Create metrics JSON for future aggregation
+          cat << EOF > bypass-event.json
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "author": "${{ github.actor }}",
+            "branch": "${{ github.ref_name }}",
+            "reason": "${{ steps.bypass-check.outputs.bypass_reason }}",
+            "repository": "${{ github.repository }}"
+          }
+          EOF
+          cat bypass-event.json
+
+      - name: Calculate bypass rate
+        run: |
+          # Get recent commit count (last 100 commits)
+          TOTAL_COMMITS=$(git rev-list --count HEAD~100..HEAD 2>/dev/null || echo "100")
+
+          # Count commits that appear to have bypassed hooks
+          BYPASS_COUNT=$(git log --oneline -100 | grep -cvE "^[a-f0-9]+ (feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?:" || echo "0")
+
+          # Calculate rate
+          if [ "$TOTAL_COMMITS" -gt 0 ]; then
+            BYPASS_RATE=$(echo "scale=2; ($BYPASS_COUNT / $TOTAL_COMMITS) * 100" | bc)
+          else
+            BYPASS_RATE="0"
+          fi
+
+          echo "Bypass Rate Metrics:"
+          echo "  Total commits (last 100): $TOTAL_COMMITS"
+          echo "  Potential bypasses: $BYPASS_COUNT"
+          echo "  Bypass rate: ${BYPASS_RATE}%"
+          echo "  Target: <5%"
+
+          # Warn if bypass rate exceeds target
+          if [ "$(echo "$BYPASS_RATE > 5" | bc)" -eq 1 ]; then
+            echo "::warning::Bypass rate (${BYPASS_RATE}%) exceeds 5% target"
+          fi
