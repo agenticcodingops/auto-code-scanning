@@ -1,0 +1,20 @@
+# Local, deterministic Semgrep rules for the test suite.
+# Offline + version-independent so app-code hook tests don't depend on the exact
+# contents of the remote p/csharp & p/typescript registry packs. Production hooks
+# default to p/csharp / p/typescript; tests point SEMGREP_RULESET_* at this file.
+rules:
+  - id: planted-csharp-weak-hash-md5
+    languages: [csharp]
+    severity: ERROR
+    message: "Insecure hash algorithm MD5 (planted test finding)."
+    metadata:
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+    pattern: MD5.Create(...)
+
+  - id: planted-typescript-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "Use of eval() on dynamic input (planted test finding)."
+    metadata:
+      cwe: "CWE-95: Eval Injection"
+    pattern: eval(...)
