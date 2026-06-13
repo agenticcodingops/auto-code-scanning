@@ -1,0 +1,26 @@
+# Line-ending policy for the scan->fix platform.
+#
+# Shell scripts and hook entrypoints MUST be LF so they run under bash on
+# Unix/macOS and inside Linux CI runners (a CRLF shebang breaks execution).
+*.sh        text eol=lf
+*.bash      text eol=lf
+
+# PowerShell tolerates either; keep CRLF for Windows-native authoring.
+*.ps1       text eol=crlf
+
+# YAML/JSON/Markdown/Python: normalize to LF (CI parsers + cross-platform diffs).
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.py        text eol=lf
+
+# Lefthook / pre-commit configs are read by Go/Python tools on Linux → LF.
+lefthook.yml      text eol=lf
+.pre-commit-hooks.yaml text eol=lf
+
+# Treat common binaries as binary (no EOL munging).
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
