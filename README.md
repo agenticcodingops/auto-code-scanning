@@ -1,130 +1,145 @@
 # auto-code-scanning
 
-Reusable security scanning infrastructure for Terraform repositories. Supports AWS, Azure, and GCP.
-## Overview
+**A reusable, configurable scan→fix platform** for many repositories — optimised for
+friction-free **autonomous Claude Code** loops and public adoption. One config file
+(`scan-config.yaml`), two layers:
 
-This repository provides two layers of security scanning:
+- **LAYER A — Scanning** (always on): Terraform/IaC **and** application code (C#/.NET,
+  TypeScript/JS, SQL) via shared OS-detecting hooks and reusable CI workflows.
+- **LAYER B — Agentic fix-loop** (opt-in): a hardened, two-job workflow where an AI agent
+  proposes a minimal fix and a separate job re-verifies and pushes it — gated by a path
+  allowlist, a PR label, and SHA-pinned actions.
 
-1. **Shared pre-commit hooks** - Local developer experience via `.pre-commit-hooks.yaml`
-2. **Reusable GitHub Actions workflows** - CI/CD enforcement via `workflow_call`
+> Apache-2.0. Terraform scanning is fully preserved. **Pin consumers to `@v2.0.0`** (or a SHA) — never `@main`.
 
-## Quick Start (5 minutes)
+---
 
-### Option A: Setup Script (Recommended)
-
-```powershell
-# Download and run the setup script
-Invoke-WebRequest -Uri "https://github.com/agenticcodingops/auto-code-scanning/main/scripts/setup-scanning.ps1" -OutFile "setup-scanning.ps1"
-.\setup-scanning.ps1 -CloudProvider aws
-```
-
-### Option B: Manual Setup
+## Adopt in 5 minutes (scan + fix)
 
 ```powershell
-# 1. Copy starter config for your cloud provider
-Invoke-WebRequest -Uri "https://github.com/agenticcodingops/auto-code-scanning/main/templates/aws/pre-commit-config.yaml" -OutFile ".pre-commit-config.yaml"
-
-# 2. Download cloud-specific configs
-Invoke-WebRequest -Uri "https://github.com/agenticcodingops/auto-code-scanning/main/configs/aws/.tflint.hcl" -OutFile ".tflint.hcl"
-Invoke-WebRequest -Uri "https://github.com/agenticcodingops/auto-code-scanning/main/configs/aws/.checkov.yaml" -OutFile ".checkov.yaml"
-Invoke-WebRequest -Uri "https://github.com/agenticcodingops/auto-code-scanning/main/configs/common/.trivyignore" -OutFile ".trivyignore"
-
-# 3. Install pre-commit hooks
-pre-commit install
-pre-commit install --hook-type pre-push
+# From your repo root. Picks Lefthook (default), C#/TS scanning, and the fix-loop.
+path/to/auto-code-scanning/scripts/setup-scan-fix.ps1 `
+  -Languages csharp,typescript -Tier standard -EnableFixLoop
+```
+```bash
+# Cross-platform twin:
+python path/to/auto-code-scanning/scripts/setup-scan-fix.py \
+  --languages csharp,typescript --tier standard --enable-fix-loop
 ```
 
-### Option C: CI/CD Only
+One idempotent command: writes `scan-config.yaml` from a tier template, installs the
+local runner + the Claude in-session bundle + thin caller workflows, creates the
+`ai-autofix` / `needs-human-review` labels, **verifies** (never creates) `AUTOFIX_TOKEN`
+/ `ANTHROPIC_API_KEY`, and runs verify-scanning. Terraform-only? `-Languages terraform -CloudProvider aws`.
 
-Add to your `.github/workflows/security.yml`:
+See **[QUICK-START-5MIN](docs/QUICK-START-5MIN.md)** and **[SETUP-GUIDE](docs/SETUP-GUIDE.md)**.
+
+---
+
+## LAYER A — Scanning
+
+**The config seam.** `scan-config.yaml` declares which languages and tools are enabled.
+The same config drives the local hooks **and** CI.
 
 ```yaml
-name: Security Scan
-on:
-  pull_request:
-    paths: ["**/*.tf"]
-  push:
-    branches: [main]
-
-jobs:
-  security:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/terraform-security-scan.yml@v1.0.0
-    with:
-      terraform-directory: "."
-      cloud-provider: "aws"
-    secrets: inherit
+languages:
+  terraform:  { enabled: true,  tools: { trivy: {...}, checkov: {...}, tflint: {...} } }
+  csharp:     { enabled: true,  build: { solution: "api/App.slnx", working_dir: "api" },
+                tools: { semgrep_csharp: {...}, dotnet_format: {...}, dotnet_build: {...} } }
+  typescript: { enabled: true,  tools: { eslint: {...}, prettier: {...}, semgrep_typescript: {...} } }
+ci:        { sarif: { category_prefix: "scan-" } }   # distinct SARIF categories per tool
+fix_loop:  { enabled: false }                        # LAYER B (see below)
 ```
 
-## Available Hooks
+**Local runners (both call the SAME `hooks/dispatcher.sh` scripts — no logic duplication):**
 
-| Hook ID | Description | Default Stage |
-|---------|-------------|---------------|
-| `trivy-iac-critical` | Scan for CRITICAL misconfigurations | pre-commit |
-| `trivy-iac-full` | Full scan (CRITICAL, HIGH, MEDIUM) | pre-push |
-| `trivy-secrets` | Detect hardcoded secrets and API keys | pre-commit |
-| `checkov-terraform` | CIS Benchmark policy validation | pre-push |
-| `checkov-terraform-strict` | Strict mode - all checks | pre-push |
-| `validate-suppressions` | Validate suppression file | pre-commit |
+| Runner | Status | Why |
+|---|---|---|
+| **Lefthook** | **default** | single Go binary, native Windows, parallel, no Python/cp1252 fragility → friction-free for autonomous loops |
+| **pre-commit** | supported alternative | for teams standardised on pre-commit + public-ecosystem distribution |
 
-## Supported Cloud Providers
+Switch with `--hooks pre-commit` at setup.
 
-| Provider | tflint Config | Checkov Config | Template |
-|----------|--------------|----------------|----------|
-| AWS | `configs/aws/.tflint.hcl` | `configs/aws/.checkov.yaml` | `templates/aws/` |
-| Azure | `configs/azure/.tflint.hcl` | `configs/azure/.checkov.yaml` | `templates/azure/` |
-| GCP | `configs/gcp/.tflint.hcl` | `configs/gcp/.checkov.yaml` | `templates/gcp/` |
+**CI:** reusable `workflow_call` workflows emit **SARIF per tool under distinct categories**
+(post-2025-07 GitHub rule) and upload to code scanning:
+- `.github/workflows/reusable-scan.yml` — Terraform/IaC (Trivy, Checkov, tflint, Snyk).
+- `.github/workflows/code-security-scan.yml` — app-code (Semgrep per language + secrets).
 
-## Adoption Tiers
+### App-code hooks (LAYER A)
 
-| Tier | Phase | Hooks | Time |
-|------|-------|-------|------|
-| **Starter** | Days 1-30 | Secrets + formatting | <5s |
-| **Standard** | Days 31-60 | + linting + critical security | <10s |
-| **Strict** | Days 61-90 | Full enforcement | <10s + pre-push |
+| Hook ID | Tool | Stage |
+|---|---|---|
+| `semgrep-csharp` / `semgrep-typescript` | Semgrep SAST (`p/csharp` / `p/typescript`, native Windows) | pre-commit |
+| `dotnet-format` | `dotnet format --verify-no-changes` (solution from config) | pre-commit |
+| `dotnet-build` | Roslyn analyzers via `dotnet build` | pre-push |
+| `eslint` / `prettier` | ESLint `--fix` + Prettier `--write` | pre-commit |
+| `sqlfluff` | SQL lint | pre-commit |
+| `validate-scan-config` | validate `scan-config.yaml` against its schema | pre-commit |
 
-See `templates/starter/`, `templates/standard/`, `templates/strict/` for pre-built configs.
+(Terraform hooks `trivy-iac-critical`, `trivy-iac-full`, `trivy-secrets`, `checkov`,
+`tflint`, `gitleaks`, `snyk-iac` are unchanged — see [HOOK-REFERENCE](docs/HOOK-REFERENCE.md).)
 
-## Updating
+---
 
-```bash
-# Update to latest version
-pre-commit autoupdate
+## LAYER B — Agentic fix-loop (opt-in)
 
-# Or pin to specific version in .pre-commit-config.yaml:
-#   rev: v1.2.0
-```
+When enabled (`fix_loop.enabled: true` + the `ai-autofix` PR label), an AI agent proposes a
+**minimal** fix and a separate job re-verifies and pushes it. It is engineered to be safe on
+a shared workflow with write access across many repos:
+
+- **Two jobs break the "lethal trifecta"**: the `analyze` job that reads attacker-influenced
+  PR text has **no write token and no egress**; the `apply-and-push` job that can push has **no
+  untrusted input** and re-verifies everything.
+- **Allowlist (not denylist) path gate** from `fix_loop.allowlist_paths` / `gated_paths`.
+- **Label opt-in + non-fork + trusted reviewer** privilege boundary.
+- **claude-code-action SHA-pinned** ≥ v1.0.93 (CVE-2025-66032), centralized.
+
+Plus an **in-session layer** (`templates/claude/`): a `PostToolUse` hook scans each file the
+agent edits and exits 2 to make it **self-correct in the same session**, and a `Stop` hook runs
+a final scan before "done". This is what makes the loop friction-free for autonomous runs.
+
+Read **[FIX-LOOP](docs/FIX-LOOP.md)** and **[SECURITY-MODEL](docs/SECURITY-MODEL.md)** before enabling.
+
+---
+
+## Adoption tiers
+
+| Tier | Blocks | App-code | Fix-loop |
+|---|---|---|---|
+| **starter** | CRITICAL | formatters + secrets | off |
+| **standard** (recommended) | CRITICAL, HIGH | + SAST (Semgrep) | wired, off |
+| **strict** | CRITICAL, HIGH, MEDIUM | + Roslyn build, full pre-push | **on** (still needs label) |
+
+`templates/scan-config/{starter,standard,strict}.yaml`.
 
 ## Documentation
 
-- [Quick Start (5 min)](docs/QUICK-START-5MIN.md)
-- [Setup Guide](docs/SETUP-GUIDE.md)
-- [Hook Reference](docs/HOOK-REFERENCE.md)
-- [Multi-Cloud Configuration](docs/MULTI-CLOUD.md)
-- [Adoption Playbook](docs/ADOPTION-PLAYBOOK.md)
-- [Metrics Dashboard](docs/METRICS-DASHBOARD.md)
-- [Suppression Governance](docs/SUPPRESSION-GOVERNANCE.md)
-- [Performance Optimization](docs/PERFORMANCE-OPTIMIZATION.md)
+- **Start here:** [QUICK-START-5MIN](docs/QUICK-START-5MIN.md) · [SETUP-GUIDE](docs/SETUP-GUIDE.md) · [AI-AGENT-GUIDE](docs/AI-AGENT-GUIDE.md)
+- **Scanning:** [APP-CODE-SCANNING](docs/APP-CODE-SCANNING.md) · [HOOK-REFERENCE](docs/HOOK-REFERENCE.md) · [MULTI-CLOUD](docs/MULTI-CLOUD.md)
+- **Fix-loop:** [FIX-LOOP](docs/FIX-LOOP.md) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
+- **Adoption:** [ADOPTION-PLAYBOOK](docs/ADOPTION-PLAYBOOK.md) · [VERSION-PINNING](docs/VERSION-PINNING.md) · [TESTING-GUIDE-CONSUMING-REPO](docs/TESTING-GUIDE-CONSUMING-REPO.md) · [CONSUMER-MIGRATION](docs/CONSUMER-MIGRATION.md)
+- **Reference:** [MIGRATION-ANALYSIS](docs/MIGRATION-ANALYSIS.md) · [ROADMAP](docs/ROADMAP.md) · [CHANGELOG](CHANGELOG.md) · spec in `specs/002-scan-fix-platform/`
 
-## Repository Structure
+## Repository structure
 
 ```
 auto-code-scanning/
-├── .pre-commit-hooks.yaml          # Hook manifest (consumed by other repos)
-├── configs/                        # Cloud-specific tool configurations
-│   ├── aws/                        # AWS CIS Benchmark configs
-│   ├── azure/                      # Azure CIS Benchmark configs
-│   ├── gcp/                        # GCP CIS Benchmark configs
-│   └── common/                     # Cloud-agnostic configs
-├── templates/                      # Pre-commit config templates
-│   ├── starter/                    # Minimal (Phase 1)
-│   ├── standard/                   # Recommended (Phase 2)
-│   ├── strict/                     # Full enforcement (Phase 3)
-│   ├── aws/                        # AWS-specific full config
-│   ├── azure/                      # Azure-specific full config
-│   └── gcp/                        # GCP-specific full config
-├── scripts/                        # PowerShell setup & utility scripts
-├── .github/workflows/              # Reusable CI/CD workflows
-├── tests/                          # Test fixtures and integration tests
-├── schemas/                        # JSON schemas for result formats
-└── docs/                           # Documentation
+├── scan-config.yaml                # THE seam: languages + tools + fix_loop
+├── schemas/scan-config.schema.json # config contract (hook + CI validation)
+├── .pre-commit-hooks.yaml          # pre-commit manifest (alternative runner)
+├── hooks/                          # dispatcher.sh + per-tool .sh/.ps1 + lib/common.{sh,ps1}
+├── .github/workflows/
+│   ├── reusable-scan.yml           # IaC scan (workflow_call)
+│   ├── code-security-scan.yml      # app-code scan, distinct SARIF categories
+│   └── autonomous-fix.yml          # two-job agentic fix-loop (workflow_call)
+├── templates/
+│   ├── scan-config/                # tier configs (starter/standard/strict)
+│   ├── lefthook/                   # default local runner
+│   ├── claude/                     # in-session bundle (.claude settings + hooks)
+│   ├── fix-loop/                   # thin fix caller (privilege boundary)
+│   └── workflows/                  # thin scan callers
+├── scripts/                        # setup-scan-fix, scan-and-fix, check-fix-allowlist, …
+├── configs/                        # cloud-specific IaC tool configs (aws/azure/gcp/common)
+├── tests/                          # fixtures + python + integration tests
+└── docs/                           # documentation
 ```

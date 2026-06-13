@@ -1,10 +1,34 @@
 # Adoption Playbook
 
-Research-backed phased approach to rolling out security scanning across the organization.
+Research-backed phased approach to rolling out the security scan→fix platform across the organization.
+
+## A Two-Layer Platform
+
+As of v2.0.0 this is a reusable **two-layer platform**, not just a Terraform scanner.
+Roll the layers out **independently** — Layer A first, Layer B only when a team is
+ready for autonomous code changes.
+
+| Layer | What it is | Rollout |
+|-------|------------|---------|
+| **Layer A — Scanning** | Detects issues across **Terraform *and* app-code** (C#/.NET, TypeScript/JS, SQL). Runs locally (Lefthook by default, or pre-commit) and in CI (SARIF to the Security tab). Read-only — never changes code. | The tiered path below (starter → standard → strict) governs **Layer A** adoption. |
+| **Layer B — Agentic fix-loop** | **Optional, opt-in, off by default.** An agent proposes a minimal fix: *in-session* via the Claude Code bundle (`templates/claude/`), and *in CI* via the hardened `autonomous-fix.yml` (opt-in per PR with the `ai-autofix` label). | Layered **on top of** a mature Layer A — see [Layer B: Enabling the Fix-Loop](#layer-b-enabling-the-fix-loop). |
+
+Everything for both layers is configured in **one file, `scan-config.yaml`**
+(`languages.*` for Layer A, the `fix_loop.*` block for Layer B). One-command
+onboarding handles install:
+
+```bash
+# Layer A only (app-code scanning, Lefthook default runner)
+python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard
+# Layer A + Layer B (adds the fix-loop)
+python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard --enable-fix-loop
+```
+
+> **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
 
 ## Rollout Philosophy
 
-The three tiers (starter, standard, strict) provide a progressive path from minimal friction to full enforcement. The timelines below are **guidelines, not deadlines** -- teams should advance when they meet the criteria for each phase, regardless of calendar time.
+The three tiers (starter, standard, strict) provide a progressive path from minimal friction to full enforcement of **Layer A scanning**. The timelines below are **guidelines, not deadlines** -- teams should advance when they meet the criteria for each phase, regardless of calendar time. **Layer B (the fix-loop) is a separate, opt-in decision** layered on a mature Layer A, covered after the tiers.
 
 ## Phase 1: Starter Tier
 
@@ -95,6 +119,50 @@ See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for step-by-step upgrade inst
 - CI failures reduced 40% vs. pre-scanning baseline
 - All suppressions have valid business justification
 - Developer satisfaction >3.5/5.0
+
+## Layer B: Enabling the Fix-Loop
+
+Layer B is **optional and opt-in**. Treat it as a deliberate, separate rollout on
+top of a team that already trusts Layer A scanning — not a tier upgrade. There are
+two independently adoptable surfaces:
+
+### Surface 1: In-session self-correction (lowest risk)
+
+The Claude Code bundle (`templates/claude/`, installed as `.claude/`) scans an
+agent's edits **inside the session** and lets Claude self-correct before anything is
+committed. **PostToolUse** scans each edited file by language (Semgrep `p/csharp` /
+`p/typescript`) plus a secret check and exits `2` to feed findings back; **Stop**
+runs the shared `scan-and-fix` secret gate as a final check (guarded by
+`stop_hook_active`, so it blocks at most once). No PR, no push credentials, no
+privilege boundary to reason about — start here.
+
+### Surface 2: CI fix-loop (`autonomous-fix.yml`)
+
+Off by default. Enable it deliberately, per repo, once Layer A is mature:
+
+1. Set `fix_loop.enabled: true` in `scan-config.yaml`.
+2. Tune `fix_loop.allowlist_paths` (only these dirs are ever auto-fixed) and confirm
+   `fix_loop.gated_paths` covers your security-sensitive areas (`auth`, `payment`,
+   `crypto`, `.github/`, `.claude/`, `scripts/`, …). The gate fails **closed**.
+3. Provision the required secrets (`AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` or
+   `CLAUDE_CODE_OAUTH_TOKEN`); setup **verifies, never creates** them.
+4. **Opt in per PR** with the `ai-autofix` label. There is a hard `max_iterations`
+   cap; on cap (or any gate/failure) the PR is flagged `needs-human-review`.
+
+The CI loop is engineered to break the "lethal trifecta": a read-only **analyze**
+job (no push creds, no egress, untrusted PR text treated as data) emits a patch
+artifact, and a separate **apply-and-push** job re-enforces the allowlist gate and
+re-verifies (secret scan + `build_verify_cmd`) before pushing with `AUTOFIX_TOKEN`.
+`claude-code-action` is SHA-pinned to v1.0.148 (CVE-2025-66032). Do not adopt the CI
+loop without reading [SECURITY-MODEL.md](SECURITY-MODEL.md).
+
+### Layer B Readiness Criteria
+
+- Team is at **standard or strict** tier with a stable Layer A pass rate.
+- `fix_loop.allowlist_paths` / `gated_paths` reviewed and signed off by a security owner.
+- Required secrets provisioned as fine-grained, repo-scoped tokens.
+- A human reviewer is assigned to `needs-human-review` PRs.
+- The team has read [SECURITY-MODEL.md](SECURITY-MODEL.md).
 
 ## Metrics to Track
 
