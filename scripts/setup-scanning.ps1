@@ -5,6 +5,12 @@
 # Sets up local security scanning tools for Terraform development.
 # All tools run LOCALLY - no code is uploaded to third-party services.
 #
+# NOTE: For the full scan->fix PLATFORM (app-code C#/TS scanning, Lefthook,
+#       the Claude in-session bundle, and the agentic fix-loop) use the
+#       one-command orchestrator instead:
+#         ./scripts/setup-scan-fix.ps1 -Languages csharp,typescript -Tier standard -EnableFixLoop
+#       (or scripts/setup-scan-fix.py). This script remains the Terraform tool installer.
+#
 # PREREQUISITES:
 #   - Windows 11
 #   - PowerShell 7+

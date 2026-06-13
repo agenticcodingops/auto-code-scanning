@@ -251,6 +251,147 @@ function Get-TfFileCount {
 }
 
 # ---------------------------------------------------------------------------
+# App-code helpers (shared by csharp/typescript/sql hooks — STEP 2)
+# ---------------------------------------------------------------------------
+
+# Return staged files (ACMR) optionally filtered by extension (no dot, case-insensitive).
+# Usage: $files = Get-StagedFiles -Extensions @('cs','csproj')
+#        $files = Get-StagedFiles   # all staged files
+function Get-StagedFiles {
+    param([string[]]$Extensions = @())
+
+    try {
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
+        $files = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        if (-not $files) { return @() }
+        $files = @($files)
+        if ($Extensions.Count -eq 0) { return $files }
+        $patterns = $Extensions | ForEach-Object { [regex]::Escape(".$_") + '$' }
+        $rx = [regex]::new(($patterns -join '|'), 'IgnoreCase')
+        return @($files | Where-Object { $rx.IsMatch($_) })
+    } catch {
+        return @()
+    }
+}
+
+# Export staged files (from the git index) into a fresh temp dir, preserving paths.
+# Returns the temp dir path; caller must Remove-Item it.
+function Export-StagedFilesToTempDir {
+    param([string[]]$Files)
+
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "scan-staged-$(Get-Random)"
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    foreach ($file in @($Files)) {
+        if (-not $file) { continue }
+        $fileDir = Split-Path $file -Parent
+        if ($fileDir) {
+            $targetDir = Join-Path $tmpDir $fileDir
+            if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
+        }
+        $targetFile = Join-Path $tmpDir $file
+        try { git show ":$file" 2>$null | Set-Content -Path $targetFile -Encoding UTF8 -NoNewline } catch { }
+    }
+    return $tmpDir
+}
+
+# Find a Python that ACTUALLY runs (skips the broken Windows Store python3 shim).
+function Find-WorkingPython {
+    foreach ($cand in @('python', 'python3', 'py')) {
+        if (Get-Command $cand -ErrorAction SilentlyContinue) {
+            try {
+                & $cand -c "" 2>$null
+                if ($LASTEXITCODE -eq 0) { return $cand }
+            } catch { }
+        }
+    }
+    return $null
+}
+
+# Read a dotted key from scan-config.yaml; returns $Default if missing/unparseable.
+# Usage: $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
+function Read-ScanConfigValue {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [string]$Default = ''
+    )
+
+    $cfg = if ($env:SCAN_CONFIG_FILE) { $env:SCAN_CONFIG_FILE } else { 'scan-config.yaml' }
+    if (-not (Test-Path $cfg)) { return $Default }
+
+    $py = Find-WorkingPython
+    if (-not $py) { return $Default }
+
+    $script = @'
+import sys
+key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    import yaml
+    with open(cfg, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    cur = data
+    for part in key.split("."):
+        cur = cur[part]
+    print(cur if cur is not None and cur != "" else default)
+except Exception:
+    print(default)
+'@
+    $tmp = New-TemporaryFile
+    try {
+        Set-Content -Path $tmp -Value $script -Encoding UTF8
+        $out = & $py $tmp $Key $Default $cfg 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $out) { return $Default }
+        return ($out | Select-Object -First 1).ToString().Trim()
+    } catch {
+        return $Default
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
+}
+
+# Count Semgrep findings by severity from a --json output file (native parse).
+# ERROR->High, WARNING->Medium, INFO->Low. Returns a hashtable @{High;Medium;Low;Total}.
+function Get-SemgrepCounts {
+    param([Parameter(Mandatory)][string]$JsonPath)
+    $res = @{ High = 0; Medium = 0; Low = 0; Total = 0 }
+    try {
+        $doc = Get-Content $JsonPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        foreach ($r in @($doc.results)) {
+            switch (("" + $r.extra.severity).ToUpper()) {
+                'ERROR'   { $res.High++ }
+                'WARNING' { $res.Medium++ }
+                default   { $res.Low++ }
+            }
+        }
+        $res.Total = $res.High + $res.Medium + $res.Low
+    } catch { }
+    return $res
+}
+
+# Print a concise list of Semgrep findings from a --json output file.
+function Show-SemgrepFindings {
+    param([Parameter(Mandatory)][string]$JsonPath)
+    try {
+        $doc = Get-Content $JsonPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        foreach ($r in @($doc.results | Select-Object -First 25)) {
+            $sev = ("" + $r.extra.severity).ToUpper()
+            $msg = (("" + $r.extra.message) -split "`n")[0]
+            Write-HookLog "  $sev  $($r.check_id)  $($r.path):$($r.start.line)"
+            Write-HookLog "    $msg"
+        }
+    } catch { }
+}
+
+# Auto-detect nearest .slnx/.sln under a working dir when build.solution is empty.
+function Find-DotnetSolution {
+    param([string]$WorkingDir = '.')
+    if (-not (Test-Path $WorkingDir)) { return '' }
+    $sln = Get-ChildItem -Path $WorkingDir -Recurse -Depth 3 -Include '*.slnx', '*.sln' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($sln) { return $sln.FullName }
+    return ''
+}
+
+# ---------------------------------------------------------------------------
 # Config resolution
 # ---------------------------------------------------------------------------
 

@@ -1,6 +1,7 @@
 # ============================================================================
 # MULTI-LANGUAGE SCANNING FRAMEWORK CONFIGURATION
-# azure-wordpress
+# auto-code-scanning — canonical/reference config (consumers generate their own
+# via scripts/setup-scan-fix from templates/scan-config/<tier>.yaml)
 #
 # This file defines the scanning framework configuration for all supported
 # languages. Each language can be independently enabled/disabled.
@@ -256,15 +257,143 @@ languages:
           - "--severity=CRITICAL,HIGH"
         stage: pre-push
 
+  # --------------------------------------------------------------------------
+  # C# / .NET (Application code)  — LAYER A: app-code scanning
+  # Plugin per docs/ai-research/2-Generic-Scanning-Framework-Design.md
+  # --------------------------------------------------------------------------
+  csharp:
+    enabled: false  # Enable for .NET repos (setup --languages csharp)
+    description: "C#/.NET application security and quality scanning"
+    file_patterns:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "**/*.slnx"
+      - "**/*.sln"
+    exclude_patterns:
+      - "**/bin/**"
+      - "**/obj/**"
+
+    # Per-project build settings. The dotnet-format / dotnet-build hooks read
+    # these so the solution path is solved by CONFIG and never hardcoded to any
+    # one repo (this is the generic fix for PR #145's api/ path bug).
+    build:
+      solution: ""        # e.g. "api/MyApp.slnx" — empty = auto-detect nearest .sln/.slnx
+      working_dir: "."    # e.g. "api" — directory to run dotnet from
+
+    tools:
+      semgrep_csharp:
+        enabled: true
+        version: ">=1.60.0"
+        # Native-Windows path (Fall-2025); PYTHONUTF8=1 set in hook env
+        args:
+          - "--config=p/csharp"
+          - "--error"
+          - "--metrics=off"
+        stage: pre-commit
+
+      dotnet_format:
+        enabled: true
+        version: ">=8.0.0"
+        # solution/working_dir come from languages.csharp.build (above)
+        args:
+          - "--verify-no-changes"
+          - "--no-restore"
+        stage: pre-commit
+
+      dotnet_build:
+        enabled: true
+        version: ">=8.0.0"
+        description: "Roslyn analyzers via build"
+        args:
+          - "/p:AnalysisMode=AllEnabledByDefault"
+          - "--nologo"
+        stage: pre-push  # Slower; full Roslyn analysis at push
+
+  # --------------------------------------------------------------------------
+  # TYPESCRIPT / JAVASCRIPT (Application code)  — LAYER A
+  # --------------------------------------------------------------------------
+  typescript:
+    enabled: false  # Enable for TS/JS repos (setup --languages typescript)
+    description: "TypeScript/JavaScript security and quality scanning"
+    file_patterns:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.jsx"
+    exclude_patterns:
+      - "**/node_modules/**"
+      - "**/dist/**"
+      - "**/build/**"
+
+    # Directory containing package.json / eslint config (for monorepos)
+    build:
+      working_dir: "."
+
+    tools:
+      eslint:
+        enabled: true
+        version: ">=8.0.0"
+        config_file: ".eslintrc"
+        auto_fix: true
+        args:
+          - "--fix"
+        stage: pre-commit
+
+      prettier:
+        enabled: true
+        version: ">=3.0.0"
+        config_file: ".prettierrc"
+        auto_fix: true
+        args:
+          - "--write"
+        stage: pre-commit
+
+      semgrep_typescript:
+        enabled: true
+        version: ">=1.60.0"
+        args:
+          - "--config=p/typescript"
+          - "--error"
+          - "--metrics=off"
+        stage: pre-commit
+
+  # --------------------------------------------------------------------------
+  # SQL  — LAYER A (bonus adapter ported from PR #145)
+  # --------------------------------------------------------------------------
+  sql:
+    enabled: false
+    description: "SQL linting via SQLFluff"
+    file_patterns:
+      - "**/*.sql"
+
+    tools:
+      sqlfluff:
+        enabled: true
+        version: ">=3.0.0"
+        config_file: ".sqlfluff"
+        args:
+          - "lint"
+          - "--dialect=ansi"
+        stage: pre-commit
+
 # ============================================================================
 # CI/CD INTEGRATION
 # ============================================================================
 ci:
-  # GitHub Actions workflow file
-  workflow_file: ".github/workflows/security-scan.yml"
+  # GitHub Actions workflow file(s) that run scanning in CI. App-code consumers use
+  # code-security-scan.yml; Terraform/IaC consumers use terraform-security-scan.yml
+  # (or the reusable reusable-scan.yml). Informational pointer to a real workflow.
+  workflow_file: ".github/workflows/code-security-scan.yml"
 
   # Upload results to GitHub Security tab
   sarif_upload: true
+
+  # SARIF categories. Since 2025-07-22 GitHub rejects same tool+category SARIF
+  # collisions, so every tool MUST upload under a DISTINCT category. The
+  # reusable workflow composes "<category_prefix><tool>" (e.g. "scan-trivy-iac",
+  # "scan-semgrep-csharp", "scan-eslint") to guarantee uniqueness per consumer.
+  sarif:
+    category_prefix: "scan-"
 
   # Fail CI on these severities
   fail_on:
@@ -315,3 +444,64 @@ suppressions:
 
   # Review frequency (days)
   review_frequency_days: 90
+
+# ============================================================================
+# FIX LOOP (LAYER B — optional agentic autonomous fix)
+# Drives .github/workflows/autonomous-fix.yml and the in-session .claude bundle.
+# OFF by default. Turn on with `fix_loop.enabled: true` AND the `ai-autofix`
+# label on a PR. See docs/FIX-LOOP.md and docs/SECURITY-MODEL.md.
+# ============================================================================
+fix_loop:
+  enabled: false
+
+  # PR labels (gates the privilege boundary)
+  label: "ai-autofix"                     # opt-in: only labelled PRs are auto-fixed
+  human_review_label: "needs-human-review"  # applied on cap/gate/failure
+
+  # Agent limits
+  max_turns: 8        # claude-code-action --max-turns per analyze run
+  max_iterations: 3   # hard cap on autofix commits per PR (.fix-attempts)
+
+  # ALLOWLIST (not denylist): ONLY these paths may be auto-fixed. Anything
+  # outside is gated to human review. Tune per consumer in scan-config.yaml.
+  allowlist_paths:
+    - "src/"
+    - "tests/"
+    - "app/"
+    - "lib/"
+
+  # GATED paths: security-sensitive areas that are NEVER auto-fixed even if they
+  # fall inside an allowlist dir. Matched case-insensitively as substrings.
+  gated_paths:
+    - "auth"
+    - "payment"
+    - "crypto"
+    - "security"
+    - "identity"
+    - "secret"
+    - "credential"
+    - ".github/"
+    - ".claude/"
+    - "hooks"
+    - "lefthook.yml"
+    - "scan-and-fix.ps1"
+    - "scripts/"
+    - ".env"
+    - "LICENSE"
+
+  # Centralized, SHA-pinned claude-code-action reference. MUST be >= v1.0.93
+  # (CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3). All consumers inherit this safe pin.
+  claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
+
+  # Authoritative re-verification command in JOB B (apply-and-push). Derive from
+  # languages.*.build (e.g. `dotnet build <solution>`). Empty = secret-scan only.
+  # SECURITY: this is EXECUTED. It is read from the BASE ref (a PR can't change it) and
+  # runs token-free, but it is still arbitrary CI code — keep it trusted. Best practice:
+  # point it at a checked-in script under a gated path, e.g. "bash scripts/ci-build-verify.sh",
+  # so it can't be altered in-PR without tripping the gate. See docs/SECURITY-MODEL.md §7.1.
+  build_verify_cmd: ""
+
+  # Secrets the consumer must provide (verified, never stored, by setup-scanning).
+  required_secrets:
+    - "AUTOFIX_TOKEN"      # fine-grained PAT: Contents RW + Pull-requests RW, this repo only
+    - "ANTHROPIC_API_KEY"  # or CLAUDE_CODE_OAUTH_TOKEN

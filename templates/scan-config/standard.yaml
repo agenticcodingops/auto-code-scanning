@@ -1,0 +1,84 @@
+# ============================================================================
+# scan-config.yaml — STANDARD tier (recommended)
+# Formatters + linting + SAST (Semgrep). Blocks CRITICAL,HIGH.
+# Fix-loop wired but OFF (flip fix_loop.enabled + add the ai-autofix label).
+# ============================================================================
+schema_version: "1.0"
+
+global:
+  results_dir: ".scan-results"
+  severity_levels: [CRITICAL, HIGH, MEDIUM, LOW]
+  blocking_severities: [CRITICAL, HIGH]
+  performance:
+    pre_commit_max_seconds: 10
+    pre_push_max_seconds: 60
+    per_hook_max_seconds: 5
+  exclude_paths: [.git, .terraform, .scan-results, node_modules, __pycache__, "*.tfstate*"]
+
+languages:
+  terraform:
+    enabled: false
+    file_patterns: ["**/*.tf", "**/*.tfvars"]
+    tools:
+      trivy:        { enabled: true,  version: ">=0.50.0", config_file: ".trivyignore", args: ["--severity=CRITICAL,HIGH", "--exit-code=1", "--skip-dirs=.terraform"], stage: pre-commit }
+      tflint:       { enabled: true,  version: ">=0.50.0", config_file: ".tflint.hcl", args: ["--config=.tflint.hcl"], stage: pre-commit }
+      terraform_fmt: { enabled: true, args: ["-recursive"], stage: pre-commit }
+      terraform_validate: { enabled: true, stage: pre-commit }
+      checkov:      { enabled: true,  version: ">=3.0.0", config_file: ".checkov.yaml", args: ["--framework=terraform", "--quiet", "--compact"], stage: pre-push }
+
+  csharp:
+    enabled: false
+    file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx", "**/*.sln"]
+    exclude_patterns: ["**/bin/**", "**/obj/**"]
+    build: { solution: "", working_dir: "." }
+    tools:
+      dotnet_format:  { enabled: true,  version: ">=8.0.0", args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
+      semgrep_csharp: { enabled: true,  version: ">=1.60.0", args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
+      dotnet_build:   { enabled: false, version: ">=8.0.0", args: ["--nologo"], stage: pre-push }
+
+  typescript:
+    enabled: false
+    file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+    exclude_patterns: ["**/node_modules/**", "**/dist/**", "**/build/**"]
+    build: { working_dir: "." }
+    tools:
+      prettier: { enabled: true, version: ">=3.0.0", config_file: ".prettierrc", auto_fix: true, args: ["--write"], stage: pre-commit }
+      eslint:   { enabled: true, version: ">=8.0.0", config_file: ".eslintrc", auto_fix: true, args: ["--fix"], stage: pre-commit }
+      semgrep_typescript: { enabled: true, version: ">=1.60.0", args: ["--config=p/typescript", "--error", "--metrics=off"], stage: pre-commit }
+
+  sql:
+    enabled: false
+    file_patterns: ["**/*.sql"]
+    tools:
+      sqlfluff: { enabled: true, version: ">=3.0.0", config_file: ".sqlfluff", args: ["lint", "--dialect=ansi"], stage: pre-commit }
+
+ci:
+  sarif_upload: true
+  sarif: { category_prefix: "scan-" }
+  fail_on: [CRITICAL, HIGH]
+
+reporting:
+  format: json
+  sarif: true
+  retention_days: 90
+  metrics:
+    enabled: true
+    targets: { bypass_rate_max: 5.0, hook_pass_rate_min: 80.0, ci_failure_reduction: 40.0 }
+
+suppressions:
+  file: ".scan-suppressions.yaml"
+  max_duration_days: 180
+  require_approval: [CRITICAL, HIGH]
+  review_frequency_days: 90
+
+fix_loop:
+  enabled: false
+  label: "ai-autofix"
+  human_review_label: "needs-human-review"
+  max_turns: 8
+  max_iterations: 3
+  allowlist_paths: ["src/", "tests/", "app/", "lib/"]
+  gated_paths: ["auth", "payment", "crypto", "security", "identity", "secret", "credential", ".github/", ".claude/", "hooks", "lefthook.yml", "scan-and-fix.ps1", "scripts/", ".env", "LICENSE"]
+  claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"
+  build_verify_cmd: ""
+  required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]

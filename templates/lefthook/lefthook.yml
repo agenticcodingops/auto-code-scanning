@@ -1,0 +1,84 @@
+# ============================================================================
+# lefthook.yml — DEFAULT local runner for auto-code-scanning consumers
+#
+# Lefthook is a single Go binary (native Windows, no Python/cp1252 fragility),
+# runs hooks in PARALLEL, and is friction-free for autonomous Claude Code loops.
+# It calls the SAME hooks/dispatcher.sh scripts as the pre-commit alternative, so
+# there is NO logic duplication — the dispatcher OS-detects (Windows -> .ps1).
+#
+# Install (one time):
+#   lefthook install
+# Bypass in an emergency:
+#   LEFTHOOK=0 git commit ...    (audited; prefer fixing the finding)
+#
+# Globs only decide WHETHER a command runs; each dispatcher hook self-discovers
+# the staged files from the git index, so behaviour matches pre-commit exactly.
+# ============================================================================
+min_version: 1.6.0
+
+# Doublestar globbing (so **/*.cs works as expected).
+# Skip during merges/rebases where partial trees would create noise.
+pre-commit:
+  parallel: true
+  skip:
+    - merge
+    - rebase
+  commands:
+    # ----- Mandatory secret gate (always; secrets can be in any file) -------
+    secret-scan:
+      priority: 1
+      run: hooks/dispatcher.sh trivy-secrets
+    gitleaks:
+      priority: 1
+      run: hooks/dispatcher.sh gitleaks
+
+    # ----- Config validation (only when scan-config.yaml changes) ----------
+    validate-scan-config:
+      glob: "scan-config.yaml"
+      run: hooks/dispatcher.sh validate-scan-config
+
+    # ----- Terraform / IaC --------------------------------------------------
+    trivy-iac:
+      glob: "*.tf"
+      run: hooks/dispatcher.sh trivy-iac-critical
+
+    # ----- C# / .NET --------------------------------------------------------
+    semgrep-csharp:
+      glob: "*.cs"
+      run: hooks/dispatcher.sh semgrep-csharp
+    dotnet-format:
+      glob: "*.{cs,csproj}"
+      run: hooks/dispatcher.sh dotnet-format
+
+    # ----- TypeScript / JavaScript -----------------------------------------
+    semgrep-typescript:
+      glob: "*.{ts,tsx,js,jsx}"
+      run: hooks/dispatcher.sh semgrep-typescript
+    eslint:
+      glob: "*.{ts,tsx,js,jsx}"
+      run: hooks/dispatcher.sh eslint
+      stage_fixed: true       # re-stage files ESLint auto-fixed
+    prettier:
+      glob: "*.{ts,tsx,js,jsx,json,css,scss,md}"
+      run: hooks/dispatcher.sh prettier
+      stage_fixed: true       # re-stage files Prettier reformatted
+
+    # ----- SQL --------------------------------------------------------------
+    sqlfluff:
+      glob: "*.sql"
+      run: hooks/dispatcher.sh sqlfluff
+
+# Heavier scans at push time. These are best-effort locally (CI's
+# code-security-scan.yml / reusable-scan.yml is the authoritative backstop).
+pre-push:
+  parallel: true
+  commands:
+    checkov:
+      glob: "*.tf"
+      run: hooks/dispatcher.sh checkov
+    tflint:
+      glob: "*.tf"
+      run: hooks/dispatcher.sh tflint
+    dotnet-build:
+      glob: "*.{cs,csproj}"
+      run: hooks/dispatcher.sh dotnet-build

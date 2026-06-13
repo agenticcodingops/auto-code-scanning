@@ -1,15 +1,31 @@
 # AI Agent Integration Guide
 
-How to integrate automated agents with the security scanning solution using `scan.py`.
+How to integrate automated agents with the security scanning solution.
+
+> **v2.0.0 — two layers.** This repo is now a reusable **scan→fix platform**, not
+> just a scanner. **Layer A** is scanning (Terraform *plus* app-code: C#/.NET,
+> TypeScript/JS, SQL). **Layer B** is an optional **agentic fix-loop**. For agents,
+> the two most important additions are the **in-session Claude Code bundle**
+> (`templates/claude/`, which self-corrects edits *inside the session*) and the
+> **CI fix-loop** (`.github/workflows/autonomous-fix.yml`). The `scan.py` interface
+> below is unchanged. Everything is configured in one file, `scan-config.yaml`.
+> **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
 
 ## Overview
 
-The scanning solution provides two integration paths:
+The scanning solution provides several integration paths:
 
-1. **Pre-commit hooks**: Run automatically on `git commit` / `git push` (developer workflow)
+1. **Pre-commit / Lefthook hooks**: Run automatically on `git commit` / `git push`
+   (developer workflow). Lefthook is the default local runner in v2.0.0; pre-commit
+   remains a supported alternative. Both call the same `hooks/dispatcher.sh` scripts.
 2. **scan.py**: Programmatic scanning interface for automated agents (agent workflow)
+3. **In-session Claude Code bundle** (`templates/claude/`): hooks that scan an agent's
+   edits *inside the same session* so Claude self-corrects before committing (Layer A/B
+   bridge — see [In-Session Self-Correction](#in-session-self-correction-claude-code-bundle))
+4. **CI fix-loop** (`autonomous-fix.yml`): an opt-in, hardened workflow where an agent
+   proposes a minimal fix for a labelled PR (Layer B — see [CI Fix-Loop](#ci-fix-loop-autonomous-fixyml))
 
-Both paths produce the same JSON output format, enabling consistent tooling.
+The first two paths produce the same JSON output format, enabling consistent tooling.
 
 ## scan.py Usage
 
@@ -187,6 +203,104 @@ For unfixable findings, the agent can:
 - Add entries to `.scan-suppressions.yaml` (with business justification)
 - Create baseline entries via `scripts/create-baseline.ps1`
 - Flag for human review
+
+## In-Session Self-Correction (Claude Code bundle)
+
+The **core feature for autonomous Claude Code loops** is the in-session bundle in
+`templates/claude/`. `setup-scanning` / `setup-scan-fix` copies it into a consumer
+repo as `.claude/settings.json` + `.claude/hooks/`. It scans the agent's own edits
+*as it makes them* so Claude fixes findings **in the same session**, before anything
+is committed — no PR round-trip required.
+
+`.claude/settings.json` wires two Claude Code hooks (cross-platform via `pwsh`; `.sh`
+twins exist for hosts without PowerShell 7):
+
+| Hook | Matcher / fires | What it does | Exit code |
+|------|-----------------|--------------|-----------|
+| **PostToolUse** | `Write\|Edit\|MultiEdit` | Scans **only the edited file** by language — Semgrep `p/csharp` for `.cs`, `p/typescript` for `.ts/.tsx/.js/.jsx` — plus a single-file secret check (`trivy fs --scanners secret`) on every edit | `2` = surface findings on stderr so Claude self-corrects in-session; `0` = clean |
+| **Stop** | when Claude tries to finish | Runs the shared `scripts/scan-and-fix.{ps1,sh}` (default scan type `secrets`) as a **final gate**, guarded by `stop_hook_active` so it blocks **at most once** per stop-chain (no loops) | `2` = block "done", list findings; `0` = allow finishing |
+
+The hooks are deliberately **thin** — they route to the right tool/ruleset and the
+heavy logic lives in the versioned shared scripts (`scripts/scan-and-fix.{ps1,sh}`
+and `hooks/`). They **fail open** if a tool (semgrep/trivy) is missing, so a
+developer without the tools is never hard-blocked, but **fail closed** on real
+findings.
+
+### How an agent experiences it
+
+1. Claude writes/edits a `.cs` or `.ts` file.
+2. **PostToolUse** scans just that file. If Semgrep or the secret check finds an
+   issue, the hook exits `2` and the findings are fed back to Claude on stderr —
+   Claude reads them and edits again, looping until the file is clean.
+3. When Claude signals it's done, **Stop** runs the shared `scan-and-fix` secret
+   gate over the working tree. On findings it exits `2`, blocks completion, and
+   writes machine-readable findings to `.claude/scan-findings.json` for the agent
+   to act on. `stop_hook_active` ensures this can only block once.
+
+### Escape hatches (for noisy local environments)
+
+| Env var | Effect |
+|---------|--------|
+| `CC_SKIP_SEMGREP_HOOK=1` | Skip the per-file Semgrep scan in PostToolUse |
+| `CC_SKIP_SECRET_HOOK=1` | Skip the per-file secret scan in PostToolUse |
+| `CC_STOP_SCAN_TYPE=secrets\|semgrep\|all` | Choose the Stop gate scan (default `secrets`) |
+| `SEMGREP_RULESET_CSHARP` / `SEMGREP_RULESET_TYPESCRIPT` | Override the ruleset (e.g. point at custom rules) |
+
+> Keep `.claude/settings.json` and `.claude/hooks/` in the **consumer** repo. They
+> are listed in `fix_loop.gated_paths`, so the autonomous CI fix-loop can never
+> modify them.
+
+## CI Fix-Loop (autonomous-fix.yml)
+
+`.github/workflows/autonomous-fix.yml` is a reusable (`workflow_call`) **Layer B**
+workflow: on an **opt-in** PR (labelled `ai-autofix`) an agent proposes the minimal
+code change that resolves genuine flagged defects, then the workflow re-verifies and
+pushes it. It is **off by default** — it runs only when `fix_loop.enabled: true` in
+`scan-config.yaml` **and** the PR carries the `ai-autofix` label.
+
+It is a hardened **two-job design** that deliberately breaks the "lethal trifecta"
+(untrusted input + write credentials + egress never share a job):
+
+| Job | Context | Token | What it does |
+|-----|---------|-------|--------------|
+| **analyze** | untrusted PR/review text | **read-only**, no push creds, no egress | Runs `claude-code-action` with a scoped tool allowlist; treats every PR/review/issue comment as **untrusted data** (never as instructions); emits a vetted **patch artifact** only |
+| **apply-and-push** | trusted artifact only | `AUTOFIX_TOKEN` (push) | Re-checks out the **exact analyzed SHA**, re-enforces the allowlist gate via `scripts/check-fix-allowlist.py`, re-verifies the **secret scan + `build_verify_cmd`**, bumps `.fix-attempts`, and pushes |
+| **flag-human-review** | — | issues/PR write | Labels `needs-human-review` and comments on cap / gate / failure |
+
+Key guarantees for an agent operating in this flow:
+
+- **Allowlist, not denylist**: only files under `fix_loop.allowlist_paths` may be
+  auto-fixed, and any path matching a `fix_loop.gated_paths` substring
+  (`auth`, `payment`, `crypto`, `.github/`, `.claude/`, `hooks`, `scripts/`, …) is
+  **never** auto-fixed even inside an allowlisted dir. A patch touching, e.g.,
+  `.github/` is gated → `needs-human-review`.
+- **Hard iteration cap**: `fix_loop.max_iterations` (tracked in `.fix-attempts`).
+  On cap the PR is flagged `needs-human-review` instead of looping forever.
+- **`claude-code-action` is SHA-pinned to v1.0.148** (`>= 1.0.93`, fixes
+  CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3). This pin is the single source of truth and
+  must match `fix_loop.claude_code_action_ref`.
+
+The full threat model and the two-job rationale are in
+[SECURITY-MODEL.md](SECURITY-MODEL.md).
+
+### One-file configuration
+
+Both layers are driven by **one file, `scan-config.yaml`**:
+
+- `languages.*` — enable Terraform / `csharp` / `typescript` / `sql` scanning; the
+  `csharp` block carries `build.solution` / `build.working_dir` so the dotnet path is
+  solved by config, never hardcoded.
+- `fix_loop.*` — `enabled`, `label`, `human_review_label`, `max_turns`,
+  `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`,
+  `build_verify_cmd`, `required_secrets`.
+
+One-command onboarding installs the runner (Lefthook by default), the in-session
+`.claude` bundle, and the caller workflows:
+
+```bash
+python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard --enable-fix-loop
+# PowerShell twin: scripts/setup-scan-fix.ps1
+```
 
 ## Cloud Provider Auto-Detection
 

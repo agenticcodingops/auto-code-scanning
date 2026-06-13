@@ -218,6 +218,157 @@ count_tf_files() {
 }
 
 # ---------------------------------------------------------------------------
+# App-code helpers (shared by csharp/typescript/sql hooks — STEP 2)
+# ---------------------------------------------------------------------------
+
+# Print staged files (added/copied/modified/renamed) optionally filtered by
+# extension. Extensions are matched case-insensitively, without the dot.
+# Usage: mapfile -t files < <(get_staged_files cs csproj)
+#        mapfile -t files < <(get_staged_files)   # all staged files
+get_staged_files() {
+    local files
+    files="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)" || return 0
+    [[ -z "${files}" ]] && return 0
+    if [[ $# -eq 0 ]]; then
+        echo "${files}"
+        return 0
+    fi
+    local pattern=""
+    local ext
+    for ext in "$@"; do
+        pattern+="${pattern:+|}\\.${ext}\$"
+    done
+    echo "${files}" | grep -iE "${pattern}" || true
+}
+
+# Export the given staged files (from the git index, not the working tree) into a
+# fresh temp dir, preserving relative paths. Prints the temp dir path; caller must
+# rm -rf it (and should set a trap).
+# Usage: tmpdir="$(export_staged_to_tmp "${files[@]}")"; trap 'rm -rf "$tmpdir"' EXIT
+export_staged_to_tmp() {
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    local file file_dir
+    for file in "$@"; do
+        [[ -z "${file}" ]] && continue
+        file_dir="$(dirname "${file}")"
+        [[ "${file_dir}" != "." ]] && mkdir -p "${tmpdir}/${file_dir}"
+        git show ":${file}" > "${tmpdir}/${file}" 2>/dev/null || true
+    done
+    echo "${tmpdir}"
+}
+
+# Find a Python interpreter that ACTUALLY runs (skips the broken Windows Store
+# `python3` shim, which is on PATH but errors out). Prints the command name.
+find_python() {
+    local c
+    for c in python python3 py; do
+        if command -v "${c}" >/dev/null 2>&1 && "${c}" -c "" >/dev/null 2>&1; then
+            echo "${c}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Read a dotted key from scan-config.yaml (e.g. languages.csharp.build.solution).
+# Falls back to the default if the config, python, PyYAML, or key is missing — so
+# hooks degrade gracefully (e.g. empty solution => auto-detect) rather than break.
+# Usage: solution="$(read_scan_config languages.csharp.build.solution '')"
+read_scan_config() {
+    local key="${1:?key required}"
+    local default="${2:-}"
+    local cfg="${SCAN_CONFIG_FILE:-scan-config.yaml}"
+    [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
+    local py
+    py="$(find_python)" || { echo "${default}"; return 0; }
+    "${py}" - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
+import sys
+key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    import yaml
+    with open(cfg, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    cur = data
+    for part in key.split("."):
+        cur = cur[part]
+    print(cur if cur is not None and cur != "" else default)
+except Exception:
+    print(default)
+PYEOF
+}
+
+# Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).
+# Semgrep is a Python package, so python is available wherever semgrep runs.
+_SEMGREP_COUNT_PY='
+import sys, json
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    h = m = l = 0
+    for r in d.get("results", []):
+        sev = str(r.get("extra", {}).get("severity") or "").upper()
+        if sev == "ERROR": h += 1
+        elif sev == "WARNING": m += 1
+        else: l += 1
+    print(h, m, l, h + m + l)
+except Exception:
+    sys.exit(3)
+'
+_SEMGREP_PRINT_PY='
+import sys, json
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    for r in d.get("results", [])[:25]:
+        sev = str(r.get("extra", {}).get("severity") or "").upper()
+        msg = (str(r.get("extra", {}).get("message") or "").splitlines() or [""])[0]
+        print("  %s  %s  %s:%s" % (sev, r.get("check_id",""), r.get("path",""), r.get("start",{}).get("line",0)))
+        print("    %s" % msg)
+except Exception:
+    pass
+'
+
+# Count Semgrep findings by severity from a --json output file.
+# Prints "<high> <medium> <low> <total>" (ERROR->HIGH, WARNING->MEDIUM, INFO->LOW).
+count_semgrep_severities() {
+    local json="${1:?json file required}"
+    [[ -f "${json}" ]] || { echo "0 0 0 0"; return 0; }
+    local py result
+    py="$(find_python 2>/dev/null)" || py=""
+    if [[ -n "${py}" ]]; then
+        result="$("${py}" -c "${_SEMGREP_COUNT_PY}" "${json}" 2>/dev/null)"
+        if [[ $? -eq 0 && -n "${result}" ]]; then
+            echo "${result}"
+            return 0
+        fi
+    fi
+    # Fallback only if python is genuinely unavailable: detect finding presence.
+    if grep -q '"check_id"' "${json}" 2>/dev/null; then echo "1 0 0 1"; else echo "0 0 0 0"; fi
+}
+
+# Print a concise list of Semgrep findings from a --json output file.
+print_semgrep_findings() {
+    local json="${1:-}"
+    [[ -f "${json}" ]] || return 0
+    local py out
+    py="$(find_python 2>/dev/null)" || return 0
+    out="$("${py}" -c "${_SEMGREP_PRINT_PY}" "${json}" 2>/dev/null)" || return 0
+    [[ -n "${out}" ]] && printf '%s\n' "${out}"
+}
+
+# Auto-detect the nearest .slnx/.sln under a working dir when build.solution is empty.
+# Prints the solution path relative to the working dir, or empty if none found.
+# Usage: sln="$(detect_dotnet_solution "${working_dir}")"
+detect_dotnet_solution() {
+    local wd="${1:-.}"
+    [[ -d "${wd}" ]] || { echo ""; return 0; }
+    local found
+    found="$(find "${wd}" -maxdepth 3 \( -name '*.slnx' -o -name '*.sln' \) 2>/dev/null | head -n1)"
+    echo "${found}"
+}
+
+# ---------------------------------------------------------------------------
 # Config resolution
 # ---------------------------------------------------------------------------
 

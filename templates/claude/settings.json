@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Copied per-repo by setup-scanning. In-session scan->self-correct layer. PostToolUse scans each edited file by language (exit 2 feeds findings back to Claude for in-session fixing). Stop runs the shared scan-and-fix as a final gate, guarded by stop_hook_active. Uses pwsh (PowerShell 7, cross-platform). On a host without pwsh, swap the commands for the .sh variants (bash .claude/hooks/posttooluse-scan.sh).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/posttooluse-scan.ps1",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/stop-scan.ps1",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

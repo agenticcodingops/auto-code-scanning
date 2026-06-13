@@ -129,3 +129,106 @@
   stages: [pre-commit]
   pass_filenames: false
   verbose: true
+
+# --------------------------------------------------------------------------
+# APP-CODE HOOKS — C# / .NET (LAYER A)
+# --------------------------------------------------------------------------
+
+- id: semgrep-csharp
+  name: "Semgrep SAST (C#)"
+  entry: hooks/dispatcher.sh semgrep-csharp
+  language: script
+  files: '\.cs$'
+  exclude: '(node_modules/|/bin/|/obj/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+- id: dotnet-format
+  name: "dotnet format (verify)"
+  entry: hooks/dispatcher.sh dotnet-format
+  language: script
+  files: '\.cs$'
+  exclude: '(node_modules/|/bin/|/obj/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+- id: dotnet-build
+  name: "dotnet build (Roslyn analyzers)"
+  entry: hooks/dispatcher.sh dotnet-build
+  language: script
+  files: '\.(cs|csproj)$'
+  exclude: '(node_modules/|/bin/|/obj/)'
+  types: [file]
+  stages: [pre-push]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# APP-CODE HOOKS — TypeScript / JavaScript (LAYER A)
+# --------------------------------------------------------------------------
+
+- id: semgrep-typescript
+  name: "Semgrep SAST (TypeScript)"
+  entry: hooks/dispatcher.sh semgrep-typescript
+  language: script
+  files: '\.(ts|tsx|js|jsx)$'
+  exclude: '(node_modules/|dist/|build/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+- id: eslint
+  name: "ESLint (auto-fix + gate)"
+  entry: hooks/dispatcher.sh eslint
+  language: script
+  files: '\.(ts|tsx|js|jsx)$'
+  exclude: '(node_modules/|dist/|build/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+- id: prettier
+  name: "Prettier (auto-format)"
+  entry: hooks/dispatcher.sh prettier
+  language: script
+  files: '\.(ts|tsx|js|jsx|json|css|scss|md)$'
+  exclude: '(node_modules/|dist/|build/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# APP-CODE HOOKS — SQL (LAYER A)
+# --------------------------------------------------------------------------
+
+- id: sqlfluff
+  name: "SQLFluff lint"
+  entry: hooks/dispatcher.sh sqlfluff
+  language: script
+  files: '\.sql$'
+  exclude: '(node_modules/)'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true
+
+# --------------------------------------------------------------------------
+# CONFIG VALIDATION
+# --------------------------------------------------------------------------
+
+- id: validate-scan-config
+  name: "Validate scan-config.yaml"
+  entry: hooks/dispatcher.sh validate-scan-config
+  language: script
+  files: 'scan-config\.yaml$'
+  types: [file]
+  stages: [pre-commit]
+  pass_filenames: false
+  verbose: true

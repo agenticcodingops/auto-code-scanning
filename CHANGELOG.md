@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - Unreleased — Reusable scan→fix platform
+
+A major evolution from a Terraform-only, scan-only POC into a reusable,
+configurable, multi-consumer **scan-AND-fix platform**. Terraform scanning is
+preserved unchanged. **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
+
+### Added — LAYER A: application-code scanning
+
+- **C#/.NET, TypeScript/JS, and SQL language plugins** in `scan-config.yaml`
+  (`languages.csharp`, `languages.typescript`, `languages.sql`), each with a
+  per-project `build.{solution,working_dir}` so the dotnet-format path is solved by
+  **config, never hardcoded** (the generic fix for the PR #145 `api/` path bug).
+- **New dispatcher hooks** (`.sh` + `.ps1`, same staged-only fail-open pattern):
+  `semgrep-csharp`, `semgrep-typescript`, `dotnet-format`, `dotnet-build` (Roslyn),
+  `eslint`, `prettier`, `sqlfluff`, `validate-scan-config`. Registered in
+  `.pre-commit-hooks.yaml`. Semgrep runs the **native-Windows path** with `PYTHONUTF8=1`.
+- **`code-security-scan.yml`** reusable workflow: auto-detects enabled languages from
+  `scan-config.yaml`, runs Semgrep per language, and uploads SARIF under **distinct
+  categories** (`ci.sarif.category_prefix`, post-2025-07 GitHub rule).
+- **`schemas/scan-config.schema.json`** + `scripts/validate-scan-config.py`: configs
+  validated in a hook and in CI; `fix_loop.enabled` requires an allowlist + a SHA-pinned
+  action ref.
+
+### Added — LAYER B: agentic fix-loop (opt-in)
+
+- **`fix_loop:` config section**: `enabled`, `label`, `human_review_label`, `max_turns`,
+  `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`,
+  `build_verify_cmd`, `required_secrets`.
+- **`autonomous-fix.yml`** reusable two-job workflow (generic PR #145 design): a
+  read-only `analyze` job (no push creds, no egress, scoped tools, untrusted-text-as-data)
+  that emits a patch artifact, and an `apply-and-push` job that re-checks out the exact
+  SHA, re-enforces the allowlist gate, re-verifies (secret scan + build), and pushes with
+  `AUTOFIX_TOKEN`; plus a `flag-human-review` job. claude-code-action **SHA-pinned
+  v1.0.148** (CVE-2025-66032). `scripts/check-fix-allowlist.py` is the shared gate.
+- **`templates/fix-loop/` + `templates/workflows/`**: thin caller workflows (privilege
+  boundary: `ai-autofix` label + non-fork + trusted reviewer), pinned `uses:`.
+
+### Added — runners, in-session loop, setup
+
+- **Lefthook is the default local runner** (`templates/lefthook/lefthook.yml`), calling
+  the SAME dispatcher scripts; **pre-commit kept as a supported alternative**.
+- **Claude Code in-session bundle** (`templates/claude/`): `PostToolUse` scans each
+  edited file (exit 2 → self-correct), `Stop` runs the shared `scan-and-fix` guarded by
+  `stop_hook_active`. Shared `scripts/scan-and-fix.{ps1,sh}`.
+- **One-command `setup-scan-fix.{ps1,py}`**: idempotent; writes config from a tier
+  template, installs the runner + bundle + caller workflows, creates labels, VERIFIES
+  (never creates) secrets, runs verify-scanning. `render-scan-config.py` renders configs.
+- **`docs/SECURITY-MODEL.md`, `docs/FIX-LOOP.md`, `docs/APP-CODE-SCANNING.md`,
+  `docs/MIGRATION-ANALYSIS.md`, `docs/CONSUMER-MIGRATION.md`**; `specs/002-scan-fix-platform/`.
+
+### Changed
+
+- **All third-party actions SHA-pinned** across this repo's own workflows
+  (`terraform-security-scan.yml` was on `@v4`/`@master`).
+- **`.gitattributes`** enforces LF on shell scripts (Unix/CI execution).
+- Tier templates extended with app-code + `fix_loop` defaults
+  (`templates/scan-config/{starter,standard,strict}.yaml`).
+
 ## [1.0.0] - Unreleased
 
 ### Added

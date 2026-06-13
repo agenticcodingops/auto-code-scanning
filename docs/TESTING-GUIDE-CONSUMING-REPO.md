@@ -1,6 +1,13 @@
 # Testing Guide: Security Scanning on Consuming Repositories
 
-This guide walks through testing the `auto-code-scanning` solution on a real Terraform repository. It was validated against `azure-wordpress` (1,494 .tf files across 11 AWS module categories) on 2026-02-12.
+This guide walks through testing the `auto-code-scanning` solution on a real consuming repository. The Terraform tests (Tests 1-8) were validated against `azure-wordpress` (1,494 .tf files across 11 AWS module categories) on 2026-02-12.
+
+> **v2.0.0 — two layers.** The repo is now a reusable **scan→fix platform**.
+> **Layer A** adds app-code scanning (C#/.NET, TypeScript/JS, SQL) alongside
+> Terraform; **Layer B** adds an optional agentic fix-loop. Tests 1-8 below cover
+> Layer A's Terraform path (unchanged). **Tests 9-11 are new in v2.0.0** and cover
+> app-code hooks, SARIF categories, and the fix-loop privilege boundary. **Pin the
+> consuming repo to `@v2.0.0` (or a SHA) — never `@main`.**
 
 ## Prerequisites
 
@@ -396,6 +403,144 @@ time pre-commit run trivy-secrets --all-files
 | trivy-iac-critical | 267s | 15 CRITICAL |
 | trivy-secrets | 22.7s | 0 |
 | gitleaks | 61.3s | 1 HIGH |
+
+---
+
+## Test 9: App-Code Hooks (Layer A — C#/.NET, TypeScript/JS, SQL)
+
+New in v2.0.0. App-code scanning runs the **same dispatcher hooks** under **both**
+local runners — Lefthook (the v2.0.0 default) and pre-commit (the alternative) —
+because both call `hooks/dispatcher.sh`, which OS-detects (Windows → `.ps1`). The
+hooks must behave identically regardless of which runner invokes them.
+
+Enable the languages you need (writes `languages.csharp` / `languages.typescript` /
+`languages.sql` in `scan-config.yaml` and installs the chosen runner):
+
+```bash
+# Lefthook (default)
+python "<path-to-scanning-repo>/scripts/setup-scan-fix.py" --languages csharp,typescript --tier standard
+# pre-commit alternative
+python "<path-to-scanning-repo>/scripts/setup-scan-fix.py" --languages csharp,typescript --tier standard --hooks-runner pre-commit
+```
+
+### 9A. Verify the app-code hooks run under Lefthook
+
+```bash
+lefthook install
+# Plant a finding, then commit a single app-code file
+lefthook run pre-commit --files src/Vulnerable.cs
+lefthook run pre-commit --files src/vulnerable.ts
+```
+
+### 9B. Verify the SAME hooks run under pre-commit
+
+```bash
+pre-commit run semgrep-csharp     --files src/Vulnerable.cs
+pre-commit run semgrep-typescript --files src/vulnerable.ts
+pre-commit run dotnet-format      --files src/Vulnerable.cs   # path solved by languages.csharp.build, not hardcoded
+```
+
+### Expected Results
+
+- `semgrep-csharp` flags `.cs` findings (Semgrep `p/csharp`); `semgrep-typescript`
+  flags `.ts/.tsx/.js/.jsx` findings (`p/typescript`); both **exit 1** on a real
+  finding and **exit 0** when clean.
+- A staged file of an irrelevant type is a **no-op PASS (0)** — the hook self-discovers
+  staged files from the git index.
+- Missing tool (semgrep/dotnet not installed) → **fail-open** (exit 0 with a warning),
+  never a hard block.
+- The result is **identical under Lefthook and pre-commit** (same dispatcher).
+
+Reference test (run from the scanning repo itself): `tests/integration/test-app-code-hooks.sh`
+plants MD5 (C#) and `eval` (TS) findings in throwaway git repos and asserts the exit
+codes, using the deterministic local rule via `SEMGREP_RULESET_CSHARP/TYPESCRIPT` so it
+does not depend on the remote rule packs.
+
+```bash
+bash tests/integration/test-app-code-hooks.sh
+```
+
+---
+
+## Test 10: SARIF Categories Are Distinct (CI)
+
+New in v2.0.0. Since 2025-07-22 GitHub **rejects** SARIF uploads that collide on the
+same tool + category. The reusable `code-security-scan.yml` workflow composes a
+**distinct** category per tool as `<ci.sarif.category_prefix><tool>` (default prefix
+`scan-`), e.g. `scan-trivy-iac`, `scan-semgrep-csharp`, `scan-semgrep-typescript`,
+`scan-eslint`.
+
+### 10A. Verify in the Security tab
+
+After a CI run on a PR (with `languages.*` enabled), open the consuming repo's
+**Security → Code scanning** tab and confirm each tool's findings appear under its own
+category and that there are **no "SARIF category already used" upload errors** in the
+workflow logs.
+
+### Expected Results
+
+| Check | Expected |
+|-------|----------|
+| `ci.sarif.category_prefix` in `scan-config.yaml` | `scan-` (or your override) |
+| Categories in Security tab | One distinct category per enabled tool (e.g. `scan-semgrep-csharp`, `scan-eslint`) |
+| Workflow logs | No SARIF category-collision rejection |
+
+---
+
+## Test 11: Fix-Loop Privilege Boundary (Layer B)
+
+New in v2.0.0. The autonomous fix-loop (`autonomous-fix.yml`) is **opt-in** and
+**off by default**. The two-job design must hold its security guarantees: the
+**analyze** job has **no write token**, and the **apply** job **enforces the
+allowlist** so a patch touching a gated path is rejected to `needs-human-review`.
+
+### 11A. Verify the gate logic (no PR required)
+
+`scripts/check-fix-allowlist.py` is the shared gate enforced in **both** the analyze
+and apply jobs. Verify it locally against the consuming repo's `scan-config.yaml`:
+
+```bash
+# A path inside fix_loop.allowlist_paths -> exit 0 ("OK")
+printf 'src/app.cs\n'                 | python "<path-to-scanning-repo>/scripts/check-fix-allowlist.py" --config scan-config.yaml
+# A patch touching .github/ -> exit 1 ("GATED") -> needs-human-review
+printf '.github/workflows/ci.yml\n'   | python "<path-to-scanning-repo>/scripts/check-fix-allowlist.py" --config scan-config.yaml
+# A security-sensitive name INSIDE an allowlisted dir still fails CLOSED
+printf 'src/AuthService.cs\n'         | python "<path-to-scanning-repo>/scripts/check-fix-allowlist.py" --config scan-config.yaml
+```
+
+Reference unit/CLI tests (run from the scanning repo): `tests/python/test_check_fix_allowlist.py`
+asserts each case, including that a `.github/` patch is rejected (→ `needs-human-review`)
+and that a sensitive substring inside an allowlisted dir fails closed.
+
+```bash
+python -m pytest tests/python/test_check_fix_allowlist.py -q
+```
+
+### 11B. Verify the two-job boundary on a real PR (optional)
+
+1. Set `fix_loop.enabled: true` in `scan-config.yaml` and add the `ai-autofix` label
+   to a PR.
+2. In the workflow run, confirm the **analyze** job has `permissions: contents: read`
+   (no `AUTOFIX_TOKEN`) and uploads only the `autofix-patch` artifact — any push attempt
+   from analyze would `403`.
+3. Confirm the **apply-and-push** job re-runs `check-fix-allowlist.py`, re-runs the
+   secret scan + `build_verify_cmd`, bumps `.fix-attempts`, and only then pushes with
+   `AUTOFIX_TOKEN`.
+4. Open a PR whose only change is under `.github/` (or another gated path) and confirm
+   the loop flags `needs-human-review` instead of pushing.
+
+### Expected Results
+
+| Check | Expected |
+|-------|----------|
+| `analyze` job permissions | `contents: read` only — no write token, no egress |
+| Gate on allowlisted path (`src/…`) | `OK` (exit 0) |
+| Gate on `.github/` patch | `GATED` (exit 1) → `needs-human-review` |
+| Sensitive name in allowlisted dir (`src/AuthService.cs`) | `GATED` (fail closed) |
+| Iteration cap reached (`fix_loop.max_iterations`) | PR labelled `needs-human-review` |
+| `claude-code-action` ref | SHA-pinned v1.0.148 (`>= 1.0.93`, CVE-2025-66032) |
+
+See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the full threat model.
 
 ---
 

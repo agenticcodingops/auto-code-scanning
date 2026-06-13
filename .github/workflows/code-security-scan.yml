@@ -1,0 +1,246 @@
+# ============================================================================
+# REUSABLE APP-CODE SECURITY SCAN (LAYER A)
+# auto-code-scanning
+#
+# Companion to reusable-scan.yml (Terraform/IaC). This workflow scans application
+# code (C#/.NET, TypeScript/JS) and uploads SARIF per tool under DISTINCT
+# categories (post-2025-07 GitHub rule), driven by the consumer's scan-config.yaml.
+#
+# Usage in a consuming repo (pin to a release tag!):
+#   jobs:
+#     code-scan:
+#       uses: {org}/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+#       with:
+#         languages: "csharp,typescript"   # or omit to auto-detect from scan-config.yaml
+#       permissions:
+#         contents: read
+#         security-events: write
+#         pull-requests: write
+# ============================================================================
+
+name: Reusable App-Code Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: "Comma-separated app-code languages to scan (csharp,typescript). Empty = auto-detect from scan-config.yaml."
+        type: string
+        required: false
+        default: ""
+      severity:
+        description: "Semgrep severity filter passed through (ERROR,WARNING)."
+        type: string
+        required: false
+        default: "ERROR"
+      category-prefix:
+        description: "SARIF category prefix; must match ci.sarif.category_prefix. Ensures distinct categories per tool."
+        type: string
+        required: false
+        default: "scan-"
+      semgrep-version:
+        description: "Pinned Semgrep version (supply-chain hygiene)."
+        type: string
+        required: false
+        default: "1.100.0"
+      run-secret-scan:
+        description: "Also run a Trivy secret scan on changed code."
+        type: boolean
+        required: false
+        default: true
+      fail-on-findings:
+        description: "Fail the workflow when findings are present."
+        type: boolean
+        required: false
+        default: true
+      upload-sarif:
+        description: "Upload SARIF to GitHub code scanning."
+        type: boolean
+        required: false
+        default: true
+    outputs:
+      languages-scanned:
+        description: "JSON array of languages that were scanned."
+        value: ${{ jobs.detect.outputs.languages }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # DETECT — derive the app-code languages from scan-config.yaml (or the input)
+  # ==========================================================================
+  detect:
+    name: Detect languages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      languages: ${{ steps.detect.outputs.languages }}
+      category_prefix: ${{ steps.detect.outputs.category_prefix }}
+    steps:
+      - name: Checkout calling repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Resolve enabled app-code languages
+        id: detect
+        env:
+          INPUT_LANGUAGES: ${{ inputs.languages }}
+          INPUT_PREFIX: ${{ inputs.category-prefix }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          app_langs = ["csharp", "typescript"]
+          prefix = os.environ.get("INPUT_PREFIX") or "scan-"
+          chosen = []
+          forced = [s.strip() for s in os.environ.get("INPUT_LANGUAGES", "").split(",") if s.strip()]
+          if forced:
+              chosen = [l for l in forced if l in app_langs]
+          else:
+              try:
+                  import yaml
+                  with open("scan-config.yaml", encoding="utf-8") as fh:
+                      cfg = yaml.safe_load(fh) or {}
+                  langs = cfg.get("languages", {}) or {}
+                  for l in app_langs:
+                      if (langs.get(l) or {}).get("enabled"):
+                          chosen.append(l)
+                  pfx = (((cfg.get("ci") or {}).get("sarif") or {}).get("category_prefix"))
+                  if pfx:
+                      prefix = pfx
+              except Exception as exc:
+                  print(f"::warning::could not read scan-config.yaml ({exc}); scanning nothing unless 'languages' input set")
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a") as f:
+              f.write(f"languages={json.dumps(chosen)}\n")
+              f.write(f"category_prefix={prefix}\n")
+          print(f"languages={chosen} category_prefix={prefix}")
+          PY
+
+  # ==========================================================================
+  # SEMGREP — one job per language => DISTINCT SARIF category per tool
+  # ==========================================================================
+  semgrep:
+    name: Semgrep (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: detect
+    if: needs.detect.outputs.languages != '[]' && needs.detect.outputs.languages != ''
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.languages) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install Semgrep (pinned)
+        # github/inputs context goes through env vars (never interpolated into the
+        # shell directly) — see docs/SECURITY-MODEL.md. This is the pattern consumers
+        # should copy.
+        env:
+          SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+        run: |
+          python3 -m pip install --quiet "semgrep==${SEMGREP_VERSION}"
+          semgrep --version
+
+      - name: Map language to ruleset
+        id: ruleset
+        env:
+          LANGUAGE: ${{ matrix.language }}
+        run: |
+          case "${LANGUAGE}" in
+            csharp)     echo "config=p/csharp" >> "$GITHUB_OUTPUT" ;;
+            typescript) echo "config=p/typescript" >> "$GITHUB_OUTPUT" ;;
+            *)          echo "config=auto" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Run Semgrep -> SARIF
+        env:
+          PYTHONUTF8: "1"
+          SEMGREP_SEND_METRICS: "off"
+          SG_CONFIG: ${{ steps.ruleset.outputs.config }}
+          SG_SEVERITY: ${{ inputs.severity }}
+          SG_LANG: ${{ matrix.language }}
+        run: |
+          out="semgrep-${SG_LANG}.sarif"
+          semgrep scan \
+            --config "${SG_CONFIG}" \
+            --severity "${SG_SEVERITY}" \
+            --sarif --output "${out}" \
+            --metrics off --quiet || true
+          # Ensure a SARIF file always exists (empty if no findings) so upload never fails.
+          test -f "${out}" || echo '{"version":"2.1.0","runs":[]}' > "${out}"
+
+      - name: Upload SARIF (distinct category)
+        if: always() && inputs.upload-sarif
+        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        with:
+          sarif_file: semgrep-${{ matrix.language }}.sarif
+          category: ${{ needs.detect.outputs.category_prefix }}semgrep-${{ matrix.language }}
+        continue-on-error: true
+
+      - name: Gate on findings
+        if: inputs.fail-on-findings
+        env:
+          PYTHONUTF8: "1"
+          SEMGREP_SEND_METRICS: "off"
+          SG_CONFIG: ${{ steps.ruleset.outputs.config }}
+          SG_SEVERITY: ${{ inputs.severity }}
+        run: |
+          semgrep scan \
+            --config "${SG_CONFIG}" \
+            --severity "${SG_SEVERITY}" \
+            --error --metrics off --quiet
+
+  # ==========================================================================
+  # SECRETS — Trivy secret scan over the tree => distinct category
+  # ==========================================================================
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: detect
+    if: inputs.run-secret-scan
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Trivy secret scan -> SARIF
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        with:
+          scan-type: fs
+          scanners: secret
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          format: sarif
+          output: trivy-secrets.sarif
+          skip-dirs: "node_modules,dist,build,bin,obj,.terraform"
+
+      - name: Upload secrets SARIF (distinct category)
+        if: always() && inputs.upload-sarif
+        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        with:
+          sarif_file: trivy-secrets.sarif
+          category: ${{ needs.detect.outputs.category_prefix }}trivy-secrets
+        continue-on-error: true
+
+      - name: Gate on secret findings
+        if: inputs.fail-on-findings
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        with:
+          scan-type: fs
+          scanners: secret
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          format: table
+          skip-dirs: "node_modules,dist,build,bin,obj,.terraform"
