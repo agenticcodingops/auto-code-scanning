@@ -114,6 +114,7 @@ Read **[FIX-LOOP](docs/FIX-LOOP.md)** and **[SECURITY-MODEL](docs/SECURITY-MODEL
 
 ## Documentation
 
+- **Adopt in a new repo:** **[Consumer Repo Setup Guide](docs/consumer-repo-setup-guide.md)** (full, detailed walkthrough)
 - **Start here:** [QUICK-START-5MIN](docs/QUICK-START-5MIN.md) · [SETUP-GUIDE](docs/SETUP-GUIDE.md) · [AI-AGENT-GUIDE](docs/AI-AGENT-GUIDE.md)
 - **Scanning:** [APP-CODE-SCANNING](docs/APP-CODE-SCANNING.md) · [HOOK-REFERENCE](docs/HOOK-REFERENCE.md) · [MULTI-CLOUD](docs/MULTI-CLOUD.md)
 - **Fix-loop:** [FIX-LOOP](docs/FIX-LOOP.md) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
