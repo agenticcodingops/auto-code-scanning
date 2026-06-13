@@ -1,0 +1,29 @@
+# ============================================================================
+# terraform-scan.yml — CALLER (drop into a consumer repo: .github/workflows/)
+# Thin caller for the reusable TERRAFORM/IaC scanner. Pin the tag — never @main.
+# ============================================================================
+name: Terraform Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  terraform-scan:
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.0.0
+    with:
+      terraform-directory: "."
+      cloud-provider: "aws"        # aws | azure | gcp
+      severity: "CRITICAL,HIGH"
+      scanning-repo-ref: "v2.0.0"
+    # Optional Snyk IaC (needs SNYK_TOKEN secret):
+    # secrets:
+    #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

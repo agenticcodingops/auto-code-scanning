@@ -1,0 +1,26 @@
+# ============================================================================
+# code-security-scan.yml — CALLER (drop into a consumer repo: .github/workflows/)
+# Thin caller for the reusable APP-CODE scanner. Pin the tag — never @main.
+# ============================================================================
+name: Code Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF to code scanning
+  pull-requests: write     # PR annotations
+
+jobs:
+  code-scan:
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+    with:
+      # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
+      # languages: "csharp,typescript"
+      category-prefix: "scan-"
+      fail-on-findings: true
