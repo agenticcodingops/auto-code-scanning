@@ -379,23 +379,27 @@ jobs:
         run: |
           git diff --cached --name-only | python3 .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}"
 
-      - name: Install Trivy (pinned)
-        env:
-          TRIVY_VERSION: "0.71.0"
+      - name: Stage changed files for the secret scan
         run: |
-          curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/v${TRIVY_VERSION}/contrib/install.sh" \
-            | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
-          trivy --version
-
-      - name: Authoritative secret scan (changed files only)
-        run: |
+          # Copy ONLY the changed files into a temp tree so a pre-existing repo secret
+          # elsewhere can't block a legit fix, and a smuggled secret can't ride in.
           tmp="$(mktemp -d)"
           while IFS= read -r -d '' f; do
             mkdir -p "${tmp}/$(dirname "$f")"
             cp "$f" "${tmp}/$f" 2>/dev/null || true
           done < <(git diff --cached --name-only -z)
-          trivy fs "${tmp}" --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet
-          rm -rf "${tmp}"
+          echo "SCAN_TMP=${tmp}" >> "$GITHUB_ENV"
+
+      - name: Authoritative secret scan (SHA-pinned action, no curl|sh)
+        # Supply-chain hygiene: use the same SHA-pinned Trivy action as code-security-scan.yml
+        # instead of piping an install script to sh in the write-capable job.
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.SCAN_TMP }}
+          scanners: secret
+          severity: CRITICAL,HIGH
+          exit-code: "1"
 
       - name: Authoritative build verify (TRUSTED base command, token-free env)
         # BUILD_VERIFY_CMD comes from the config job, which read it from the BASE ref,
@@ -488,7 +492,10 @@ jobs:
             if (process.env.CAPPED === 'true') {
               reason = `the autonomous-fix cap was reached (attempts: ${process.env.ATTEMPTS}). Reset \`.fix-attempts\` to 0 after a human review.`;
             } else if (process.env.GATED === 'true') {
-              reason = `the proposed fix was blocked by the path gate: ${process.env.GATE_REASON}. Apply it manually (security-sensitive or non-fixable area).`;
+              // Backtick-wrap the gate reason so any path characters render as inert code,
+              // never as markdown/HTML, in the PR comment.
+              const safeReason = '`' + String(process.env.GATE_REASON || '').replace(/`/g, "'") + '`';
+              reason = `the proposed fix was blocked by the path gate: ${safeReason}. Apply it manually (security-sensitive or non-fixable area).`;
             } else if (process.env.ANALYZE_RESULT === 'failure') {
               reason = 'the analysis job failed (fork PR, invalid PR, or infra error). No change was made.';
             } else {

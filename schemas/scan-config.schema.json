@@ -5,7 +5,8 @@
   "description": "Schema for the multi-language scan->fix platform config. Validated by hooks/validate-scan-config and in CI.",
   "type": "object",
   "required": ["schema_version", "languages"],
-  "additionalProperties": true,
+  "comment-additionalProperties": "false at the root catches typos like 'fx_loop' that would silently leave the fix-loop disabled. All known top-level keys are declared below.",
+  "additionalProperties": false,
   "properties": {
     "schema_version": {
       "type": "string",

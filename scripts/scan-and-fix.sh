@@ -58,10 +58,10 @@ if [[ ${AUTO_FIX} -eq 1 && ${has_errors} -ne 0 ]]; then
         echo "  \"hasErrors\": true,"
         echo '  "findings": ['
         for i in "${!TOOLS[@]}"; do
-            local_comma=','
-            [[ $i -eq $(( ${#TOOLS[@]} - 1 )) ]] && local_comma=''
+            trailing_comma=','
+            [[ $i -eq $(( ${#TOOLS[@]} - 1 )) ]] && trailing_comma=''
             passed=$([[ "${CODES[$i]}" -eq 0 ]] && echo true || echo false)
-            echo "    {\"tool\": \"${TOOLS[$i]}\", \"exitCode\": ${CODES[$i]}, \"passed\": ${passed}}${local_comma}"
+            echo "    {\"tool\": \"${TOOLS[$i]}\", \"exitCode\": ${CODES[$i]}, \"passed\": ${passed}}${trailing_comma}"
         done
         echo '  ]'
         echo '}'

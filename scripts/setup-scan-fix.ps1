@@ -110,8 +110,11 @@ if ($HooksRunner -eq "lefthook") {
 # ---------------------------------------------------------------------------
 Step "Claude Code in-session bundle (.claude/)"
 $claudeSettings = Join-Path $RepoPath ".claude/settings.json"
+# Install the runner-appropriate settings: pwsh on Windows, bash on macOS/Linux.
+$settingsSrc = if ($IsWindows -eq $false) { "templates/claude/settings.unix.json" } else { "templates/claude/settings.json" }
 if (-not (Test-Path $claudeSettings)) {
-    Copy-IfNewer (Join-Path $PlatformRoot "templates/claude/settings.json") $claudeSettings
+    Copy-IfNewer (Join-Path $PlatformRoot $settingsSrc) $claudeSettings
+    Info "Installed $(Split-Path $settingsSrc -Leaf) as .claude/settings.json"
 } else { Info ".claude/settings.json exists; leaving it (merge manually if needed)" }
 foreach ($h in @("posttooluse-scan.ps1", "posttooluse-scan.sh", "stop-scan.ps1", "stop-scan.sh")) {
     Copy-IfNewer (Join-Path $PlatformRoot "templates/claude/hooks/$h") (Join-Path $RepoPath ".claude/hooks/$h")

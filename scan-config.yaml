@@ -1,6 +1,7 @@
 # ============================================================================
 # MULTI-LANGUAGE SCANNING FRAMEWORK CONFIGURATION
-# azure-wordpress
+# auto-code-scanning — canonical/reference config (consumers generate their own
+# via scripts/setup-scan-fix from templates/scan-config/<tier>.yaml)
 #
 # This file defines the scanning framework configuration for all supported
 # languages. Each language can be independently enabled/disabled.
@@ -379,8 +380,10 @@ languages:
 # CI/CD INTEGRATION
 # ============================================================================
 ci:
-  # GitHub Actions workflow file
-  workflow_file: ".github/workflows/security-scan.yml"
+  # GitHub Actions workflow file(s) that run scanning in CI. App-code consumers use
+  # code-security-scan.yml; Terraform/IaC consumers use terraform-security-scan.yml
+  # (or the reusable reusable-scan.yml). Informational pointer to a real workflow.
+  workflow_file: ".github/workflows/code-security-scan.yml"
 
   # Upload results to GitHub Security tab
   sarif_upload: true

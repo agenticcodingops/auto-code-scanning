@@ -21,24 +21,33 @@ $ruleset = if ($env:SEMGREP_RULESET_TYPESCRIPT) { $env:SEMGREP_RULESET_TYPESCRIP
 Start-ScanTimer
 Write-HookLog "Scanning... ($(@($files).Count) TS/JS files, $ruleset)"
 
-$semgrepArgs = @('scan', '--config', $ruleset, '--error', '--metrics', 'off', '--quiet')
+$tmpJson = New-TemporaryFile
+$semgrepArgs = @('scan', '--config', $ruleset, '--metrics', 'off', '--json', '--output', $tmpJson)
 if ($ExtraArgs) { $semgrepArgs += $ExtraArgs }
 $semgrepArgs += $files
 
-$output = & semgrep @semgrepArgs 2>&1
-$exitCode = $LASTEXITCODE
+& semgrep @semgrepArgs *> $null
+$sgExit = $LASTEXITCODE
 $durationMs = Stop-ScanTimer
 
-if ($exitCode -eq 0) {
-    Write-HookLog "PASS: No findings (${durationMs}ms)"
-    Write-ScanJson (Build-PassJson -Tool 'semgrep-typescript' -DurationMs $durationMs)
-    exit 0
-} elseif ($exitCode -eq 1) {
-    $output | ForEach-Object { Write-Host $_ }
-    Write-HookLog "FAIL: Semgrep (p/typescript) found issues"
-    Write-ScanJson (Build-FindingsJson -Tool 'semgrep-typescript' -DurationMs $durationMs -High 1)
-    exit 1
-} else {
-    $null = Get-HookExitCode -ToolExitCode $exitCode
-    exit 0
+try {
+    if ($sgExit -ne 0 -and ((Get-Item $tmpJson).Length -eq 0)) {
+        $null = Get-HookExitCode -ToolExitCode $sgExit
+        Write-HookLog "PASS: scanner error, allowing commit (fail-open)"
+        Write-ScanJson (Build-PassJson -Tool 'semgrep-typescript' -DurationMs $durationMs)
+        exit 0
+    }
+    $counts = Get-SemgrepCounts -JsonPath $tmpJson
+    if ($counts.Total -eq 0) {
+        Write-HookLog "PASS: No findings (${durationMs}ms)"
+        Write-ScanJson (Build-PassJson -Tool 'semgrep-typescript' -DurationMs $durationMs)
+        exit 0
+    } else {
+        Show-SemgrepFindings -JsonPath $tmpJson
+        Write-HookLog "FAIL: $(Format-FindingSummary -High $counts.High -Medium $counts.Medium -Low $counts.Low)"
+        Write-ScanJson (Build-FindingsJson -Tool 'semgrep-typescript' -DurationMs $durationMs -High $counts.High -Medium $counts.Medium -Low $counts.Low)
+        exit 1
+    }
+} finally {
+    Remove-Item $tmpJson -ErrorAction SilentlyContinue
 }

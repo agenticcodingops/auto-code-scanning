@@ -348,6 +348,39 @@ except Exception:
     }
 }
 
+# Count Semgrep findings by severity from a --json output file (native parse).
+# ERROR->High, WARNING->Medium, INFO->Low. Returns a hashtable @{High;Medium;Low;Total}.
+function Get-SemgrepCounts {
+    param([Parameter(Mandatory)][string]$JsonPath)
+    $res = @{ High = 0; Medium = 0; Low = 0; Total = 0 }
+    try {
+        $doc = Get-Content $JsonPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        foreach ($r in @($doc.results)) {
+            switch (("" + $r.extra.severity).ToUpper()) {
+                'ERROR'   { $res.High++ }
+                'WARNING' { $res.Medium++ }
+                default   { $res.Low++ }
+            }
+        }
+        $res.Total = $res.High + $res.Medium + $res.Low
+    } catch { }
+    return $res
+}
+
+# Print a concise list of Semgrep findings from a --json output file.
+function Show-SemgrepFindings {
+    param([Parameter(Mandatory)][string]$JsonPath)
+    try {
+        $doc = Get-Content $JsonPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        foreach ($r in @($doc.results | Select-Object -First 25)) {
+            $sev = ("" + $r.extra.severity).ToUpper()
+            $msg = (("" + $r.extra.message) -split "`n")[0]
+            Write-HookLog "  $sev  $($r.check_id)  $($r.path):$($r.start.line)"
+            Write-HookLog "    $msg"
+        }
+    } catch { }
+}
+
 # Auto-detect nearest .slnx/.sln under a working dir when build.solution is empty.
 function Find-DotnetSolution {
     param([string]$WorkingDir = '.')

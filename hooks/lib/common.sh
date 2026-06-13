@@ -298,6 +298,65 @@ except Exception:
 PYEOF
 }
 
+# Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).
+# Semgrep is a Python package, so python is available wherever semgrep runs.
+_SEMGREP_COUNT_PY='
+import sys, json
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    h = m = l = 0
+    for r in d.get("results", []):
+        sev = str(r.get("extra", {}).get("severity") or "").upper()
+        if sev == "ERROR": h += 1
+        elif sev == "WARNING": m += 1
+        else: l += 1
+    print(h, m, l, h + m + l)
+except Exception:
+    sys.exit(3)
+'
+_SEMGREP_PRINT_PY='
+import sys, json
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    for r in d.get("results", [])[:25]:
+        sev = str(r.get("extra", {}).get("severity") or "").upper()
+        msg = (str(r.get("extra", {}).get("message") or "").splitlines() or [""])[0]
+        print("  %s  %s  %s:%s" % (sev, r.get("check_id",""), r.get("path",""), r.get("start",{}).get("line",0)))
+        print("    %s" % msg)
+except Exception:
+    pass
+'
+
+# Count Semgrep findings by severity from a --json output file.
+# Prints "<high> <medium> <low> <total>" (ERROR->HIGH, WARNING->MEDIUM, INFO->LOW).
+count_semgrep_severities() {
+    local json="${1:?json file required}"
+    [[ -f "${json}" ]] || { echo "0 0 0 0"; return 0; }
+    local py result
+    py="$(find_python 2>/dev/null)" || py=""
+    if [[ -n "${py}" ]]; then
+        result="$("${py}" -c "${_SEMGREP_COUNT_PY}" "${json}" 2>/dev/null)"
+        if [[ $? -eq 0 && -n "${result}" ]]; then
+            echo "${result}"
+            return 0
+        fi
+    fi
+    # Fallback only if python is genuinely unavailable: detect finding presence.
+    if grep -q '"check_id"' "${json}" 2>/dev/null; then echo "1 0 0 1"; else echo "0 0 0 0"; fi
+}
+
+# Print a concise list of Semgrep findings from a --json output file.
+print_semgrep_findings() {
+    local json="${1:-}"
+    [[ -f "${json}" ]] || return 0
+    local py out
+    py="$(find_python 2>/dev/null)" || return 0
+    out="$("${py}" -c "${_SEMGREP_PRINT_PY}" "${json}" 2>/dev/null)" || return 0
+    [[ -n "${out}" ]] && printf '%s\n' "${out}"
+}
+
 # Auto-detect the nearest .slnx/.sln under a working dir when build.solution is empty.
 # Prints the solution path relative to the working dir, or empty if none found.
 # Usage: sln="$(detect_dotnet_solution "${working_dir}")"

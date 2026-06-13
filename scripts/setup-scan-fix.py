@@ -103,8 +103,11 @@ def main(argv) -> int:
     # 4) Claude bundle
     step("Claude Code in-session bundle (.claude/)")
     settings = repo / ".claude/settings.json"
+    # pwsh settings on Windows, bash settings on macOS/Linux.
+    settings_src = "templates/claude/settings.json" if os.name == "nt" else "templates/claude/settings.unix.json"
     if not settings.exists():
-        copy(PLATFORM_ROOT / "templates/claude/settings.json", settings)
+        copy(PLATFORM_ROOT / settings_src, settings)
+        info(f"Installed {Path(settings_src).name} as .claude/settings.json")
     else:
         info(".claude/settings.json exists; leaving it")
     for h in ("posttooluse-scan.ps1", "posttooluse-scan.sh", "stop-scan.ps1", "stop-scan.sh"):
