@@ -82,9 +82,18 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 
 | Job | Token | Sees untrusted input? | Egress? | Output |
 |---|---|---|---|---|
+| `config` | read-only | no (reads **base** ref) | no | trusted `fix_loop` config |
 | `analyze` | **read-only** | yes (PR/review text, as DATA) | **no** | a patch artifact |
-| `apply-and-push` | **AUTOFIX_TOKEN** (write) | **no** | no | a commit pushed to the PR head |
+| `apply-and-push` | **AUTOFIX_TOKEN** (push step only) | **no** | no | a commit pushed to the PR head |
 | `flag-human-review` | issues/PR write | no | no | `needs-human-review` label + comment |
+
+> **Trust boundary (hardened).** `fix_loop` config — `build_verify_cmd`, `allowlist_paths`,
+> `gated_paths`, `max_iterations` — is read from the **base ref**, so a PR cannot change the gate
+> or the executed build command via its own head diff. In `apply-and-push` the checkout uses
+> `persist-credentials: false`; the gate, secret scan, and `build_verify_cmd` run **token-free**,
+> and `AUTOFIX_TOKEN` is injected only into the final push URL. Point `build_verify_cmd` at a
+> checked-in script under a gated path (e.g. `bash scripts/ci-build-verify.sh`) so it can't be
+> altered in-PR either. See [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
 
 Key enforcement (all mechanical, independent of the prompt):
 - `analyze` runs `claude-code-action` **FIX-ONLY** with a **scoped tool allowlist** (no umbrella

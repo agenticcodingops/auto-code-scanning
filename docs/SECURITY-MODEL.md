@@ -58,10 +58,24 @@ single job ever holds more than one.**
   no `WebSearch`/`WebFetch`, no `git push/commit/reset`, no `curl`/`wget`**. Its only
   output is a **patch artifact**.
 - **`apply-and-push`** never sees untrusted input. It re-checks out the **exact
-  immutable head SHA** the patch was built against (no TOCTOU), `git apply`s the
-  vetted patch, **re-runs the allowlist gate**, **re-scans changed files for secrets**,
-  runs the configured **`build_verify_cmd`**, bumps `.fix-attempts`, and only then
-  pushes — using `AUTOFIX_TOKEN`, which lives **only** in this job.
+  immutable head SHA** the patch was built against (no TOCTOU) **with
+  `persist-credentials: false` — the `AUTOFIX_TOKEN` is never written to `.git/config`**.
+  It `git apply`s the vetted patch, **re-runs the allowlist gate** (against the *base*
+  config — see §4), **re-scans changed files for secrets**, and runs **`build_verify_cmd`**
+  — all in this **credential-free** checkout. Only a final, separate **push** step holds
+  the token, injected directly into the push URL
+  (`https://x-access-token:$AUTOFIX_TOKEN@github.com/$REPO.git`) and never persisted to
+  disk. So even a hostile build command cannot read the push token.
+
+### The config that drives the gate and the build is read from the BASE ref
+
+`fix_loop` settings — `build_verify_cmd`, `allowlist_paths`, `gated_paths`,
+`max_iterations` — are parsed by the `config` job from the **already-merged base ref**
+(`pull_request.base.sha`, or the default branch for `workflow_dispatch`) and handed to the
+other jobs as outputs + a `trusted-config` artifact. **A PR cannot change what command runs,
+or widen its own allowlist, by editing `scan-config.yaml` in its head diff** — that edit is
+ignored by the loop. (`build_verify_cmd` is still *executed*, so it must be a trusted,
+repo-controlled command — see §7.1.)
 
 ## 4. The path gate is an ALLOWLIST, not a denylist
 
@@ -74,8 +88,10 @@ single job ever holds more than one.**
    `scripts/`, `scan-and-fix.*`, `.env`, `LICENSE`) — case-insensitive, **fail-closed**.
 
 A new sensitive file added tomorrow is gated by default because it must *opt in* to the
-allowlist. The gate runs **twice** (analyze and apply) — defense in depth. `scan-config.yaml`
-itself sits outside every allowlist prefix, so the loop **cannot edit its own gate**.
+allowlist. The gate runs **twice** (analyze and apply) — defense in depth — and **both runs read
+`allowlist_paths` / `gated_paths` from the trusted base config** (the `trusted-config` artifact),
+never the PR-head `scan-config.yaml`. `scan-config.yaml` also sits outside every allowlist prefix,
+so the loop **cannot edit its own gate**, and a PR **cannot widen the gate via its own head diff**.
 
 ## 5. The privilege boundary (who/when)
 
@@ -89,6 +105,13 @@ The caller's `if:` requires **all** of:
   **OWNER/MEMBER/COLLABORATOR** review.
 
 Plus a hard **`max_iterations`** cap (`.fix-attempts`, default 3) → `needs-human-review`.
+
+> **The `ai-autofix` label IS the privilege boundary.** On a repo with multiple
+> write-collaborators, remember that **any write-collaborator can add the label to a PR** (and
+> approve/review it). If that is too broad for your threat model, restrict who can apply it —
+> e.g. a separate guard job that checks the labeller against an allowlist, a GitHub label/branch
+> protection rule, or requiring `workflow_dispatch` (maintainer-only) instead of the label. Treat
+> labelling as equivalent to "approve this PR for an automated, gated, capped code change."
 
 ## 6. Supply-chain pinning
 
@@ -107,6 +130,19 @@ Plus a hard **`max_iterations`** cap (`.fix-attempts`, default 3) → `needs-hum
 `setup-scan-fix` **verifies** their presence with `gh secret list` and prints creation
 steps if missing — it **never** reads, stores, or transmits a secret value.
 
+### 7.1 `build_verify_cmd` is **executed** — keep it trusted
+
+`apply-and-push` runs `fix_loop.build_verify_cmd` as a shell command. The loop reads it from the
+**base ref** (so a PR can't change it) and runs it in a **token-free** checkout (so it can't read
+`AUTOFIX_TOKEN`) — but it is still arbitrary code running in CI. Treat it as **semi-trusted**:
+
+- Keep it a simple, repo-controlled command (e.g. `cd api && dotnet build App.slnx --nologo`).
+- **Best practice:** point it at a **checked-in script under a gated path**, e.g.
+  `build_verify_cmd: "bash scripts/ci-build-verify.sh"`. Because `scripts/` is in `gated_paths`,
+  a PR cannot modify that script without tripping the gate — so the executed logic is doubly
+  protected (base-sourced *and* gated against in-PR edits).
+- It runs with **no inherited secrets** in its environment.
+
 ## 8. What a prompt-injected consumer PR still cannot do
 
 Assume an attacker opens a PR (or comments) with the most hostile payload they can craft,
@@ -116,7 +152,9 @@ and somehow the `ai-autofix` label is present. They **still cannot**:
 |---|---|
 | Exfiltrate secrets via the agent | `analyze` has **no secrets, no egress tools** (`WebFetch`/`WebSearch`/`curl`/`wget` disallowed). It can't even *see* `AUTOFIX_TOKEN`. |
 | Push arbitrary code | `analyze` has **no write token**; it only emits a patch. |
-| Push a malicious patch to a sensitive area | `apply-and-push` re-runs the **allowlist gate**; anything touching `.github/`, `.claude/`, auth/crypto/secrets, `scripts/`, `LICENSE`, … is **rejected → needs-human-review**. |
+| Run arbitrary build commands with the push token | `build_verify_cmd` is read from the **base ref** (not the PR head) and runs in a **credential-free** checkout (`persist-credentials: false`); the `AUTOFIX_TOKEN` exists only in the final push step's URL. A PR can neither change the command nor read the token by running it. |
+| Influence the gate via PR-head config | The allowlist/gated lists are read from the **trusted base config** in both gate runs; editing `scan-config.yaml` in the PR head is ignored. |
+| Push a malicious patch to a sensitive area | `apply-and-push` re-runs the **allowlist gate** (base config); anything touching `.github/`, `.claude/`, auth/crypto/secrets, `scripts/`, `LICENSE`, … is **rejected → needs-human-review**. |
 | Smuggle a secret into committed code | `apply-and-push` re-scans changed files with Trivy and **fails closed** on a CRITICAL/HIGH secret. |
 | Break the build to slip something through | `build_verify_cmd` must pass before any push. |
 | Run forever / brute-force the gate | Hard `max_iterations` cap → `needs-human-review`. |

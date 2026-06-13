@@ -492,6 +492,10 @@ fix_loop:
 
   # Authoritative re-verification command in JOB B (apply-and-push). Derive from
   # languages.*.build (e.g. `dotnet build <solution>`). Empty = secret-scan only.
+  # SECURITY: this is EXECUTED. It is read from the BASE ref (a PR can't change it) and
+  # runs token-free, but it is still arbitrary CI code — keep it trusted. Best practice:
+  # point it at a checked-in script under a gated path, e.g. "bash scripts/ci-build-verify.sh",
+  # so it can't be altered in-PR without tripping the gate. See docs/SECURITY-MODEL.md §7.1.
   build_verify_cmd: ""
 
   # Secrets the consumer must provide (verified, never stored, by setup-scanning).

@@ -6,15 +6,23 @@
 # by the consumer's scan-config.yaml `fix_loop` block. Breaks the "lethal trifecta"
 # (untrusted input + write creds + egress) by SPLITTING work across two jobs:
 #
+#   JOB config         : reads fix_loop from the TRUSTED BASE ref (never PR head) and
+#                        publishes it as an artifact -> the gate & build command cannot
+#                        be influenced by the PR's own diff.
 #   JOB analyze        : untrusted input | READ-ONLY token, no push creds, no egress
 #                        -> produces a vetted PATCH ARTIFACT only
-#   JOB apply-and-push : trusted artifact | re-checkout exact SHA, allowlist gate,
-#                        re-verify (secrets + build), push with AUTOFIX_TOKEN
+#   JOB apply-and-push : trusted artifact | re-checkout exact SHA with NO token on disk;
+#                        gate + secret scan + build_verify all run credential-free; the
+#                        AUTOFIX_TOKEN is injected ONLY into the final push URL.
 #   JOB flag-human     : label + comment on cap / gate / failure
 #
 # The CALLER workflow (templates/fix-loop/) owns the privilege boundary: it only
 # `uses:` this workflow for non-fork, owner-repo PRs that carry the `ai-autofix`
 # label and a trusted reviewer/dispatch. See docs/SECURITY-MODEL.md.
+#
+# TRUST BOUNDARY (hardened): fix_loop config (build_verify_cmd, allowlist_paths,
+# gated_paths, max_iterations) is read from the base ref; build_verify runs with no
+# AUTOFIX_TOKEN in env or .git/config; the gate uses the base config, not PR-head config.
 #
 # claude-code-action is SHA-pinned to v1.0.148 (>= 1.0.93 fixes CVE-2025-66032 /
 # GHSA-xq4m-mc3c-vvg3). This pin is the centralized source of truth; it MUST match
@@ -81,12 +89,20 @@ jobs:
       max_iterations: ${{ steps.cfg.outputs.max_iterations }}
       build_verify_cmd: ${{ steps.cfg.outputs.build_verify_cmd }}
     steps:
-      - name: Checkout consumer repo
+      - name: Checkout TRUSTED base config (NEVER the PR head)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
+          # SECURITY: read fix_loop (build_verify_cmd, allowlist_paths, gated_paths,
+          # max_iterations, …) from the already-merged BASE ref, so a PR can NEVER
+          # alter the gate or the executed build command via its own head diff.
+          # workflow_dispatch has no PR base -> fall back to the default branch.
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Parse fix_loop
+      - name: Ensure PyYAML (a missing dep must not silently disable the loop)
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
+      - name: Parse fix_loop (from trusted base config)
         id: cfg
         env:
           CONFIG_PATH: ${{ inputs.config_path }}
@@ -112,6 +128,25 @@ jobs:
           w("max_iterations", int(fl.get("max_iterations", 3)))
           w("build_verify_cmd", fl.get("build_verify_cmd", "") or "")
           PY
+
+      - name: Stage trusted base config for downstream jobs
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+        run: |
+          # The gate in analyze/apply consumes THIS file (trusted base), never the
+          # PR-head scan-config.yaml — so a PR cannot widen its own allowlist/gated.
+          if [ -f "${CONFIG_PATH:-scan-config.yaml}" ]; then
+            cp "${CONFIG_PATH:-scan-config.yaml}" trusted-scan-config.yaml
+          else
+            : > trusted-scan-config.yaml
+          fi
+
+      - name: Upload trusted base config
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: trusted-config
+          path: trusted-scan-config.yaml
+          retention-days: 3
 
   # ==========================================================================
   # JOB A — analyze (UNTRUSTED INPUT context). NO write token. NO egress.
@@ -173,6 +208,15 @@ jobs:
           ref: ${{ inputs.scanning_repo_ref }}
           path: .scanning-repo
           persist-credentials: false
+
+      - name: Download trusted base config (for the gate)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: trusted-config
+          path: .trusted
+
+      - name: Ensure PyYAML (gate must fail closed, not silently)
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
 
       - name: Iteration-cap pre-check (.fix-attempts)
         id: precheck
@@ -250,17 +294,18 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Safety gate (allowlist + gated paths from config)
+      - name: Safety gate (allowlist + gated paths from TRUSTED base config)
         id: gate
         if: steps.capture.outputs.has_changes == 'true'
         env:
-          CONFIG_PATH: ${{ inputs.config_path }}
+          # Allowlist/gated come from the trusted base config artifact, NOT the PR head.
+          TRUSTED_CONFIG: .trusted/trusted-scan-config.yaml
         run: |
           gated=false
           reason=""
           changed="$(git diff --cached --name-only)"
           if [ -n "${changed}" ]; then
-            if ! out="$(printf '%s\n' "${changed}" | python3 .scanning-repo/scripts/check-fix-allowlist.py --config "${CONFIG_PATH}")"; then
+            if ! out="$(printf '%s\n' "${changed}" | python3 .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}")"; then
               gated=true
               reason="${out#GATED: }"
             fi
@@ -290,14 +335,18 @@ jobs:
       needs.analyze.outputs.has_changes == 'true' &&
       needs.analyze.outputs.gated != 'true'
     permissions:
-      contents: read   # workflow token stays read-only; push uses AUTOFIX_TOKEN
+      contents: read   # workflow token stays read-only; push uses AUTOFIX_TOKEN in one step
     steps:
-      - name: Checkout the EXACT vetted SHA (AUTOFIX_TOKEN, no TOCTOU)
+      - name: Checkout the EXACT vetted SHA (NO token on disk, no TOCTOU)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
+          # SECURITY: persist-credentials:false => AUTOFIX_TOKEN is NEVER written to
+          # .git/config. The allowlist gate, secret scan, and build_verify all run in
+          # this credential-free checkout, so even a hostile build command cannot read
+          # the push token. The token is injected only into the final push URL.
           ref: ${{ needs.analyze.outputs.head_sha }}
           fetch-depth: 0
-          token: ${{ secrets.AUTOFIX_TOKEN }}
+          persist-credentials: false
 
       - name: Checkout shared scanning scripts (pinned)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -312,14 +361,23 @@ jobs:
         with:
           name: autofix-patch
 
+      - name: Download trusted base config (for the gate)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: trusted-config
+          path: .trusted
+
+      - name: Ensure PyYAML (gate must fail closed, not silently)
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
       - name: Apply patch
         run: git apply --index --whitespace=nowarn autofix.patch
 
-      - name: Re-enforce allowlist gate (defense in depth)
+      - name: Re-enforce allowlist gate from TRUSTED base config (defense in depth)
         env:
-          CONFIG_PATH: ${{ inputs.config_path }}
+          TRUSTED_CONFIG: .trusted/trusted-scan-config.yaml
         run: |
-          git diff --cached --name-only | python3 .scanning-repo/scripts/check-fix-allowlist.py --config "${CONFIG_PATH}"
+          git diff --cached --name-only | python3 .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}"
 
       - name: Install Trivy (pinned)
         env:
@@ -339,12 +397,15 @@ jobs:
           trivy fs "${tmp}" --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet
           rm -rf "${tmp}"
 
-      - name: Authoritative build verify (from config)
+      - name: Authoritative build verify (TRUSTED base command, token-free env)
+        # BUILD_VERIFY_CMD comes from the config job, which read it from the BASE ref,
+        # so it is repo-controlled and cannot be set by this PR's head diff. It runs in
+        # the credential-free checkout with NO AUTOFIX_TOKEN in env or .git/config.
         env:
           BUILD_VERIFY_CMD: ${{ needs.config.outputs.build_verify_cmd }}
         run: |
           if [ -n "${BUILD_VERIFY_CMD}" ]; then
-            echo "Running build verify: ${BUILD_VERIFY_CMD}"
+            echo "Running build verify (trusted, base-sourced): ${BUILD_VERIFY_CMD}"
             bash -c "${BUILD_VERIFY_CMD}"
           else
             echo "No build_verify_cmd configured; secret scan is the gate."
@@ -359,10 +420,9 @@ jobs:
           git add .fix-attempts
           echo "autofix iteration ${next}"
 
-      - name: Commit and push (AUTOFIX_TOKEN)
+      - name: Commit (no token present)
         env:
           PR: ${{ needs.analyze.outputs.pr }}
-          HEAD_REF: ${{ needs.analyze.outputs.head_ref }}
         run: |
           git config user.name "auto-code-scanning-autofix[bot]"
           git config user.email "autofix@users.noreply.github.com"
@@ -371,8 +431,18 @@ jobs:
           git commit -m "chore(autofix): apply review fixes [autofix]" \
                      -m "Automated minimal fix for PR #${PR}." \
                      -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
-          # Push to the PR head. If the branch advanced since analyze, this is REJECTED.
-          git push origin "HEAD:${HEAD_REF}"
+
+      - name: Push (AUTOFIX_TOKEN injected into the push URL ONLY — never on disk)
+        env:
+          AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ needs.analyze.outputs.head_ref }}
+        run: |
+          # The token lives only in this step's env and only in the one-shot push URL;
+          # persist-credentials:false kept it out of .git/config, and every prior step
+          # (gate, secret scan, build verify) ran without it. If the branch advanced
+          # since analyze, this push is REJECTED (non-fast-forward).
+          git push "https://x-access-token:${AUTOFIX_TOKEN}@github.com/${REPO}.git" "HEAD:${HEAD_REF}"
 
   # ==========================================================================
   # JOB C — flag-human-review on cap / gate / failure
