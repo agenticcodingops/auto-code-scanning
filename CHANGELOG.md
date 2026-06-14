@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - Minor — local-scanning kill-switch
+
+Adds a single config switch to pause **local** pre-commit/pre-push scanning per repo —
+useful when in-progress work shouldn't be blocked by hooks. CI and the fix-loop are
+unaffected.
+
+- **`scan-config.yaml` → `global.local_hooks_enabled`** (default `true`). `hooks/dispatcher.sh`
+  checks it first and exits `0` (skips all local hooks) when set to `false`. Added to the
+  tier templates + schema; see **[docs/LOCAL-HOOKS-TOGGLE.md](docs/LOCAL-HOOKS-TOGGLE.md)**
+  (also documents `LEFTHOOK=0`, `lefthook-local.yml`, and `lefthook uninstall`).
+
 ## [2.0.3] - Patch — fix-loop capture excludes the workflow's own checkouts
 
 The agentic fix-loop **never applied a fix**: the `analyze` job's capture step ran

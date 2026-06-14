@@ -23,6 +23,11 @@ global:
   # Output directory for all scan results
   results_dir: ".scan-results"
 
+  # Master switch for LOCAL pre-commit/pre-push scanning (hooks/dispatcher.sh). Set
+  # false to skip ALL local hooks without uninstalling lefthook; CI is unaffected.
+  # Default true; only an explicit false disables.
+  local_hooks_enabled: true
+
   # Severity levels (in order of priority)
   severity_levels:
     - CRITICAL

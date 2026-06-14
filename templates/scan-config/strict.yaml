@@ -7,6 +7,10 @@ schema_version: "1.0"
 
 global:
   results_dir: ".scan-results"
+  # Master switch for LOCAL pre-commit/pre-push scanning. Set false to skip ALL local
+  # hooks (e.g. to avoid blocking in-progress work) WITHOUT uninstalling lefthook; CI is
+  # unaffected. Default true; only an explicit false disables.
+  local_hooks_enabled: true
   severity_levels: [CRITICAL, HIGH, MEDIUM, LOW]
   blocking_severities: [CRITICAL, HIGH, MEDIUM]
   performance:
