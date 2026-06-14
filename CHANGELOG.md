@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - Patch — fix the secret-scan Trivy install
+
+The reusable secret-scan jobs failed because `aquasecurity/trivy-action` / `setup-trivy`
+defaulted to **Trivy v0.65.0**, which fails to install on the runner ("found version
+0.65.0" then exit 1). Consumers no longer need the `run-secret-scan: false` workaround.
+
+- **`code-security-scan.yml`** (read-only `secrets` job): install a known-good Trivy from
+  the **version-tagged `install.sh`** (`v0.71.0`) and run `trivy fs` directly, instead of
+  the action's broken default.
+- **`autonomous-fix.yml`** (`apply-and-push`, write-capable): keep the SHA-pinned
+  `trivy-action` (no `curl|sh` in the write job) but pin `version: v0.71.0`.
+
 ## [2.0.1] - Patch — review hardening (security + correctness)
 
 Fixes from the workout-trackroutinely PR #145 consumer review. No breaking changes;

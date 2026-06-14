@@ -215,16 +215,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
+      # The trivy-action/setup-trivy default (Trivy v0.65.0) fails to install on the
+      # runner ("found version 0.65.0" then exit 1). This is a READ-ONLY job (no push),
+      # so install a KNOWN-GOOD version directly from its release-tagged install.sh —
+      # the same approach the proven inline workflow used. (The write-capable
+      # autonomous-fix apply job keeps the SHA-pinned action with a pinned version.)
+      - name: Install Trivy (pinned, version-tagged install.sh)
+        env:
+          TRIVY_VERSION: "0.71.0"
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/v${TRIVY_VERSION}/contrib/install.sh" \
+            | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
+          trivy --version
+
       - name: Trivy secret scan -> SARIF
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
-        with:
-          scan-type: fs
-          scanners: secret
-          severity: "CRITICAL,HIGH"
-          exit-code: "0"
-          format: sarif
-          output: trivy-secrets.sarif
-          skip-dirs: "node_modules,dist,build,bin,obj,.terraform"
+        run: |
+          trivy fs . --scanners secret --severity CRITICAL,HIGH --exit-code 0 \
+            --format sarif --output trivy-secrets.sarif \
+            --skip-dirs "node_modules,dist,build,bin,obj,.terraform" --quiet
 
       - name: Upload secrets SARIF (distinct category)
         if: always() && inputs.upload-sarif
@@ -236,11 +244,7 @@ jobs:
 
       - name: Gate on secret findings
         if: inputs.fail-on-findings
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
-        with:
-          scan-type: fs
-          scanners: secret
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-          format: table
-          skip-dirs: "node_modules,dist,build,bin,obj,.terraform"
+        run: |
+          trivy fs . --scanners secret --severity CRITICAL,HIGH --exit-code 1 \
+            --format table \
+            --skip-dirs "node_modules,dist,build,bin,obj,.terraform" --quiet

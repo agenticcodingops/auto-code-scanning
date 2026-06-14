@@ -390,11 +390,13 @@ jobs:
           done < <(git diff --cached --name-only -z)
           echo "SCAN_TMP=${tmp}" >> "$GITHUB_ENV"
 
-      - name: Authoritative secret scan (SHA-pinned action, no curl|sh)
-        # Supply-chain hygiene: use the same SHA-pinned Trivy action as code-security-scan.yml
-        # instead of piping an install script to sh in the write-capable job.
+      - name: Authoritative secret scan (SHA-pinned action, pinned Trivy version)
+        # Supply-chain hygiene: keep the SHA-pinned Trivy action (no curl|sh) in this
+        # write-capable job. Pin the Trivy binary version so setup-trivy does not default
+        # to v0.65.0, which fails to install on the runner.
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.71.0"
           scan-type: fs
           scan-ref: ${{ env.SCAN_TMP }}
           scanners: secret
