@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - Patch — fix the Terraform/IaC reusable scan (reusable-scan.yml)
+
+The IaC scanner failed for fresh consumers:
+
+- **Trivy IaC** — the 4 `trivy-action` steps had no `version`, so they defaulted to
+  **v0.65.0**, which fails to install on the runner. Pinned `v0.71.0` (same root cause
+  as v2.0.2, which only fixed `code-security-scan.yml` / `autonomous-fix.yml`).
+- **TFLint** — the config artifact (`.tflint.hcl`, `.checkov.yaml`, `.trivyignore`) is
+  **all dotfiles**, and `upload-artifact@v4` excludes hidden files by default, so the
+  tflint job got no config (`open .scanning/configs/.tflint.hcl: no such file`). Added
+  `include-hidden-files: true` to the config upload.
+
+> Known (pre-existing, not addressed here): several `reusable-scan.yml` `run:` steps
+> interpolate `${{ ... }}` context directly; should move to `env:` vars. Tracked for a
+> follow-up hardening release.
+
 ## [2.0.4] - Minor — local-scanning kill-switch
 
 Adds a single config switch to pause **local** pre-commit/pre-push scanning per repo —

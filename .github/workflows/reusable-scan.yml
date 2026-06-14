@@ -145,6 +145,9 @@ jobs:
         with:
           name: scanning-configs
           path: .scanning/configs/
+          # The configs are dotfiles (.tflint.hcl, .checkov.yaml, .trivyignore); upload-artifact@v4
+          # excludes hidden files by default, which left the tflint job with no config.
+          include-hidden-files: true
           retention-days: 1
 
   # ==========================================================================
@@ -168,6 +171,7 @@ jobs:
       - name: Run Trivy IaC scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
           scan-type: config
           scan-ref: ${{ inputs.terraform-directory }}
           severity: ${{ inputs.severity }}
@@ -182,6 +186,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
           scan-type: config
           scan-ref: ${{ inputs.terraform-directory }}
           severity: ${{ inputs.severity }}
@@ -194,6 +199,7 @@ jobs:
       - name: Run Trivy secret scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
           scan-type: fs
           scanners: secret
           severity: "HIGH,CRITICAL"
@@ -206,6 +212,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
           scan-type: fs
           scanners: secret
           severity: "HIGH,CRITICAL"
