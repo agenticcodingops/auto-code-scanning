@@ -31,9 +31,10 @@ def main(argv: list[str]) -> int:
     if cfg_path is None:
         found = _find(Path.cwd(), "scan-config.yaml")
         if found is None:
-            # No config to validate — nothing to do.
-            print("[validate-scan-config] no scan-config.yaml found; skipping")
-            return 0
+            # In CI (STRICT=1) a missing config must FAIL the gate, not silently pass.
+            print("[validate-scan-config] no scan-config.yaml found"
+                  + ("; FAILING (strict)" if strict else "; skipping"))
+            return 1 if strict else 0
         cfg_path = found
 
     schema_path = _find(Path(__file__).resolve().parent, "scan-config.schema.json")

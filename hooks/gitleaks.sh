@@ -48,7 +48,9 @@ if [[ ${exit_code} -eq 1 ]]; then
     if command -v jq >/dev/null 2>&1; then
         total_high="$(echo "${output}" | jq 'length' 2>/dev/null || echo 1)"
         # Show actionable details so developers know what to fix
-        gitleaks_details="$(echo "${output}" | jq -r '.[]? | "  HIGH  \(.RuleID)  \(.File):\(.StartLine)-\(.EndLine)\n    \(.Description)\n    Match: \(.Match)"' 2>/dev/null)" || true
+        # Do NOT emit \(.Match) — it is the raw secret value. Rule + file:line is
+        # enough to locate and fix it without leaking the secret into logs.
+        gitleaks_details="$(echo "${output}" | jq -r '.[]? | "  HIGH  \(.RuleID)  \(.File):\(.StartLine)-\(.EndLine)\n    \(.Description)"' 2>/dev/null)" || true
         if [[ -n "${gitleaks_details}" ]]; then
             hook_log ""
             while IFS= read -r line; do

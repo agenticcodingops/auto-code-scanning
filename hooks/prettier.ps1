@@ -28,9 +28,16 @@ if ($files.Count -eq 0) {
     exit 0
 }
 
-$localBin = Join-Path $workingDir 'node_modules/.bin/prettier.cmd'
+# Resolve the working dir to an ABSOLUTE path so the local-bin path survives
+# Push-Location below (a relative path would double, e.g. mobile/mobile/node_modules/...),
+# and check the POSIX binary too so macOS/Linux find the local install.
+$workingDirPath = (Resolve-Path -LiteralPath $workingDir -ErrorAction SilentlyContinue).Path
+if (-not $workingDirPath) { $workingDirPath = $workingDir }
+$localBinCmd = Join-Path $workingDirPath 'node_modules/.bin/prettier.cmd'   # Windows
+$localBinPosix = Join-Path $workingDirPath 'node_modules/.bin/prettier'     # macOS/Linux
 $runner = $null; $runnerArgs = @()
-if (Test-Path $localBin) { $runner = $localBin }
+if (Test-Path $localBinCmd) { $runner = $localBinCmd }
+elseif (Test-Path $localBinPosix) { $runner = $localBinPosix }
 elseif (Get-Command prettier -ErrorAction SilentlyContinue) { $runner = 'prettier' }
 elseif (Get-Command npx -ErrorAction SilentlyContinue) { $runner = 'npx'; $runnerArgs = @('--no-install', 'prettier') }
 else {
@@ -45,7 +52,7 @@ $prettierArgs = $runnerArgs + @('--write', '--ignore-unknown')
 if ($ExtraArgs) { $prettierArgs += $ExtraArgs }
 $prettierArgs += $files
 
-Push-Location $workingDir
+Push-Location $workingDirPath
 try {
     $output = & $runner @prettierArgs 2>&1
     $exitCode = $LASTEXITCODE

@@ -26,6 +26,7 @@ $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "trivy-secrets-$(Get-Rando
 New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
 try {
+    $skipped = 0
     foreach ($file in @($stagedFiles)) {
         # Create parent directories in temp
         $fileDir = Split-Path $file -Parent
@@ -40,9 +41,13 @@ try {
         try {
             git show ":$file" 2>$null | Set-Content -Path $targetFile -Encoding UTF8 -NoNewline
         } catch {
-            # Skip files that can't be exported (binary, etc.)
+            # Export failure (binary/encoding/etc.) -> count + surface so secret-scan
+            # coverage gaps are visible rather than silently dropped.
+            $skipped++
+            Write-HookWarn "could not export staged '$file' for secret scan (skipped)"
         }
     }
+    if ($skipped -gt 0) { Write-HookWarn "$skipped staged file(s) skipped from the secret scan" }
 
     # Build Trivy command — scan the temp dir (contains only staged files)
     $trivyArgs = @('fs', $tmpDir, '--scanners', 'secret', '--exit-code', '1', '--format', 'json', '--skip-db-update', '--quiet')

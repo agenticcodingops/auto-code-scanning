@@ -13,12 +13,17 @@ if (@($files).Count -eq 0) {
     exit 0
 }
 
-$dialect = 'ansi'
+# Respect a project .sqlfluff config (a CLI --dialect would OVERRIDE it); only force a
+# default dialect when no config is present.
+$sqlfluffArgs = @('lint')
+$dialectNote = 'from .sqlfluff'
+if (-not (Test-Path '.sqlfluff')) {
+    $sqlfluffArgs += @('--dialect', 'ansi')
+    $dialectNote = 'ansi (default; no .sqlfluff)'
+}
 
 Start-ScanTimer
-Write-HookLog "Linting... ($(@($files).Count) SQL files, dialect=$dialect)"
-
-$sqlfluffArgs = @('lint', '--dialect', $dialect)
+Write-HookLog "Linting... ($(@($files).Count) SQL files, dialect=$dialectNote)"
 if ($ExtraArgs) { $sqlfluffArgs += $ExtraArgs }
 $sqlfluffArgs += $files
 

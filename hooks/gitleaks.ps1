@@ -53,7 +53,8 @@ if ($exitCode -eq 1) {
             foreach ($finding in @($json)) {
                 Write-HookLog "  HIGH  $($finding.RuleID)  $($finding.File):$($finding.StartLine)-$($finding.EndLine)"
                 Write-HookLog "    $($finding.Description)"
-                Write-HookLog "    Match: $($finding.Match)"
+                # Do NOT print $finding.Match — it is the raw secret value. Location
+                # (file:line) + rule is enough to find and fix it without leaking it to logs.
             }
             Write-HookLog ""
         }

@@ -26,15 +26,21 @@ hook_log "Scanning... (${#staged_files[@]} staged files)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
+skipped=0
 for file in "${staged_files[@]}"; do
     # Create parent directories in temp
     file_dir="$(dirname "${file}")"
     if [[ "${file_dir}" != "." ]]; then
         mkdir -p "${tmpdir}/${file_dir}"
     fi
-    # Export staged content (from git index, not working tree)
-    git show ":${file}" > "${tmpdir}/${file}" 2>/dev/null || true
+    # Export staged content (from git index). On failure, count + warn so secret-scan
+    # coverage gaps are visible rather than silently dropped.
+    if ! git show ":${file}" > "${tmpdir}/${file}" 2>/dev/null; then
+        skipped=$((skipped + 1))
+        hook_warn "could not export staged '${file}' for secret scan (skipped)"
+    fi
 done
+[[ ${skipped} -gt 0 ]] && hook_warn "${skipped} staged file(s) skipped from the secret scan"
 
 # Build Trivy command — scan the temp dir (contains only staged files)
 trivy_cmd=(trivy fs "${tmpdir}" --scanners secret --exit-code 1 --format json --skip-db-update --quiet)

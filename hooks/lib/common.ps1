@@ -170,6 +170,21 @@ function Build-FindingsJson {
 # Monorepo / directory detection
 # ---------------------------------------------------------------------------
 
+# Changed files for dir-detection: the staged index (pre-commit), or the push range
+# when the index is empty (the usual case at pre-push), so pushed commits are still
+# scanned. Best-effort — CI is the authoritative backstop.
+function Get-ChangedFilesForDetect {
+    $files = @(git diff --cached --name-only --diff-filter=ACMR 2>$null)
+    if (-not $files -or $files.Count -eq 0) {
+        $files = @(git diff --name-only --diff-filter=ACMR '@{push}' HEAD 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $files -or $files.Count -eq 0) {
+            $files = @(git diff --name-only --diff-filter=ACMR '@{upstream}' HEAD 2>$null)
+            if ($LASTEXITCODE -ne 0) { $files = @() }
+        }
+    }
+    return @($files | Where-Object { $_ })
+}
+
 function Get-ChangedDirs {
     try {
         $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
@@ -182,11 +197,10 @@ function Get-ChangedDirs {
             return @()
         }
 
-        $changedFiles = git diff --cached --name-only --diff-filter=ACMR 2>$null |
-            Where-Object { $_ -match '\.tf$' }
+        $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf$' }
 
         if (-not $changedFiles -or $changedFiles.Count -eq 0) {
-            # No staged .tf files — return empty so hooks skip scanning
+            # No changed .tf files — return empty so hooks skip scanning
             return @()
         }
 
@@ -215,7 +229,7 @@ function Get-AllChangedDirs {
         $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
         if ($LASTEXITCODE -ne 0) { return @() }
 
-        $changedFiles = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        $changedFiles = Get-ChangedFilesForDetect
 
         if (-not $changedFiles -or $changedFiles.Count -eq 0) {
             return @()
@@ -564,7 +578,8 @@ function Show-TrivySecretFindings {
             foreach ($f in $findings) {
                 Write-HookLog "  $($f.Severity)  $($f.RuleID)  $($f.Target):$($f.StartLine)-$($f.EndLine)"
                 Write-HookLog "    $($f.Title)"
-                Write-HookLog "    Match: $($f.Match)"
+                # Do NOT print $f.Match — it is the raw secret value. file:line + rule
+                # is enough to locate and fix it without leaking it to logs.
             }
             Write-HookLog ""
         }

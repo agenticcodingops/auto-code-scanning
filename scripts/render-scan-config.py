@@ -53,7 +53,7 @@ def main(argv) -> int:
         return 0
 
     text = template.read_text(encoding="utf-8")
-    langs = [l.strip() for l in args.languages.split(",") if l.strip()]
+    langs = [lang_name.strip() for lang_name in args.languages.split(",") if lang_name.strip()]
     for lang in langs:
         if lang not in KNOWN_LANGUAGES:
             print(f"::warning::unknown language '{lang}' (known: {sorted(KNOWN_LANGUAGES)})", file=sys.stderr)

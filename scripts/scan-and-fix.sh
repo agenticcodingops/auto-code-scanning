@@ -45,7 +45,7 @@ case "${SCAN_TYPE}" in
     semgrep)   run_semgrep_scan ;;
     terraform) run_terraform_scan ;;
     all)       run_secret_scan; run_semgrep_scan; run_terraform_scan ;;
-    *)         echo "[scan-and-fix] unknown scan type: ${SCAN_TYPE}"; exit 0 ;;
+    *)         echo "[scan-and-fix] unknown scan type: ${SCAN_TYPE}" >&2; exit 1 ;;  # fail closed
 esac
 
 if [[ ${AUTO_FIX} -eq 1 && ${has_errors} -ne 0 ]]; then

@@ -46,8 +46,8 @@ except ImportError:
 # Required fields per suppression entry
 REQUIRED_FIELDS = ["rule_id", "tool", "reason", "owner", "approved_date", "expires_date"]
 
-# Allowed tool values
-ALLOWED_TOOLS = {"trivy", "checkov", "tflint", "gitleaks"}
+# Allowed tool values (snyk_suppressions is a declared section, so snyk must be allowed)
+ALLOWED_TOOLS = {"trivy", "checkov", "tflint", "gitleaks", "snyk"}
 
 # Allowed severity values
 ALLOWED_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
@@ -58,6 +58,7 @@ RULE_ID_PATTERNS = {
     "checkov": re.compile(r"^CKV_[A-Z]+_\d+$"),
     "tflint": re.compile(r"^[a-z][a-z0-9_-]+$"),
     "gitleaks": re.compile(r"^[a-z][a-z0-9-]+$"),
+    "snyk": re.compile(r"^SNYK-[A-Z0-9-]+$"),
 }
 
 # Tool section names in the YAML file

@@ -25,8 +25,14 @@ hook_verbose "Running suppression validation with $PYTHON"
 
 SUPPRESSION_FILE="${SCAN_CONFIG_DIR}/.scan-suppressions.yaml"
 if [[ ! -f "$SUPPRESSION_FILE" ]]; then
-    hook_verbose "No suppression file found at $SUPPRESSION_FILE — skipping"
-    exit 0
+    # scan-config.yaml's suppressions.file is typically .scan-suppressions.yaml at the
+    # repo root; fall back to it before skipping (the configured-dir copy is optional).
+    if [[ -f ".scan-suppressions.yaml" ]]; then
+        SUPPRESSION_FILE=".scan-suppressions.yaml"
+    else
+        hook_verbose "No suppression file ($SUPPRESSION_FILE or ./.scan-suppressions.yaml) — skipping"
+        exit 0
+    fi
 fi
 
 exit_code=0

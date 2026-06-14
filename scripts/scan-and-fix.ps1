@@ -51,8 +51,10 @@ function Invoke-SecretScan {
     $out = & trivy fs . --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet `
         --skip-dirs node_modules --skip-dirs dist --skip-dirs build --skip-dirs bin --skip-dirs obj --skip-dirs .terraform 2>&1
     $code = $LASTEXITCODE
-    $text = ($out -join "`n")
-    Add-Result -Tool 'Trivy Secrets' -ExitCode $code -Issues (Get-IssueLines $text) -OutputTail ($text.Substring([Math]::Max(0, $text.Length - 3000)))
+    # SECURITY: never persist raw secret-scan output (it contains matched secrets) into
+    # .claude/scan-findings.json, which the agent reads. Record only the pass/fail signal.
+    $issues = if ($code -ne 0) { @('Secret findings detected — run `trivy fs . --scanners secret` locally to see them (redacted from findings file).') } else { @() }
+    Add-Result -Tool 'Trivy Secrets' -ExitCode $code -Issues $issues -OutputTail ''
 }
 
 function Invoke-SemgrepScan {
@@ -99,7 +101,7 @@ switch ($ScanType) {
     'terraform'  { Invoke-TerraformScan }
     'csharp'     { Invoke-CSharpScan }
     'typescript' { Invoke-TypeScriptScan }
-    'all'        { Invoke-SecretScan; Invoke-SemgrepScan; Invoke-TerraformScan }
+    'all'        { Invoke-SecretScan; Invoke-SemgrepScan; Invoke-TerraformScan; Invoke-CSharpScan; Invoke-TypeScriptScan }
 }
 
 $failed = @($results | Where-Object { -not $_.passed })

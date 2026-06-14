@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - Patch — review hardening (security + correctness)
+
+Fixes from the workout-trackroutinely PR #145 consumer review. No breaking changes;
+consumers should bump the pin from `@v2.0.0` to `@v2.0.1` and re-vendor `hooks/`,
+`scripts/`, `schemas/`.
+
+### Security
+
+- **`check-fix-allowlist.py`: boundary-aware allowlist matching.** A bare
+  `startswith` let a sibling path bypass the gate (e.g. `api/src-malicious/x` matched
+  allowlist `api/src`). Now matches the entry itself or a path under it (`a` or `a/…`)
+  regardless of trailing slashes. Also **fails closed** (exit 2) on a malformed/unreadable
+  config instead of crashing with a traceback.
+- **Stop leaking raw secret values in hook output/findings.** `gitleaks.{ps1,sh}`,
+  `lib/common.{ps1,sh}` (Trivy secret printer), and `scripts/scan-and-fix.ps1`
+  (`.claude/scan-findings.json`) no longer emit the matched secret content — only
+  rule + `file:line`.
+
+### Correctness
+
+- **`validate-scan-config.py`** now **fails closed** (exit 1) on a missing config when
+  `STRICT=1` (CI), instead of silently passing.
+- **`scan-and-fix.sh`** unknown scan type now exits 1 (was 0 — typos silently skipped
+  scanning). **`scan-and-fix.ps1`** `-ScanType all` now includes the C# and TypeScript scans.
+- **`eslint.ps1` / `prettier.ps1`**: resolve `working_dir` to an absolute path before
+  `Push-Location` (fixes a doubled `mobile/mobile/node_modules/…` path) and find the
+  POSIX local binary, not just `*.cmd`.
+- **`sqlfluff.{ps1,sh}`**: only force `--dialect ansi` when no `.sqlfluff` config exists
+  (a CLI dialect overrides project config).
+- **`trivy-secrets.{ps1,sh}`**: count + warn on staged-file export failures instead of
+  silently dropping them from the scan.
+- **`validate-suppressions.py`**: add `snyk` to `ALLOWED_TOOLS` + a rule-id pattern
+  (the `snyk_suppressions` section was otherwise un-validatable).
+- **`validate-suppressions.sh`**: fall back to `./.scan-suppressions.yaml` (repo root)
+  when not under `SCAN_CONFIG_DIR`.
+- **`lib/common.{ps1,sh}`**: directory-change detection falls back to the push range
+  (`@{push}`/`@{upstream}..HEAD`) when the index is empty, so **pre-push** Terraform
+  hooks actually scan the pushed commits.
+- **`render-scan-config.py`**: rename ambiguous loop var (`l` → `lang_name`, Ruff E741).
+
 ## [2.0.0] - Unreleased — Reusable scan→fix platform
 
 A major evolution from a Terraform-only, scan-only POC into a reusable,

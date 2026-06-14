@@ -14,13 +14,17 @@ if [[ ${#files[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Dialect: prefer a .sqlfluff config; else default to ansi.
-dialect="ansi"
+# Respect a project .sqlfluff config (a CLI --dialect would OVERRIDE it); only force a
+# default dialect when no config is present.
+sqlfluff_cmd=(sqlfluff lint)
+dialect_note="from .sqlfluff"
+if [[ ! -f .sqlfluff ]]; then
+    sqlfluff_cmd+=(--dialect ansi)
+    dialect_note="ansi (default; no .sqlfluff)"
+fi
 
 start_timer
-hook_log "Linting... (${#files[@]} SQL files, dialect=${dialect})"
-
-sqlfluff_cmd=(sqlfluff lint --dialect "${dialect}")
+hook_log "Linting... (${#files[@]} SQL files, dialect=${dialect_note})"
 [[ $# -gt 0 ]] && sqlfluff_cmd+=("$@")
 sqlfluff_cmd+=("${files[@]}")
 

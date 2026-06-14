@@ -33,7 +33,11 @@ def _load_fix_loop(config_path: Path):
     if not config_path.is_file():
         print(f"GATED: {config_path} not found (fail closed)")
         sys.exit(2)
-    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # malformed/unreadable config -> fail CLOSED, never open
+        print(f"GATED: cannot read/parse {config_path}: {exc} (fail closed)")
+        sys.exit(2)
     fix_loop = data.get("fix_loop") or {}
     allow = [str(p) for p in (fix_loop.get("allowlist_paths") or [])]
     gated = [str(p).lower() for p in (fix_loop.get("gated_paths") or [])]
@@ -44,7 +48,19 @@ def _norm(path: str) -> str:
     p = path.strip().replace("\\", "/")
     while p.startswith("./"):
         p = p[2:]
-    return p
+    return p.rstrip("/")
+
+
+def _within(file_path: str, allow_path: str) -> bool:
+    """True iff file_path is the allow_path itself or a path UNDER it.
+
+    Boundary-aware: enforces a path-segment boundary so a sibling like
+    `api/src-malicious/x` does NOT match the allowlist entry `api/src`
+    (a bare startswith would have let it through). See PR #145 review.
+    """
+    a = _norm(allow_path)
+    f = _norm(file_path)
+    return bool(a) and (f == a or f.startswith(a + "/"))
 
 
 def check(files, allow, gated):
@@ -53,7 +69,7 @@ def check(files, allow, gated):
         f = _norm(raw)
         if not f:
             continue
-        if not any(f.startswith(_norm(a)) for a in allow):
+        if not any(_within(f, a) for a in allow):
             return False, f"non-fixable path (outside allowlist): {f}"
         low = f.lower()
         for g in gated:

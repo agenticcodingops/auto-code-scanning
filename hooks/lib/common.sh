@@ -160,6 +160,19 @@ ENDJSON
 # Monorepo / directory detection
 # ---------------------------------------------------------------------------
 
+# Print changed files for dir-detection. Prefer the staged index (pre-commit); when
+# it is empty (the usual case at pre-push) fall back to the push range so pushed
+# commits are still scanned. Best-effort — CI is the authoritative backstop.
+_changed_files_for_detect() {
+    local files
+    files="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)"
+    if [[ -z "${files}" ]]; then
+        files="$(git diff --name-only --diff-filter=ACMR '@{push}' HEAD 2>/dev/null)" || files=""
+        [[ -z "${files}" ]] && { files="$(git diff --name-only --diff-filter=ACMR '@{upstream}' HEAD 2>/dev/null)" || files=""; }
+    fi
+    printf '%s' "${files}"
+}
+
 # Detect directories containing Terraform files that have changed
 # Uses git diff to find changed .tf files and extracts unique directories
 # Returns EMPTY when no .tf files are staged — hooks should skip scanning
@@ -172,8 +185,8 @@ detect_changed_dirs() {
     fi
 
     local dirs
-    # Get directories with changed .tf files (staged for commit)
-    dirs="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
+    # Changed .tf dirs — staged at pre-commit, or the push range at pre-push.
+    dirs="$(_changed_files_for_detect \
         | grep '\.tf$' \
         | xargs -I{} dirname {} 2>/dev/null \
         | sort -u)"
@@ -194,7 +207,7 @@ detect_all_changed_dirs() {
     fi
 
     local dirs
-    dirs="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
+    dirs="$(_changed_files_for_detect \
         | xargs -I{} dirname {} 2>/dev/null \
         | sort -u)"
 
@@ -561,9 +574,9 @@ print_trivy_secret_findings() {
         [.Results[]? | .Target as $target |
          .Secrets[]? |
          {severity: .Severity, rule: .RuleID, title: .Title, target: $target,
-          start: .StartLine, end: .EndLine, match: .Match}] |
+          start: .StartLine, end: .EndLine}] |
         .[] |
-        "  \(.severity)  \(.rule)  \(.target):\(.start)-\(.end)\n    \(.title)\n    Match: \(.match)"
+        "  \(.severity)  \(.rule)  \(.target):\(.start)-\(.end)\n    \(.title)"
     ' 2>/dev/null)" || true
 
     if [[ -n "${findings}" ]]; then
