@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] - Patch — IaC gate blocks on CRITICAL/HIGH only (not lint)
+
+`reusable-scan.yml`'s Aggregate gate failed on **any** finding (`total == 0`), so a repo
+with lint-level tflint warnings (0 CRITICAL/HIGH) failed the check. The gate now blocks
+only on the **blocking severities (CRITICAL + HIGH)** — consistent with the
+`severity: CRITICAL,HIGH` the scanners run with; lint / medium / low are still reported
+(SARIF + PR comment) but don't fail the check. Fixed both the Python gate and the JS
+PR-comment pass/fail indicator.
+
 ## [2.0.5] - Patch — fix the Terraform/IaC reusable scan (reusable-scan.yml)
 
 The IaC scanner failed for fresh consumers:

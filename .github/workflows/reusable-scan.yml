@@ -660,7 +660,11 @@ jobs:
           high = severity_counts["HIGH"]
 
           fail_on = "${{ inputs.fail-on-findings }}" == "true"
-          passed = "true" if (total == 0 or not fail_on) else "false"
+          # Gate on the BLOCKING severities (CRITICAL + HIGH) only — lint / medium / low
+          # findings are reported (SARIF + PR comment) but do NOT fail the check, matching
+          # the `severity: CRITICAL,HIGH` the scanners are configured with.
+          blocking = critical + high
+          passed = "true" if (blocking == 0 or not fail_on) else "false"
 
           # Write aggregated results
           output = {
@@ -868,7 +872,8 @@ jobs:
             const total = data.total_findings || 0;
             const suppressed = data.suppressions_applied || 0;
             const baselined = data.baseline_filtered || 0;
-            const passed = total === 0;
+            // Gate on BLOCKING severities (CRITICAL + HIGH) only — matches the Aggregate gate.
+            const passed = (critical + high) === 0;
 
             // Build top findings table (max 20)
             const activeFindings = (data.findings || [])
