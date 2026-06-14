@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - Patch — fix-loop capture excludes the workflow's own checkouts
+
+The agentic fix-loop **never applied a fix**: the `analyze` job's capture step ran
+`git add -A`, which also staged the workflow's **own** in-workspace checkouts —
+`.scanning-repo` (the pinned platform scripts) and `.trusted` (the base-config
+artifact) — so the path gate rejected `.scanning-repo` as outside the allowlist and
+routed every PR to `needs-human-review`.
+
+- **`autonomous-fix.yml`** (`analyze` capture): reset `.scanning-repo` and `.trusted`
+  out of the staged index (alongside `.fix-attempts`/`autofix.patch`) before producing
+  the patch, so only the agent's real edits are captured and gated.
+
 ## [2.0.2] - Patch — fix the secret-scan Trivy install
 
 The reusable secret-scan jobs failed because `aquasecurity/trivy-action` / `setup-trivy`

@@ -286,7 +286,12 @@ jobs:
         run: |
           git reset --soft "${HEAD_SHA}" 2>/dev/null || true
           git add -A
-          git reset -q -- .fix-attempts autofix.patch 2>/dev/null || true
+          # Exclude this workflow's OWN checkouts/artifacts from the captured patch:
+          # .scanning-repo (the pinned platform scripts) and .trusted (the base-config
+          # artifact) are created in the workspace BEFORE the agent runs, so `git add -A`
+          # would otherwise stage them and the path gate would reject `.scanning-repo`
+          # as outside the allowlist — blocking every fix.
+          git reset -q -- .fix-attempts autofix.patch .scanning-repo .trusted 2>/dev/null || true
           git diff --cached --binary > autofix.patch || true
           if [ -s autofix.patch ]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
