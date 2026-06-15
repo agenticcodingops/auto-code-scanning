@@ -101,19 +101,19 @@ flowchart TD
     ev["git commit / git push"] --> runner["Lefthook (default) / pre-commit (alt)"]
     runner --> disp["hooks/dispatcher.sh hook-id"]
     disp --> ks{"local_hooks_enabled: false<br/>in scan-config.yaml?"}
-    ks -- "yes" --> skip["echo 'local scanning disabled' · exit 0"]
-    ks -- "no" --> osd{"OS detection<br/>($OSTYPE)"}
-    osd -- "msys / cygwin / win32" --> winp{"pwsh available?"}
-    winp -- "yes" --> p1["exec pwsh … hook-id.ps1"]
-    winp -- "no"  --> p2["exec powershell … hook-id.ps1"]
-    osd -- "linux / darwin" --> s1["exec hook-id.sh"]
+    ks -->|"yes"| skip["echo 'local scanning disabled' · exit 0"]
+    ks -->|"no"| osd{"OS detection<br/>($OSTYPE)"}
+    osd -->|"msys / cygwin / win32"| winp{"pwsh available?"}
+    winp -->|"yes"| p1["exec pwsh … hook-id.ps1"]
+    winp -->|"no"| p2["exec powershell … hook-id.ps1"]
+    osd -->|"linux / darwin"| s1["exec hook-id.sh"]
     p1 --> impl
     p2 --> impl
     s1 --> impl["per-tool implementation<br/>(reads scan-config + STAGED files)"]
     impl --> outcome{"outcome"}
-    outcome -- "tool missing / transient" --> open["WARN · exit 0  (FAIL-OPEN)"]
-    outcome -- "real finding ≥ blocking" --> closed["exit 1  (FAIL-CLOSED → blocks)"]
-    outcome -- "clean" --> ok["exit 0"]
+    outcome -->|"tool missing / transient"| open["WARN · exit 0  (FAIL-OPEN)"]
+    outcome -->|"real finding ≥ blocking"| closed["exit 1  (FAIL-CLOSED → blocks)"]
+    outcome -->|"clean"| ok["exit 0"]
 ```
 
 Design notes:
@@ -156,8 +156,8 @@ flowchart TD
     agg --> prc["PR Comment<br/>(findings table)"]
     agg --> met["Upload Metrics<br/>(JSON for dashboards)"]
     agg --> gate{"CRITICAL + HIGH<br/>count > 0?"}
-    gate -- "yes" --> red["check fails"]
-    gate -- "no" --> green["check passes<br/>(lint / medium / low reported only)"]
+    gate -->|"yes"| red["check fails"]
+    gate -->|"no"| green["check passes<br/>(lint / medium / low reported only)"]
 ```
 
 ### App code — `code-security-scan.yml`
@@ -284,8 +284,8 @@ flowchart TD
         vend["vendored hooks/ scripts/ schemas/"]
         owncfg["scan-config.yaml + lefthook.yml"]
     end
-    rw -. "referenced by SHA" .-> call
-    files == "vendored (byte-identical)" ==> vend
+    rw -.->|"referenced by SHA"| call
+    files ==>|"vendored (byte-identical)"| vend
     owncfg --> call
     owncfg --> vend
 

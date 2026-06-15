@@ -105,15 +105,15 @@ flowchart TD
     ev["git commit / git push"] --> lh["Lefthook (default)<br/>or pre-commit (alt)"]
     lh --> disp["hooks/dispatcher.sh hook-id"]
     disp --> ks{"scan-config.yaml<br/>local_hooks_enabled: false ?"}
-    ks -- "yes" --> skip["exit 0 — skip ALL local hooks<br/>(CI + fix-loop unaffected)"]
-    ks -- "no" --> os{"OS ?"}
-    os -- "Windows" --> ps["pwsh hook-id.ps1"]
-    os -- "Linux / macOS" --> sh["hook-id.sh"]
+    ks -->|"yes"| skip["exit 0 — skip ALL local hooks<br/>(CI + fix-loop unaffected)"]
+    ks -->|"no"| os{"OS ?"}
+    os -->|"Windows"| ps["pwsh hook-id.ps1"]
+    os -->|"Linux / macOS"| sh["hook-id.sh"]
     ps --> tool["run tool on STAGED files<br/>Semgrep · Trivy · dotnet · eslint · …"]
     sh --> tool
     tool --> res{"finding ≥ blocking severity ?"}
-    res -- "yes" --> block["exit 1 — block commit/push"]
-    res -- "no" --> pass["exit 0 — allow"]
+    res -->|"yes"| block["exit 1 — block commit/push"]
+    res -->|"no"| pass["exit 0 — allow"]
 ```
 
 | Runner | Status | Why |
@@ -151,8 +151,8 @@ flowchart TD
     end
 
     AG --> gate{"CRITICAL / HIGH<br/>found ?"}
-    gate -- "yes" --> fail["❌ fail the check"]
-    gate -- "no" --> okk["✅ pass (lint/medium reported, not blocking)"]
+    gate -->|"yes"| fail["❌ fail the check"]
+    gate -->|"no"| okk["✅ pass (lint/medium reported, not blocking)"]
 ```
 
 ### App-code hooks
@@ -236,8 +236,8 @@ flowchart LR
         vend["vendored hooks/ scripts/ schemas/<br/>(byte-identical)"]
         cfg2["scan-config.yaml + lefthook.yml"]
     end
-    callers -. "uses: @SHA (referenced)" .-> rw
-    src == "vendored: setup-scan-fix / cp" ==> vend
+    callers -.->|"uses: @SHA (referenced)"| rw
+    src ==>|"vendored: setup-scan-fix / cp"| vend
     cfg2 -.drives.-> callers
     cfg2 -.drives.-> vend
 ```
