@@ -327,9 +327,12 @@ jobs:
           tflint_version: latest
 
       - name: Initialize TFLint
-        # Retry: `tflint --init` downloads plugins from the GitHub API, which
-        # intermittently returns 5xx (observed 504s). Retry up to 3 times with
-        # linear backoff before failing the job, so a transient blip isn't a red CI.
+        # `tflint --init` downloads plugins from the GitHub API, which intermittently
+        # returns 5xx (observed 504s) and rate-limits anonymous callers. Authenticate
+        # with GITHUB_TOKEN to lift the anonymous limit, and retry up to 3 times with
+        # linear backoff so a transient blip isn't a red CI.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           for attempt in 1 2 3; do
             if tflint --init --config=.scanning/configs/.tflint.hcl; then

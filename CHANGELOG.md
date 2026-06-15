@@ -27,8 +27,9 @@ GitHub-recommended mitigation). Resolves the pre-existing note from v2.0.5.
 
 **CI robustness.**
 
-- **`reusable-scan.yml`** — `tflint --init` (which pulls plugins from the GitHub API and
-  intermittently 5xx's) now retries up to 3× with linear backoff before failing.
+- **`reusable-scan.yml`** + **`ci.yml`** — `tflint --init` (which pulls plugins from the
+  GitHub API and intermittently 5xx's / rate-limits anonymous callers) now authenticates
+  with `GITHUB_TOKEN` and retries up to 3× with linear backoff before failing.
 
 **Hooks — correctness & security (Bash + PowerShell kept at parity).**
 

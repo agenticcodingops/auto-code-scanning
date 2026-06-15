@@ -134,7 +134,24 @@ jobs:
           tflint_version: latest
 
       - name: Initialize TFLint
-        run: tflint --init --config=configs/${{ matrix.cloud }}/.tflint.hcl
+        # Authenticate plugin downloads with GITHUB_TOKEN (lifts the anonymous GitHub
+        # API rate limit) and retry 3x with backoff on transient 5xx — same fix as
+        # reusable-scan.yml.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUD: ${{ matrix.cloud }}
+        run: |
+          for attempt in 1 2 3; do
+            if tflint --init --config="configs/${CLOUD}/.tflint.hcl"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "tflint --init failed after 3 attempts" >&2
+              exit 1
+            fi
+            echo "tflint --init attempt ${attempt} failed; retrying in $((attempt * 5))s..." >&2
+            sleep "$((attempt * 5))"
+          done
 
       - name: Test terraform-valid fixture passes all scans
         run: |
