@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.9] - Patch — read Process.ExitCode before disposing (trivy-secrets.ps1)
+
+CodeRabbit follow-up on v2.0.8: `hooks/trivy-secrets.ps1` read `$proc.ExitCode` **after**
+`$proc.Dispose()` (in the `finally`), which can throw `InvalidOperationException`. Capture
+the exit code into a local inside the `try` (right after `WaitForExit`), then check the
+local after disposal.
+
 ## [2.0.8] - Patch — follow-up fixes to the v2.0.7 hardening (CodeRabbit review)
 
 CodeRabbit's review of the v2.0.7 hardening surfaced real edge cases in the new code —
