@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.8] - Patch — follow-up fixes to the v2.0.7 hardening (CodeRabbit review)
+
+CodeRabbit's review of the v2.0.7 hardening surfaced real edge cases in the new code —
+including a regression in the NUL-safety fix itself. All addressed; re-vendor `hooks/`,
+`scripts/` and bump the pin.
+
+- **`hooks/lib/common.sh` — NUL-safety regression (the important one).** v2.0.7 captured
+  `git diff … -z` into a **scalar** (`files="$(…)"`), and command substitution strips NUL
+  bytes — so the delimiters were lost and the downstream `grep -z` / `xargs -0` saw merged
+  paths (defeating the very fix). Now reads into an array with `mapfile -d ''` and re-emits
+  NUL-delimited. Verified multi-file + whitespace-in-path safe.
+- **`hooks/lib/common.ps1`** — the staged-export `catch {}` silently dropped a file on
+  `git show` failure (a false CLEAN over missing content). Now `Write-HookWarn`s the gap.
+- **`hooks/trivy-secrets.ps1`** — the binary-safe export could deadlock `WaitForExit()`
+  (redirected stderr never drained) and leaked the process handle. Now drains stderr async
+  and disposes in `finally`.
+- **`hooks/dotnet-format.{sh,ps1}` + `hooks/eslint.ps1`** — stripping a leading `./`/`.\`
+  from `working_dir` could leave it empty (matching nothing → false PASS). Coerced back to `.`.
+- **`hooks/eslint.sh` + `hooks/prettier.sh`** — a missing `working_dir` made `cd` fail and
+  be misread as a lint failure; added a fail-open existence guard.
+- **`hooks/snyk-iac.ps1`** — render each finding's own file path, not only the top-level
+  `targetFile`.
+- **`hooks/validate-suppressions.py`** — `max_expiry_days` `int()` silently accepted
+  `bool`/`float`; now rejected as a V-006 error (int-strings like `"180"` still pass).
+- **`scripts/scan-and-fix.sh`** — extra positional args / unknown `--*` options now fail
+  closed (exit 2) instead of being silently ignored.
+
+> The `dispatcher.sh` `local_hooks_enabled` grep was also flagged but is a **false
+> positive** — `^[[:space:]]*…` already matches the indented `global.local_hooks_enabled:
+> false` form (verified empirically). Left unchanged.
+
 ## [2.0.7] - Patch — security & robustness hardening (workflows + hooks)
 
 Broad hardening pass addressing CodeRabbit/Gemini/Semgrep findings surfaced across the
