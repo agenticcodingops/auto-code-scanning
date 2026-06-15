@@ -280,16 +280,16 @@ flowchart TD
         tag["git tag vX.Y.Z == commit SHA"]
     end
     subgraph consumer["Consumer repo"]
-        call["thin callers (uses: …@SHA # vX.Y.Z)"]
+        cw["thin callers (uses: …@SHA # vX.Y.Z)"]
         vend["vendored hooks/ scripts/ schemas/"]
         owncfg["scan-config.yaml + lefthook.yml"]
     end
-    rw -.->|"referenced by SHA"| call
+    rw -.->|"referenced by SHA"| cw
     files ==>|"vendored (byte-identical)"| vend
-    owncfg --> call
+    owncfg --> cw
     owncfg --> vend
 
-    note["Upgrade = bump the pin SHA + re-vendor the 3 dirs.<br/>Never use @main; a tag is immutable only by convention —<br/>pin the SHA the tag points to."]
+    legend["Upgrade = bump the pin SHA + re-vendor the 3 dirs.<br/>Never use @main; a tag is immutable only by convention —<br/>pin the SHA the tag points to."]
 ```
 
 - **Referenced, not vendored:** the reusable workflows (`uses: …@<SHA>`). The caller's
