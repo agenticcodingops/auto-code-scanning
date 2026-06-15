@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - Patch — security & robustness hardening (workflows + hooks)
+
+Broad hardening pass addressing CodeRabbit/Gemini/Semgrep findings surfaced across the
+consumer repos. No new inputs or behavior changes for callers — re-vendor `hooks/`,
+`scripts/`, `schemas/` and bump the pin.
+
+**GitHub Actions script injection (CWE-78).** Every `run:` step that interpolated
+untrusted `${{ inputs.* }}` / `${{ github.* }}` context directly into the shell or an
+embedded python heredoc now binds it to an intermediate `env:` var instead (the
+GitHub-recommended mitigation). Resolves the pre-existing note from v2.0.5.
+
+- **`reusable-scan.yml`** — `cloud-provider`, `terraform-directory`,
+  `apply-suppressions`, `apply-baseline`, `fail-on-findings` moved to `env:` and read via
+  `"$VAR"` (shell) / `os.environ.get()` (python heredocs). Verified clean against
+  `p/github-actions`.
+- **`bypass-detection.yml`** — the `bypass-event.json` heredoc (which interpolated
+  `github.actor` / `github.sha` / step output) now builds JSON with `jq -n --arg` from the
+  built-in `GITHUB_*` env vars + an `env:`-bound reason — injection-safe **and** correctly
+  JSON-escaped.
+
+**CI robustness.**
+
+- **`reusable-scan.yml`** — `tflint --init` (which pulls plugins from the GitHub API and
+  intermittently 5xx's) now retries up to 3× with linear backoff before failing.
+
+**Hooks — correctness & security (Bash + PowerShell kept at parity).**
+
+- **Fail-open vs fail-closed** — `tflint.sh` no longer terminates under `set -e` on the
+  exit-1 path (`handle_exit_code … || true`); `validate-suppressions` import/interpreter
+  errors exit `2` (infra → fail-open) distinct from validation failures (`1`);
+  `check-fix-allowlist.py` fails **closed** (`exit 2`) on malformed config instead of
+  `AttributeError`.
+- **Secret hygiene** — `scan-and-fix.sh` secret scan redirects Trivy's matched-value
+  output to `/dev/null` (keeps the exit code), so secret values never reach logs.
+- **Files silently skipped** — NUL-safe staged-file / changed-dir enumeration
+  (`git … -z`, `mapfile -d ''`, `xargs -0`) in `common.sh` / `trivy-secrets.{sh,ps1}`;
+  root-level files no longer dropped by `Split-Path -Parent` (mapped to `.`) in
+  `common.ps1`; staged-content export no longer strips newlines / corrupts binary blobs.
+- **Windows fail-open bypass** — `validate-suppressions.ps1` uses `Find-WorkingPython`
+  (not a Store-shim `python3`) so suppression validation can't be silently skipped; adds a
+  repo-root config fallback.
+- **Misc** — SC2295 quoting; leading `./` stripped from `working_dir`; case-insensitive
+  path-prefix strip in `dotnet-build.ps1`; `npx --no-install` availability probe before
+  fallback; Snyk findings now printed before failing; `dispatcher.sh` resolves
+  `scan-config.yaml` against the repo root and no longer references a non-vendored doc path.
+
+**Schema.**
+
+- **`scan-config.schema.json`** — declares `global.local_hooks_enabled` as `boolean`, so a
+  malformed `"false"` (string) is rejected rather than silently breaking the kill-switch.
+
 ## [2.0.6] - Patch — IaC gate blocks on CRITICAL/HIGH only (not lint)
 
 `reusable-scan.yml`'s Aggregate gate failed on **any** finding (`total == 0`), so a repo

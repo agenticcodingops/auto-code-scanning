@@ -65,18 +65,22 @@ jobs:
 
       - name: Log bypass metrics
         if: steps.bypass-check.outputs.bypass_detected == 'true'
+        env:
+          # Bind the one non-default value to env; the GITHUB_* vars are built-in.
+          # Keeping all of these out of the command text avoids script injection,
+          # and `jq -n --arg` guarantees correct JSON escaping of every value.
+          BYPASS_REASON: ${{ steps.bypass-check.outputs.bypass_reason }}
         run: |
           # Create metrics JSON for future aggregation
-          cat << EOF > bypass-event.json
-          {
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "commit": "${{ github.sha }}",
-            "author": "${{ github.actor }}",
-            "branch": "${{ github.ref_name }}",
-            "reason": "${{ steps.bypass-check.outputs.bypass_reason }}",
-            "repository": "${{ github.repository }}"
-          }
-          EOF
+          jq -n \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg commit "$GITHUB_SHA" \
+            --arg author "$GITHUB_ACTOR" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg reason "$BYPASS_REASON" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '{timestamp: $timestamp, commit: $commit, author: $author, branch: $branch, reason: $reason, repository: $repository}' \
+            > bypass-event.json
           cat bypass-event.json
 
       - name: Calculate bypass rate

@@ -132,13 +132,17 @@ jobs:
 
       - name: Copy configs to .scanning/configs
         id: config
+        env:
+          # Bind the untrusted input to an env var so it is never interpolated into the
+          # shell command text (avoids GitHub Actions script injection).
+          CLOUD_PROVIDER: ${{ inputs.cloud-provider }}
         run: |
           mkdir -p .scanning/configs
-          cp .scanning-repo/configs/${{ inputs.cloud-provider }}/.checkov.yaml .scanning/configs/.checkov.yaml
-          cp .scanning-repo/configs/${{ inputs.cloud-provider }}/.tflint.hcl .scanning/configs/.tflint.hcl
-          cp .scanning-repo/configs/${{ inputs.cloud-provider }}/policy-overlay.yaml .scanning/configs/policy-overlay.yaml 2>/dev/null || true
+          cp ".scanning-repo/configs/${CLOUD_PROVIDER}/.checkov.yaml" .scanning/configs/.checkov.yaml
+          cp ".scanning-repo/configs/${CLOUD_PROVIDER}/.tflint.hcl" .scanning/configs/.tflint.hcl
+          cp ".scanning-repo/configs/${CLOUD_PROVIDER}/policy-overlay.yaml" .scanning/configs/policy-overlay.yaml 2>/dev/null || true
           cp .scanning-repo/configs/common/.trivyignore .scanning/configs/.trivyignore 2>/dev/null || true
-          echo "config-path=.scanning/configs" >> $GITHUB_OUTPUT
+          echo "config-path=.scanning/configs" >> "$GITHUB_OUTPUT"
 
       - name: Upload config artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -323,14 +327,31 @@ jobs:
           tflint_version: latest
 
       - name: Initialize TFLint
-        run: tflint --init --config=.scanning/configs/.tflint.hcl
+        # Retry: `tflint --init` downloads plugins from the GitHub API, which
+        # intermittently returns 5xx (observed 504s). Retry up to 3 times with
+        # linear backoff before failing the job, so a transient blip isn't a red CI.
+        run: |
+          for attempt in 1 2 3; do
+            if tflint --init --config=.scanning/configs/.tflint.hcl; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "tflint --init failed after 3 attempts" >&2
+              exit 1
+            fi
+            echo "tflint --init attempt ${attempt} failed; retrying in $((attempt * 5))s..." >&2
+            sleep "$((attempt * 5))"
+          done
 
       - name: Run TFLint
         id: tflint
+        env:
+          # Bind the untrusted input to env (avoids GitHub Actions script injection).
+          TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
           EXIT_CODE=0
           TFLINT_OUTPUT=""
-          SCAN_DIR="${{ inputs.terraform-directory }}"
+          SCAN_DIR="$TERRAFORM_DIRECTORY"
 
           while IFS= read -r dir; do
             echo "::group::Scanning $dir"
@@ -394,8 +415,9 @@ jobs:
       - name: Run Snyk IaC scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
-          snyk iac test ${{ inputs.terraform-directory }} \
+          snyk iac test "$TERRAFORM_DIRECTORY" \
             --json \
             --json-file-output=snyk-iac-results.json \
             --severity-threshold=low \
@@ -404,8 +426,9 @@ jobs:
       - name: Generate Snyk SARIF
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
-          snyk iac test ${{ inputs.terraform-directory }} \
+          snyk iac test "$TERRAFORM_DIRECTORY" \
             --sarif-file-output=snyk-iac-results.sarif \
             --severity-threshold=low \
             2>&1 || true
@@ -446,6 +469,12 @@ jobs:
 
       - name: Aggregate and filter results
         id: aggregate
+        env:
+          # Untrusted inputs bound to env (avoid GitHub Actions script injection);
+          # the python heredoc below reads them via os.environ.
+          APPLY_SUPPRESSIONS: ${{ inputs.apply-suppressions }}
+          APPLY_BASELINE: ${{ inputs.apply-baseline }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         run: |
           python3 << 'PYTHON_SCRIPT'
           import json
@@ -598,7 +627,7 @@ jobs:
 
           # Apply suppressions
           suppressions_applied = 0
-          apply_suppressions = "${{ inputs.apply-suppressions }}" == "true"
+          apply_suppressions = os.environ.get("APPLY_SUPPRESSIONS", "") == "true"
           if apply_suppressions and os.path.exists(".scan-suppressions.yaml"):
               try:
                   import yaml
@@ -631,7 +660,7 @@ jobs:
 
           # Apply baseline
           baseline_filtered = 0
-          apply_baseline = "${{ inputs.apply-baseline }}" == "true"
+          apply_baseline = os.environ.get("APPLY_BASELINE", "") == "true"
           if apply_baseline and os.path.exists(".scan-baseline/baseline.json"):
               try:
                   with open(".scan-baseline/baseline.json") as f:
@@ -659,7 +688,7 @@ jobs:
           critical = severity_counts["CRITICAL"]
           high = severity_counts["HIGH"]
 
-          fail_on = "${{ inputs.fail-on-findings }}" == "true"
+          fail_on = os.environ.get("FAIL_ON_FINDINGS", "") == "true"
           # Gate on the BLOCKING severities (CRITICAL + HIGH) only — lint / medium / low
           # findings are reported (SARIF + PR comment) but do NOT fail the check, matching
           # the `severity: CRITICAL,HIGH` the scanners are configured with.
@@ -943,6 +972,8 @@ jobs:
           path: aggregated/
 
       - name: Generate metrics
+        env:
+          CLOUD_PROVIDER: ${{ inputs.cloud-provider }}
         run: |
           python3 << 'PYTHON_SCRIPT'
           import json
@@ -962,7 +993,7 @@ jobs:
               "repository": os.environ.get("GITHUB_REPOSITORY", ""),
               "branch": os.environ.get("GITHUB_HEAD_REF", os.environ.get("GITHUB_REF_NAME", "")),
               "commit_sha": os.environ.get("GITHUB_SHA", ""),
-              "cloud_provider": "${{ inputs.cloud-provider }}",
+              "cloud_provider": os.environ.get("CLOUD_PROVIDER", ""),
               "aggregate": {
                   "total_findings": data.get("total_findings", 0),
                   "by_severity": data.get("by_severity", {}),
