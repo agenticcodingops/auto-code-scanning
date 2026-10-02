@@ -1,0 +1,106 @@
+# ============================================================================
+# REUSABLE SCAN SELF-TEST
+# auto-code-scanning
+#
+# Runs this repository's own reusable-scan.yml, with the configs from the same
+# commit, against the Azure test fixture. A change to the scanner pins or to a
+# cloud config is therefore exercised before it is released, and the run log
+# records the exact scanner versions (the Checkov image tag and banner,
+# `trivy --version`, `tflint --version`).
+#
+# The fixture carries findings, so the gate is not asserted. The verify job
+# fails instead when a scanner wrote no report or TFLint reported an error:
+# the ways the scan has failed silently before.
+# ============================================================================
+
+name: Reusable Scan Self-Test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/reusable-scan.yml"
+      - ".github/workflows/reusable-scan-self-test.yml"
+      - "configs/**"
+      - "tests/fixtures/terraform-valid/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/reusable-scan.yml"
+      - ".github/workflows/reusable-scan-self-test.yml"
+      - "configs/**"
+      - "tests/fixtures/terraform-valid/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    # reusable-scan.yml declares these on its SARIF and PR-comment jobs, and a caller
+    # must grant them even though both jobs are switched off below.
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-scan.yml
+    with:
+      terraform-directory: tests/fixtures/terraform-valid/azure
+      cloud-provider: azure
+      scanning-repo-ref: ${{ github.sha }}
+      fail-on-findings: false
+      upload-sarif: false
+      post-pr-comment: false
+      upload-metrics: false
+
+  verify:
+    name: Verify every scanner wrote a report
+    needs: scan
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download scan results
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          path: scan-artifacts/
+
+      - name: Check the reports
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          import sys
+
+          problems = []
+
+          def load(path):
+              try:
+                  with open(path) as fh:
+                      return json.load(fh)
+              except (OSError, ValueError) as exc:
+                  problems.append(f"{path}: {exc}")
+                  return None
+
+          # Checkov writes its report only when it runs; the report names its version.
+          checkov = load("scan-artifacts/checkov-results/checkov-results.json")
+          if checkov is not None:
+              reports = checkov if isinstance(checkov, list) else [checkov]
+              versions = sorted({(r.get("summary") or r).get("checkov_version") or "unknown" for r in reports})
+              print(f"Checkov report written by version {', '.join(versions)}")
+
+          tflint = load("scan-artifacts/tflint-results/tflint-results.json")
+          if tflint is not None:
+              errors = tflint.get("errors") or []
+              print(f"TFLint: {len(tflint.get('issues') or [])} issue(s), {len(errors)} error(s)")
+              problems.extend(f"TFLint error: {err.get('message', err)}" for err in errors)
+
+          for name in ("trivy-iac-results.json", "trivy-secrets-results.json"):
+              report = load(f"scan-artifacts/trivy-results/{name}")
+              if report is not None and "SchemaVersion" not in report:
+                  problems.append(f"{name} is not a Trivy JSON report")
+
+          for problem in problems:
+              text = str(problem).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error::{text}")
+          sys.exit(1 if problems else 0)
+          PYTHON_SCRIPT
