@@ -286,7 +286,8 @@ jobs:
           results = data if isinstance(data, list) else [data]
           for result in results:
               for check_type in ['passed_checks', 'failed_checks']:
-                  checks = result.get(check_type, [])
+                  # Checkov nests the check lists under 'results'.
+                  checks = (result.get('results') or {}).get(check_type, [])
                   for check in checks:
                       check_id = check.get('check_id', '')
                       if check_id.startswith('CKV_'):
@@ -367,10 +368,12 @@ jobs:
           EXIT_CODE=0
           TFLINT_OUTPUT=""
           SCAN_DIR="$TERRAFORM_DIRECTORY"
+          # tflint resolves a relative --config against --chdir, so pass an absolute path.
+          TFLINT_CONFIG="${GITHUB_WORKSPACE}/.scanning/configs/.tflint.hcl"
 
           while IFS= read -r dir; do
             echo "::group::Scanning $dir"
-            if ! tflint --config=.scanning/configs/.tflint.hcl --chdir="$dir" --format=json > "tflint-${dir//\//-}.json" 2>&1; then
+            if ! tflint --config="$TFLINT_CONFIG" --chdir="$dir" --format=json > "tflint-${dir//\//-}.json" 2>&1; then
               EXIT_CODE=1
             fi
             echo "::endgroup::"
@@ -380,18 +383,28 @@ jobs:
           python3 -c "
           import json, glob, os
 
+          def annotate(text):
+              # Workflow-command data must escape %, CR and LF.
+              return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
           all_issues = []
+          all_errors = []
           for f in glob.glob('tflint-*.json'):
               try:
                   with open(f) as fh:
                       data = json.load(fh)
-                      if isinstance(data, dict) and 'issues' in data:
-                          all_issues.extend(data['issues'])
               except (json.JSONDecodeError, FileNotFoundError):
-                  pass
+                  print('::warning::' + annotate(f + ' is not TFLint JSON output'))
+                  continue
+              if isinstance(data, dict):
+                  all_issues.extend(data.get('issues') or [])
+                  # Keep TFLint's own errors (e.g. a config it could not load) visible.
+                  for err in data.get('errors') or []:
+                      all_errors.append(err)
+                      print('::warning::' + annotate('TFLint error in ' + f + ': ' + str(err.get('message', ''))))
 
           with open('tflint-results.json', 'w') as f:
-              json.dump({'issues': all_issues, 'errors': []}, f, indent=2)
+              json.dump({'issues': all_issues, 'errors': all_errors}, f, indent=2)
           " || true
 
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
@@ -573,7 +586,8 @@ jobs:
           # Parse Checkov findings
           checkov_results = checkov_data if isinstance(checkov_data, list) else [checkov_data]
           for result in checkov_results:
-              for check in result.get("failed_checks", []):
+              # Checkov nests the check lists under "results".
+              for check in (result.get("results") or {}).get("failed_checks", []):
                   check_id = check.get("check_id", "")
                   remediation_url = f"https://docs.checkov.io/docs/{check_id}" if check_id.startswith("CKV_") else None
                   severity = check.get("severity", "MEDIUM")
