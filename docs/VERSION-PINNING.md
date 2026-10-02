@@ -139,6 +139,42 @@ The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`)
 already pin to `@v2.0.0`. Update the `@` reference when upgrading. Unlike
 pre-commit, there is no automatic update mechanism for workflow references.
 
+## Scanner Versions in the Terraform Scan
+
+`reusable-scan.yml` installs exact scanner versions, so every consumer that pins a
+release scans with the same tools and rules. Pass the same commit as
+`scanning-repo-ref`, because the TFLint rulesets come from the configs checked out
+at that ref.
+
+| Scanner | Version | Where it is pinned |
+|---|---|---|
+| Checkov | 3.3.19 | the `bridgecrewio/checkov-action` SHA (v12.3125.0): the action's `action.yml` names the image `ghcr.io/bridgecrewio/checkov:3.3.19` |
+| Trivy | 0.75.0 | `version:` on each of the four `aquasecurity/trivy-action` steps |
+| TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
+| TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
+
+Every run logs the versions it used: the Checkov step's image tag and banner, the
+`Show Trivy version` step, and the `Show TFLint version` step, which lists each
+ruleset. One input still moves without a pin: Trivy downloads its misconfiguration
+checks bundle at run time, and `Show Trivy version` logs that bundle's digest.
+
+To bump a scanner, change it in one release:
+
+1. Checkov: choose the `checkov-action` tag whose `action.yml` names the Checkov
+   image you want, and pin that tag's commit SHA.
+2. Trivy: change all four `version:` values together.
+3. TFLint: change `tflint_version:`, and replace `checksums:` with the SHA-256 of
+   `tflint_linux_amd64.zip` and `tflint_linux_arm64.zip` from that release's
+   `checksums.txt`.
+4. Rulesets: change the `version` in every `configs/<cloud>/.tflint.hcl` that uses
+   the plugin.
+
+`.github/workflows/reusable-scan-self-test.yml` runs the scan on any change to it or
+to `configs/`, and fails if a scanner wrote no report or TFLint reported an error.
+
+`scan-config.yaml` carries no tool versions. The local hooks run whichever version
+of each tool is on `PATH`.
+
 ## The Centralized `claude-code-action` Pin (Layer B)
 
 The agentic fix loop calls Anthropic's `claude-code-action`. That action is
