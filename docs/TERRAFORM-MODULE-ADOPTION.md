@@ -157,8 +157,9 @@ using this pull request's run. The `aggregated-results` artifact is kept for one
 - **Operator STOP:** yes. Do not merge until every CRITICAL and HIGH finding has a
   decision.
 
-The Aggregate Results job fails while a CRITICAL or HIGH finding remains
-(`reusable-scan.yml:752-756`, `785-786`). Fix, baseline or suppress each one, as in
+With `fail-on-findings` left at its default, `true`, the Aggregate Results job fails
+while a CRITICAL or HIGH finding remains (`reusable-scan.yml:45-49`, `752-756`,
+`785-786`). Fix, baseline or suppress each one, as in
 [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#7-decide-how-each-newly-failing-check-is-handled).
 Record the decisions in the pull request.
 

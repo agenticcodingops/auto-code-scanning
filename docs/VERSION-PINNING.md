@@ -225,6 +225,7 @@ jobs:
     uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+      scanning_repo: OWNER/auto-code-scanning   # defaults to the upstream repository
       scanning_repo_ref: v2.2.0 # x-release-please-version
     secrets: inherit
 ```

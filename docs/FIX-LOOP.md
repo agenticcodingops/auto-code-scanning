@@ -113,8 +113,9 @@ Key enforcement (all mechanical, independent of the prompt):
    - `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`).
    The platform **verifies** these via `gh secret list` — it never stores them.
 3. Set `fix_loop.enabled: true` and tune `allowlist_paths` / `build_verify_cmd` for your repo.
-4. Pin the caller's `uses:` and its `scanning_repo_ref` input to the current release, and
-   grant its `fix` job the permissions listed in
+4. Pin the caller's `uses:` and its `scanning_repo_ref` input to the current release. If
+   you call your own copy of the platform, set `scanning_repo` to it as well. Grant its
+   `fix` job the permissions listed in
    [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). The template pins
    `@v2.0.0` and grants only `contents: read`.
 5. Add the **`ai-autofix`** label to a PR. After a trusted review (CodeRabbit/SonarCloud or an

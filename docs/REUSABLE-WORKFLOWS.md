@@ -187,8 +187,9 @@ does not. Whether an internal copy works is UNKNOWN.
 
 #### The gate counts CRITICAL and HIGH only
 
-MEDIUM and LOW findings are reported in the comment and SARIF, but never fail the run
-(`reusable-scan.yml:752-756`). How each tool's severity is mapped:
+With `fail-on-findings: true`, the default, active CRITICAL and HIGH findings fail the
+Aggregate Results job. MEDIUM and LOW findings are reported in the comment and SARIF, but
+never fail it (`reusable-scan.yml:45-49`, `752-756`). How each tool's severity is mapped:
 
 | Tool | Severity used | Source |
 |---|---|---|

@@ -12,10 +12,12 @@ You get **two layers**, both driven by a single `scan-config.yaml`:
   *minimal* fix to a flagged PR and a separate, locked-down job re-verifies and pushes it.
 
 > **This guide uses the current release, `v2.2.0`.** <!-- x-release-please-version -->
-> The examples call `agenticcodingops/auto-code-scanning`; replace the owner with yours if
-> you use your own copy. `reusable-scan.yml` always reads its configs from
-> `auto-code-scanning` under the calling repository's owner (see
-> [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
+> The examples call `agenticcodingops/auto-code-scanning`. If you use your own copy,
+> change the owner in every `uses:` line, and set the fix loop's `scanning_repo` input to
+> your copy too: it defaults to `agenticcodingops/auto-code-scanning` (see
+> [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml)). `reusable-scan.yml`
+> always reads its configs from `auto-code-scanning` under the calling repository's owner
+> (see [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
 > **Always pin to a release tag — never `@main`.**
 
 ---
@@ -64,7 +66,7 @@ missing tool warns and allows the commit rather than blocking you. Install what'
 **Get the platform locally** (so setup can copy templates and shared scripts into your repo):
 
 ```bash
-git clone --branch v2.0.0 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning
+git clone --branch v2.2.0 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning  # x-release-please-version
 ```
 
 (Or add it as a git submodule if you prefer to track the version in-repo.)
@@ -264,7 +266,7 @@ languages to scan, and Lefthook calls the vendored `hooks/`. So these must be co
 
 ```bash
 git add scan-config.yaml hooks/ lefthook.yml scripts/ .claude/ .github/workflows/
-git commit -m "chore: adopt auto-code-scanning v2.0.0 (scan + fix-loop)"
+git commit -m "chore: adopt auto-code-scanning v2.2.0 (scan + fix-loop)"  # x-release-please-version
 ```
 
 > Add `.scanning/` and `.scan-results/` to your `.gitignore` (setup/hooks write runtime artifacts

@@ -82,8 +82,9 @@ Run the scan on the default branch at the current pin, then save its findings. T
 download it soon after the run.
 
 ```bash
-gh workflow run terraform-scan.yml --ref main
-gh run list --workflow terraform-scan.yml --branch main --limit 1   # note the run ID
+BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
+gh workflow run terraform-scan.yml --ref "$BRANCH"
+gh run list --workflow terraform-scan.yml --branch "$BRANCH" --limit 1   # note the run ID
 gh run watch <run-id>
 gh run download <run-id> --name aggregated-results --dir before
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
@@ -162,7 +163,9 @@ versions from both runs' job summaries. Compare the `trivy-secrets` alerts too.
 - **Operator STOP:** yes. Do not merge until every line of `new.tsv` has a recorded
   decision.
 
-Only CRITICAL and HIGH findings fail the scan (`reusable-scan.yml:752-756`). Checkov
+Only CRITICAL and HIGH findings fail the scan, and only while the caller's
+`fail-on-findings` input is `true`, its default (`reusable-scan.yml:45-49`, `752-756`).
+Check the value in your caller. Checkov
 findings are normally MEDIUM; a TFLint rule at `error` level is HIGH
 (`reusable-scan.yml:624-628`, `646`; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#the-gate-counts-critical-and-high-only)).
