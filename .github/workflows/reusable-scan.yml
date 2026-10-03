@@ -187,8 +187,18 @@ jobs:
         continue-on-error: true
 
       - name: Show Trivy version
-        # Records the binary version and the digest of the checks bundle Trivy downloaded.
-        run: trivy --version --cache-dir "${GITHUB_WORKSPACE}/.cache/trivy"
+        # Records the binary version and the digest of the checks bundle Trivy downloaded,
+        # in the log and in the job summary.
+        run: |
+          trivy --version --cache-dir "${GITHUB_WORKSPACE}/.cache/trivy" > "${RUNNER_TEMP}/trivy-version.txt"
+          cat "${RUNNER_TEMP}/trivy-version.txt"
+          {
+            echo "### Trivy"
+            echo ""
+            echo "~~~"
+            cat "${RUNNER_TEMP}/trivy-version.txt"
+            echo "~~~"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Trivy IaC SARIF
         if: always()
@@ -359,8 +369,18 @@ jobs:
           done
 
       - name: Show TFLint version
-        # Prints the TFLint version and the version of each ruleset the config installed.
-        run: tflint --version --config=.scanning/configs/.tflint.hcl
+        # Prints the TFLint version and the version of each ruleset the config installed,
+        # in the log and in the job summary.
+        run: |
+          tflint --version --config=.scanning/configs/.tflint.hcl > "${RUNNER_TEMP}/tflint-version.txt"
+          cat "${RUNNER_TEMP}/tflint-version.txt"
+          {
+            echo "### TFLint and its rulesets"
+            echo ""
+            echo "~~~"
+            cat "${RUNNER_TEMP}/tflint-version.txt"
+            echo "~~~"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run TFLint
         id: tflint
