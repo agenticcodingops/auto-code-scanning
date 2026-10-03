@@ -179,7 +179,9 @@ In the branch protection rule or ruleset for the default branch, add these jobs 
 required status checks: Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan, TFLint
 Scan and Aggregate Results (`reusable-scan.yml:114`, `161`, `257`, `328`, `510`). Use the
 names shown on the pull request's Checks tab. Require all five, because Aggregate Results
-runs even when a scan job fails (`reusable-scan.yml:514`).
+runs even when a scan job fails (`reusable-scan.yml:514`). These checks do not fail when a
+scanner wrote no report; to catch that, add a report check as described in
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#a-green-job-does-not-prove-its-scanner-ran).
 
 ## Verify
 

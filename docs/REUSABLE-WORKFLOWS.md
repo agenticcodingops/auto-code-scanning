@@ -155,9 +155,10 @@ Grant all three even when you turn the SARIF or comment job off
   such uploads in one workflow run fail it ([GitHub Docs: Uploading a SARIF file to
   GitHub][gh-sarif]). So two calls of this workflow on the same commit, for example one
   per cloud, keep only one call's results in code scanning. TFLint results are not
-  uploaded to code scanning. A SARIF file over 25 MB or 5,000 results is cut to at most
-  5,000 results, most severe first, and gets a `scan-truncation-warning` result
-  (`reusable-scan.yml:825-872`).
+  uploaded to code scanning. When a SARIF file is over 25 MB or holds more than 5,000
+  results, each run in it keeps its 5,000 most severe results and then gets one
+  `scan-truncation-warning` result, so a run can hold 5,001 results and a file with
+  several runs can hold more (`reusable-scan.yml:825-872`).
 - **Pull request comment:** counts per severity, the number suppressed and baselined,
   and up to 20 active findings, most severe first (`reusable-scan.yml:956-1008`).
 - **Artifacts kept for 1 day:** `scanning-configs`, `trivy-results`, `checkov-results`,
@@ -207,12 +208,22 @@ change the outputs, the gate or the comment. The secret scan step does not fail 
 either (`continue-on-error: true`, `reusable-scan.yml:217-227`). For a secret gate, use
 `code-security-scan.yml` with `run-secret-scan: true`.
 
-#### A failed scanner does not stop Aggregate
+#### A green job does not prove its scanner ran
 
 Aggregate Results runs even when a scan job failed (`if: always()`,
-`reusable-scan.yml:514`). It skips any report it cannot find or parse
+`reusable-scan.yml:514`), and skips any report it cannot find or parse
 (`reusable-scan.yml:552-595`). Make the setup and scan jobs required status checks too,
-not only Aggregate Results.
+not only Aggregate Results: that catches a job that fails, such as a failed
+`tflint --init` (`reusable-scan.yml:359-369`).
+
+It does not catch a scanner that wrote no report. The Trivy, Checkov and TFLint scan steps
+have `continue-on-error: true` (`reusable-scan.yml:187`, `227`, `281`, `442`), and the
+result uploads keep `upload-artifact`'s default `if-no-files-found: warn`
+(`reusable-scan.yml:241-251`, `314-322`, `444-450`). So, for example, the Checkov job can
+pass with no `checkov-results.json`, and every required check stays green without a
+Checkov scan. To fail on a missing report, add a job to your caller like the `verify` job
+of `reusable-scan-self-test.yml` (lines 61-136). It downloads the run's artifacts and fails
+when the Checkov or Trivy report is missing or TFLint reported an error.
 
 #### Checkov uses this repository's config
 

@@ -392,7 +392,8 @@ To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): it moves 
 `uses:` reference and the `scanning-repo-ref` / `scanning_repo_ref` inputs together.
 Never use `@main`. Re-running
 `setup-scan-fix` refreshes the vendored `hooks/`, scripts, and `.claude/` bundle
-idempotently.
+idempotently. It also overwrites the caller workflows with the templates, which pin
+`@v2.0.0`, so re-run it before you move the pins, never after.
 
 **pre-commit hooks** (legacy Terraform path):
 

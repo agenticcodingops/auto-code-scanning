@@ -406,12 +406,15 @@ nothing merges un-scanned. This is what turns the platform from advisory into en
 
 ## 10. Step 8 — Operate & maintain
 
-- **Upgrade the platform:** move every pin to the next release — the caller workflows'
-  `uses:` lines and their `scanning-repo-ref` / `scanning_repo_ref` inputs, as in
-  [`BUMP-THE-SCAN.md`](BUMP-THE-SCAN.md) — and **re-run `setup-scan-fix`** from that release
-  to re-vendor the updated `hooks/`/`scripts/`. `fix_loop.claude_code_action_ref` is a
-  commit SHA of the action, not a release tag; copy it from the new release's tier
-  template. See [`VERSION-PINNING.md`](VERSION-PINNING.md).
+- **Upgrade the platform:** first **re-run `setup-scan-fix`** from the new release to
+  re-vendor the updated `hooks/`/`scripts/`. It also overwrites the caller workflows with
+  the templates, which pin `v2.0.0` (`scripts/setup-scan-fix.py:117-124`). **Then** move
+  every pin to the new release — the callers' `uses:` lines and their
+  `scanning-repo-ref` / `scanning_repo_ref` inputs, as in
+  [`BUMP-THE-SCAN.md`](BUMP-THE-SCAN.md) — and check `git diff .github/workflows/` before
+  you commit. `fix_loop.claude_code_action_ref` is a commit SHA of the action, not a
+  release tag; copy it from the new release's tier template. See
+  [`VERSION-PINNING.md`](VERSION-PINNING.md).
 - **Rotate `AUTOFIX_TOKEN`** before expiry (or switch to a GitHub App to avoid rotation).
 - **Tune the fix-loop scope** by widening `allowlist_paths` as you trust the loop on more paths, or
   tightening `gated_paths`. The config is gated, so the loop can't widen its own scope.

@@ -83,8 +83,11 @@ download it soon after the run.
 
 ```bash
 BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
+git fetch origin "$BRANCH"
 gh workflow run terraform-scan.yml --ref "$BRANCH"
-gh run list --workflow terraform-scan.yml --branch "$BRANCH" --limit 1   # note the run ID
+# List the dispatched runs for the branch's current commit; use the one created just now.
+gh run list --workflow terraform-scan.yml --event workflow_dispatch \
+  --commit "$(git rev-parse "origin/$BRANCH")" --limit 5 --json databaseId,createdAt,status
 gh run watch <run-id>
 gh run download <run-id> --name aggregated-results --dir before
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
@@ -124,7 +127,8 @@ with another release's configs. Never leave `scanning-repo-ref` unset: its defau
 Find every other pin to this platform and move it in the same pull request:
 
 ```bash
-grep -rn "auto-code-scanning" .github/workflows .pre-commit-config.yaml lefthook.yml 2>/dev/null
+grep -rnE 'auto-code-scanning|scanning-repo-ref|scanning_repo(_ref)?:' .github/workflows
+grep -n -A1 'auto-code-scanning' .pre-commit-config.yaml 2>/dev/null   # the rev: line follows
 ```
 
 That includes `scanning_repo_ref` in an `autonomous-fix.yml` caller
@@ -145,7 +149,9 @@ Push the branch and open a pull request. CI runs the scan with the new pins.
 Take the scan run of the pull request, and compare it with the run from step 3:
 
 ```bash
-gh run list --workflow terraform-scan.yml --branch <your-branch> --limit 1
+# The pull request run for the commit you pushed in step 5.
+gh run list --workflow terraform-scan.yml --event pull_request \
+  --commit "$(git rev-parse HEAD)" --limit 5 --json databaseId,createdAt,status
 gh run download <run-id> --name aggregated-results --dir after
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
        | [.severity, .tool, .rule_id, .file] | @tsv' after/aggregated.json \
