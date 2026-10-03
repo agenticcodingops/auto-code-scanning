@@ -113,7 +113,11 @@
       "additionalProperties": true,
       "properties": {
         "enabled": { "type": "boolean" },
-        "version": { "type": "string" },
+        "version": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Ignored: nothing reads it. CI uses the scanner versions pinned in the auto-code-scanning release; local hooks run whatever is on PATH. Still accepted so existing configs validate."
+        },
         "description": { "type": "string" },
         "config_file": { "type": "string" },
         "auto_fix": { "type": "boolean" },

@@ -20,12 +20,15 @@ global:
     per_hook_max_seconds: 5
   exclude_paths: [.git, .terraform, .scan-results, node_modules, __pycache__, "*.tfstate*"]
 
+# Tool versions are not configured here: CI uses the scanner versions pinned in
+# the auto-code-scanning release you call, and local hooks run whatever is on
+# PATH (auto-code-scanning docs/VERSION-PINNING.md).
 languages:
   terraform:
     enabled: false
     file_patterns: ["**/*.tf", "**/*.tfvars"]
     tools:
-      trivy:        { enabled: true,  version: ">=0.50.0", config_file: ".trivyignore", args: ["--severity=CRITICAL", "--exit-code=1", "--skip-dirs=.terraform"], stage: pre-commit }
+      trivy:        { enabled: true,  config_file: ".trivyignore", args: ["--severity=CRITICAL", "--exit-code=1", "--skip-dirs=.terraform"], stage: pre-commit }
       terraform_fmt: { enabled: true, args: ["-recursive"], stage: pre-commit }
 
   csharp:
@@ -34,9 +37,9 @@ languages:
     exclude_patterns: ["**/bin/**", "**/obj/**"]
     build: { solution: "", working_dir: "." }
     tools:
-      dotnet_format:  { enabled: true,  version: ">=8.0.0", args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
-      semgrep_csharp: { enabled: false, version: ">=1.60.0", args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
-      dotnet_build:   { enabled: false, version: ">=8.0.0", args: ["--nologo"], stage: pre-push }
+      dotnet_format:  { enabled: true,  args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
+      semgrep_csharp: { enabled: false, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
+      dotnet_build:   { enabled: false, args: ["--nologo"], stage: pre-push }
 
   typescript:
     enabled: false
@@ -44,15 +47,15 @@ languages:
     exclude_patterns: ["**/node_modules/**", "**/dist/**", "**/build/**"]
     build: { working_dir: "." }
     tools:
-      prettier: { enabled: true,  version: ">=3.0.0", config_file: ".prettierrc", auto_fix: true, args: ["--write"], stage: pre-commit }
-      eslint:   { enabled: true,  version: ">=8.0.0", config_file: ".eslintrc", auto_fix: true, args: ["--fix"], stage: pre-commit }
-      semgrep_typescript: { enabled: false, version: ">=1.60.0", args: ["--config=p/typescript", "--error", "--metrics=off"], stage: pre-commit }
+      prettier: { enabled: true,  config_file: ".prettierrc", auto_fix: true, args: ["--write"], stage: pre-commit }
+      eslint:   { enabled: true,  config_file: ".eslintrc", auto_fix: true, args: ["--fix"], stage: pre-commit }
+      semgrep_typescript: { enabled: false, args: ["--config=p/typescript", "--error", "--metrics=off"], stage: pre-commit }
 
   sql:
     enabled: false
     file_patterns: ["**/*.sql"]
     tools:
-      sqlfluff: { enabled: true, version: ">=3.0.0", config_file: ".sqlfluff", args: ["lint", "--dialect=ansi"], stage: pre-commit }
+      sqlfluff: { enabled: true, config_file: ".sqlfluff", args: ["lint", "--dialect=ansi"], stage: pre-commit }
 
 ci:
   sarif_upload: true

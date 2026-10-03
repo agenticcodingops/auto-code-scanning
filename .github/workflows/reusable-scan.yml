@@ -173,9 +173,9 @@ jobs:
           path: .scanning/configs/
 
       - name: Run Trivy IaC scanner
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
+          version: "v0.75.0"  # exact Trivy pin; bump deliberately (docs/VERSION-PINNING.md)
           scan-type: config
           scan-ref: ${{ inputs.terraform-directory }}
           severity: ${{ inputs.severity }}
@@ -186,11 +186,15 @@ jobs:
           skip-dirs: ".terraform,node_modules,.git"
         continue-on-error: true
 
+      - name: Show Trivy version
+        # Records the binary version and the digest of the checks bundle Trivy downloaded.
+        run: trivy --version --cache-dir "${GITHUB_WORKSPACE}/.cache/trivy"
+
       - name: Generate Trivy IaC SARIF
         if: always()
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
+          version: "v0.75.0"  # exact Trivy pin; bump deliberately (docs/VERSION-PINNING.md)
           scan-type: config
           scan-ref: ${{ inputs.terraform-directory }}
           severity: ${{ inputs.severity }}
@@ -201,9 +205,9 @@ jobs:
           skip-dirs: ".terraform,node_modules,.git"
 
       - name: Run Trivy secret scanner
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
+          version: "v0.75.0"  # exact Trivy pin; bump deliberately (docs/VERSION-PINNING.md)
           scan-type: fs
           scanners: secret
           severity: "HIGH,CRITICAL"
@@ -214,9 +218,9 @@ jobs:
 
       - name: Generate Trivy secrets SARIF
         if: always()
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          version: "v0.71.0"  # pin: the action's default (v0.65.0) fails to install on the runner
+          version: "v0.75.0"  # exact Trivy pin; bump deliberately (docs/VERSION-PINNING.md)
           scan-type: fs
           scanners: secret
           severity: "HIGH,CRITICAL"
@@ -255,7 +259,7 @@ jobs:
           path: .scanning/configs/
 
       - name: Run Checkov
-        uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf  # v12.1347.0
+        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
         with:
           directory: ${{ inputs.terraform-directory }}
           config_file: .scanning/configs/.checkov.yaml
@@ -271,7 +275,7 @@ jobs:
         run: |
           if [ -f checkov-results.json ]; then
             python3 -c "
-          import json, sys
+          import json, os, sys
 
           try:
               with open('checkov-results.json', 'r') as f:
@@ -282,14 +286,18 @@ jobs:
           results = data if isinstance(data, list) else [data]
           for result in results:
               for check_type in ['passed_checks', 'failed_checks']:
-                  checks = result.get(check_type, [])
+                  # Checkov nests the check lists under 'results'.
+                  checks = (result.get('results') or {}).get(check_type, [])
                   for check in checks:
                       check_id = check.get('check_id', '')
                       if check_id.startswith('CKV_'):
                           check['guideline'] = f'https://docs.checkov.io/docs/{check_id}'
 
-          with open('checkov-results.json', 'w') as f:
+          # Checkov runs as root in its container, so its report is root-owned and this
+          # step cannot open it for writing. Write a new file and rename it over the report.
+          with open('checkov-results.json.tmp', 'w') as f:
               json.dump(results if len(results) > 1 else results[0], f, indent=2)
+          os.replace('checkov-results.json.tmp', 'checkov-results.json')
           "
           fi
 
@@ -324,7 +332,11 @@ jobs:
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
         with:
-          tflint_version: latest
+          tflint_version: v0.64.0  # exact pin; bump deliberately (docs/VERSION-PINNING.md)
+          # SHA-256 of that release's tflint_linux_amd64.zip and tflint_linux_arm64.zip (its checksums.txt)
+          checksums: |
+            cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+            560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb
 
       - name: Initialize TFLint
         # `tflint --init` downloads plugins from the GitHub API, which intermittently
@@ -346,6 +358,10 @@ jobs:
             sleep "$((attempt * 5))"
           done
 
+      - name: Show TFLint version
+        # Prints the TFLint version and the version of each ruleset the config installed.
+        run: tflint --version --config=.scanning/configs/.tflint.hcl
+
       - name: Run TFLint
         id: tflint
         env:
@@ -355,10 +371,12 @@ jobs:
           EXIT_CODE=0
           TFLINT_OUTPUT=""
           SCAN_DIR="$TERRAFORM_DIRECTORY"
+          # tflint resolves a relative --config against --chdir, so pass an absolute path.
+          TFLINT_CONFIG="${GITHUB_WORKSPACE}/.scanning/configs/.tflint.hcl"
 
           while IFS= read -r dir; do
             echo "::group::Scanning $dir"
-            if ! tflint --config=.scanning/configs/.tflint.hcl --chdir="$dir" --format=json > "tflint-${dir//\//-}.json" 2>&1; then
+            if ! tflint --config="$TFLINT_CONFIG" --chdir="$dir" --format=json > "tflint-dir-${dir//\//-}.json" 2>&1; then
               EXIT_CODE=1
             fi
             echo "::endgroup::"
@@ -368,18 +386,36 @@ jobs:
           python3 -c "
           import json, glob, os
 
+          def annotate(text):
+              # Workflow-command data must escape %, CR and LF.
+              return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
           all_issues = []
-          for f in glob.glob('tflint-*.json'):
+          all_errors = []
+          # Per-directory reports only: the glob must not also match tflint-results.json.
+          for f in glob.glob('tflint-dir-*.json'):
               try:
                   with open(f) as fh:
                       data = json.load(fh)
-                      if isinstance(data, dict) and 'issues' in data:
-                          all_issues.extend(data['issues'])
-              except (json.JSONDecodeError, FileNotFoundError):
-                  pass
+              except (OSError, ValueError):
+                  data = None
+              if not isinstance(data, dict):
+                  # No JSON report: TFLint crashed or stopped before reporting. Record it as
+                  # an error so the run cannot pass for a clean one.
+                  try:
+                      with open(f, errors='replace') as fh:
+                          first_line = ''.join(c if c.isprintable() else '?' for c in fh.readline().strip()[:200])
+                  except OSError:
+                      first_line = ''
+                  data = {'errors': [{'message': 'no JSON report: ' + (first_line or 'empty output'), 'severity': 'error'}]}
+              all_issues.extend(data.get('issues') or [])
+              # Keep TFLint's own errors (e.g. a config it could not load) visible.
+              for err in data.get('errors') or []:
+                  all_errors.append(err)
+                  print('::warning::' + annotate('TFLint error in ' + f + ': ' + str(err.get('message', ''))))
 
           with open('tflint-results.json', 'w') as f:
-              json.dump({'issues': all_issues, 'errors': []}, f, indent=2)
+              json.dump({'issues': all_issues, 'errors': all_errors}, f, indent=2)
           " || true
 
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
@@ -561,7 +597,8 @@ jobs:
           # Parse Checkov findings
           checkov_results = checkov_data if isinstance(checkov_data, list) else [checkov_data]
           for result in checkov_results:
-              for check in result.get("failed_checks", []):
+              # Checkov nests the check lists under "results".
+              for check in (result.get("results") or {}).get("failed_checks", []):
                   check_id = check.get("check_id", "")
                   remediation_url = f"https://docs.checkov.io/docs/{check_id}" if check_id.startswith("CKV_") else None
                   severity = check.get("severity", "MEDIUM")

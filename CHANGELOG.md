@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - Minor — exact scanner pins for the Terraform scan; Checkov and TFLint now scan
+
+`reusable-scan.yml` installed Checkov 2.0.930 (2022), the latest TFLint on each run and
+Trivy 0.71.0, and two of its three scanners were not scanning:
+
+- **Checkov never ran.** `checkov-action` v12.1347.0 rejects the comma-separated output list
+  the job passes (`checkov: error: argument -o/--output: invalid choice: 'cli,json,sarif'`),
+  so it wrote no report, and `continue-on-error` kept the job green.
+- **TFLint linted at most the scan root.** TFLint resolves a relative `--config` against
+  `--chdir`, so every other directory failed with `Failed to load TFLint config`, and the
+  merge step dropped those errors.
+- **The Aggregate step read Checkov's JSON at the wrong level** (`failed_checks` sits under
+  `results`), so a Checkov finding could never reach the PR comment or the metrics.
+
+Changes, all in `reusable-scan.yml` unless stated:
+
+- **Exact scanner versions** (how to bump them: [docs/VERSION-PINNING.md](docs/VERSION-PINNING.md)):
+  - Checkov **3.3.19**: `checkov-action` v12.3125.0, image `ghcr.io/bridgecrewio/checkov:3.3.19`.
+  - Trivy **0.75.0**, through `trivy-action` v0.36.0. Its `setup-trivy` v0.2.6 also pins
+    Trivy's install script to a commit instead of fetching it from `main` on each run.
+  - TFLint **v0.64.0**, checked against the release's SHA-256 checksums.
+  - TFLint rulesets in `configs/*/.tflint.hcl`: terraform **0.15.0**, azurerm **0.32.0**,
+    aws **0.49.0**, google **0.40.0**.
+- **The run log names every version:** `Show Trivy version` (with the digest of the checks
+  bundle Trivy downloaded) and `Show TFLint version` (with each ruleset); Checkov prints its
+  version in its banner.
+- **TFLint** gets an absolute `--config`. Its own errors are kept in `tflint-results.json`
+  and shown as warnings.
+- **Checkov findings** are read from `results.failed_checks`. Open-source Checkov reports no
+  severity without a platform API key, so they count as MEDIUM and do not block. Checkov
+  runs as root in its container, so the remediation-URL step now replaces its root-owned
+  report instead of writing into it, which failed the job once Checkov wrote a report.
+- **`scan-config.yaml`** and the tier templates no longer carry tool `version:` floors:
+  nothing read them. The schema still accepts the key, marked deprecated, so existing
+  configs validate.
+- **New `reusable-scan-self-test.yml`** runs the reusable scan against the Azure fixture
+  whenever the scan or its configs change, and fails if a scanner wrote no report or TFLint
+  reported an error.
+
+**When you bump to this release**, expect findings the scan never surfaced: TFLint warnings
+and Checkov failed checks in the PR comment (MEDIUM), and Checkov alerts in code scanning.
+The gate still blocks only CRITICAL and HIGH. Checkov uses this repository's
+`configs/<cloud>/.checkov.yaml`, not a consumer's own Checkov config. Move the
+`scanning-repo-ref` input to the same commit as the `uses:` reference.
+
 ## [2.0.9] - Patch — read Process.ExitCode before disposing (trivy-secrets.ps1)
 
 CodeRabbit follow-up on v2.0.8: `hooks/trivy-secrets.ps1` read `$proc.ExitCode` **after**

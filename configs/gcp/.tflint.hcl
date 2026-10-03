@@ -26,7 +26,7 @@ config {
 # ============================================================================
 plugin "terraform" {
   enabled = true
-  version = "0.5.0"
+  version = "0.15.0"
   source  = "github.com/terraform-linters/tflint-ruleset-terraform"
 }
 
@@ -36,7 +36,7 @@ plugin "terraform" {
 # ============================================================================
 plugin "google" {
   enabled = true
-  version = "0.27.1"
+  version = "0.40.0"
   source  = "github.com/terraform-linters/tflint-ruleset-google"
 }
 
