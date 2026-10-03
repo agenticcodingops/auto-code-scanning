@@ -1,147 +1,259 @@
-# Consumer Migration — adopting the platform (reference: workout-trackroutinely)
+# Runbook: Migrate an Inline Scan or Fix Loop to the Platform
 
-This guide shows how an existing repo that **inlined** the scan→fix machinery
-(workout-trackroutinely, PR #145) switches to **consuming** `auto-code-scanning`
-as a versioned platform. It is the proof that the platform reproduces the inline
-design with **zero project specifics left in workflow YAML** — everything
-consumer-specific moves into `scan-config.yaml`.
+Some repositories copied the scan or fix-loop logic into their own workflow and hook
+files. This runbook replaces those copies with pinned calls to this platform, and moves
+the project-specific values into one file, `scan-config.yaml`.
 
-> Run these steps **in the consumer repo** (workout-trackroutinely). Do **not** open
-> that repo's PR from this repository.
+The current release is `v2.2.0`. <!-- x-release-please-version -->
 
----
+Line references such as `setup-scan-fix.py:85` mean that line of `scripts/setup-scan-fix.py`
+at commit
+[`7cd34a5`](https://github.com/agenticcodingops/auto-code-scanning/tree/7cd34a52c823a725575ef3b59ab34e062d1d83dd)
+on `main`. Workflow files are under `.github/workflows/`.
 
-## 0. What changes (at a glance)
+## Purpose
 
-| Inline today (PR #145) | After migration |
-|---|---|
-| `.github/workflows/autonomous-fix.yml` (full two-job logic, ~250 lines) | thin **caller** (~30 lines) that `uses:` the reusable workflow `@v2.0.0` |
-| Allowlist `api/src,api/tests,mobile` **baked into YAML** | `fix_loop.allowlist_paths` in `scan-config.yaml` |
-| Sensitive denylist baked into YAML | `fix_loop.gated_paths` in `scan-config.yaml` |
-| `api/`, `TrackRoutinely.slnx`, `dotnet build` baked into hooks/workflow | `languages.csharp.build.{solution,working_dir}` + `fix_loop.build_verify_cmd` |
-| `lefthook.yml` calling tools directly | `lefthook.yml` calling shared `hooks/dispatcher.sh` |
-| `.claude/` hooks (local) | **unchanged** — `.claude/` stays local per repo |
-| claude-code-action pin maintained by hand | inherited from the platform's centralized pin |
+After the migration the repository keeps `scan-config.yaml` and a few thin caller
+workflows. The hardened logic (the two-job fix loop, the path gate, the secret re-scan,
+the iteration cap) comes from the platform at a pinned release, so a fix to it reaches
+the repository through one pin change.
 
-Net effect: the consumer keeps **one config file** (`scan-config.yaml`) and a handful of
-**thin, pinned callers**; all the hardened logic lives in the platform at a pinned tag.
+## When to use
 
----
+- The repository has its own copy of a fix-loop workflow, a scan workflow, or hooks with
+  hard-coded paths, solution names or build commands.
+- For a repository with no scan yet, use
+  [consumer-repo-setup-guide.md](consumer-repo-setup-guide.md) or, for a Terraform
+  module, [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).
 
-## 1. Add `scan-config.yaml` with the project specifics
+## Prerequisites
+
+- A clone of this platform, checked out at the release you will pin
+  (`git checkout vX.Y.Z`). `setup-scan-fix.py` copies files from the clone it runs from
+  (`setup-scan-fix.py:22`, `74-77`, `119-123`).
+- Python 3 with PyYAML and `jsonschema`, and `gh` authenticated against the repository. `gh` creates the
+  labels and checks the secrets (`setup-scan-fix.py:126-155`).
+- Lefthook or pre-commit, for the local hooks.
+- A clean working tree in the repository, so you can review every file the setup
+  overwrites.
+- A second maintainer to review the pull request.
+
+Roles: the **Operator** is the maintainer doing the migration. The **Reviewer** approves
+the pull request. **CI** is GitHub Actions.
+
+## What moves where
+
+| Inline today | After the migration | Source |
+|---|---|---|
+| A full fix-loop workflow in the repository | A thin caller that `uses:` `autonomous-fix.yml` at a pinned release | `templates/fix-loop/autonomous-fix.yml` |
+| Fix-loop allowlist written into the workflow | `fix_loop.allowlist_paths` | `autonomous-fix.yml:23-25`, `302-320` |
+| Sensitive-path denylist written into the workflow | `fix_loop.gated_paths` (case-insensitive substrings) | `scripts/check-fix-allowlist.py:4-7` |
+| Solution path, working directory and build command in hooks or the workflow | `languages.<lang>.build.solution`, `languages.<lang>.build.working_dir` and `fix_loop.build_verify_cmd` | `templates/scan-config/standard.yaml:40`, `50`, `90` |
+| A bespoke SARIF-uploading scan workflow | A caller of `code-security-scan.yml` and, for Terraform, of `reusable-scan.yml` | `templates/workflows/` |
+| `lefthook.yml` calling each tool directly | `lefthook.yml` calling `hooks/dispatcher.sh` | `templates/lefthook/lefthook.yml:6-7` |
+| An action pin maintained by hand in the fix loop | The pin inside the platform's `autonomous-fix.yml`, mirrored in `fix_loop.claude_code_action_ref` | `autonomous-fix.yml:27-29`, `242`; [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) |
+
+## Steps
+
+### 1. List what the repository has copied
+
+- **Who:** Operator
+- **Operator STOP:** no
+
+Find the inline workflows, hooks and their hard-coded values:
+
+```bash
+ls .github/workflows/
+grep -rln "upload-sarif\|claude-code-action\|allowlist\|semgrep\|trivy" .github/workflows hooks scripts lefthook.yml 2>/dev/null
+```
+
+Write down, for each file: the paths the fix loop may edit, the paths it must never edit,
+the build command, the solution file and its directory, the SARIF categories, and who is
+allowed to trigger the fix loop. You will need each value in step 3.
+
+### 2. Run the setup from the release you will pin
+
+- **Who:** Operator
+- **Operator STOP:** no
+
+From the repository root, on a new branch:
+
+```bash
+python /path/to/auto-code-scanning/scripts/setup-scan-fix.py \
+  --languages csharp,typescript --tier standard --hooks-runner lefthook --enable-fix-loop
+```
+
+Use your own languages and tier. Add `--cloud-provider aws|azure|gcp` for Terraform
+(`setup-scan-fix.py:42-54`). The setup:
+
+- writes `scan-config.yaml` from the tier template, but leaves an existing one unless you
+  pass `--force` (`setup-scan-fix.py:59-68`; `render-scan-config.py:51-52`);
+- copies `hooks/` and five shared scripts over any files with the same names
+  (`setup-scan-fix.py:71-78`);
+- overwrites `lefthook.yml` with the template, or writes `.pre-commit-config.yaml` only if
+  it does not exist (`setup-scan-fix.py:82-100`);
+- keeps an existing `.claude/settings.json`, and overwrites the four scan hooks in
+  `.claude/hooks/` (`setup-scan-fix.py:103-114`);
+- overwrites `code-security-scan.yml`, `terraform-scan.yml` (Terraform only) and
+  `autonomous-fix.yml` (fix loop only) in `.github/workflows/` with the caller templates
+  (`setup-scan-fix.py:117-124`).
+
+Review `git status` and `git diff` before you go on.
+
+### 3. Put the project values into `scan-config.yaml`
+
+- **Who:** Operator
+- **Operator STOP:** no
+
+Set the values from step 1. An excerpt with example paths:
 
 ```yaml
-# workout-trackroutinely/scan-config.yaml
-schema_version: "1.0"
 languages:
   csharp:
     enabled: true
-    file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx"]
-    build:
-      solution: "api/TrackRoutinely.slnx"   # <- was hardcoded in hooks; now config
-      working_dir: "api"
-    tools:
-      dotnet_format:  { enabled: true, args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
-      semgrep_csharp: { enabled: true, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
-      dotnet_build:   { enabled: true, args: ["--nologo"], stage: pre-push }
+    build: { solution: "app/Example.slnx", working_dir: "app" }
   typescript:
-    enabled: true            # mobile/ React Native
-    build: { working_dir: "mobile" }
-    tools:
-      eslint:   { enabled: true, auto_fix: true, args: ["--fix"], stage: pre-commit }
-      prettier: { enabled: true, auto_fix: true, args: ["--write"], stage: pre-commit }
-      semgrep_typescript: { enabled: true, args: ["--config=p/typescript", "--error", "--metrics=off"], stage: pre-commit }
+    enabled: true
+    build: { working_dir: "web" }
 ci:
   sarif: { category_prefix: "scan-" }
 fix_loop:
   enabled: true
-  label: "ai-autofix"
-  human_review_label: "needs-human-review"
-  max_turns: 12            # PR #145 used --max-turns 12
-  max_iterations: 3
-  allowlist_paths: ["api/src/", "api/tests/", "mobile/"]   # <- was in YAML; now config
+  allowlist_paths: ["app/src/", "app/tests/", "web/"]
   gated_paths: ["auth", "payment", "crypto", "security", "identity", "secret", "credential",
                 ".github/", ".claude/", "hooks", "lefthook.yml", "scan-and-fix.ps1", "scripts/", ".env", "LICENSE"]
-  claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"
-  build_verify_cmd: "cd api && dotnet build TrackRoutinely.slnx --nologo"
+  build_verify_cmd: "cd app && dotnet build Example.slnx --nologo"
 ```
 
-Validate it: `python scripts/validate-scan-config.py` (or just commit — the
-`validate-scan-config` hook runs it).
+Keep `fix_loop.claude_code_action_ref` as the template wrote it. The schema accepts only a
+40-character commit SHA there (`schemas/scan-config.schema.json:157-161`). Then validate
+with the platform clone's copy of the validator:
 
-## 2. Replace the inline `autonomous-fix.yml` with a thin caller
+```bash
+STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
+```
 
-Delete the ~250-line inline workflow and drop in
-`templates/fix-loop/autonomous-fix.yml`, adjusting the owner/labels if needed:
+The copy the setup put in your `scripts/` cannot find the schema, because the setup does
+not copy `schemas/`. Without `STRICT=1` it then prints a warning and exits 0 instead of
+validating (`validate-scan-config.py:29`, `40-48`; `setup-scan-fix.py:71-78`).
+
+The fix loop reads this file from the pull request's base commit, never from its head
+(`autonomous-fix.yml:92-142`). Your changes take effect for the fix loop only after they
+merge.
+
+### 4. Pin the callers and grant their permissions
+
+- **Who:** Operator
+- **Operator STOP:** no
+
+The caller templates pin `v2.0.0` (`templates/workflows/code-security-scan.yml:21`,
+`templates/workflows/terraform-scan.yml:21` and `26`,
+`templates/fix-loop/autonomous-fix.yml:55` and `59`). Move every pin to the release you
+checked out in the prerequisites. For the fix-loop caller:
 
 ```yaml
-# .github/workflows/autonomous-fix.yml  (now ~30 lines)
-name: Autonomous Fix (caller)
-on:
-  pull_request_review: { types: [submitted] }
-  pull_request_review_comment: { types: [created] }
-  workflow_dispatch: { inputs: { pr_number: { required: true, type: string } } }
-permissions: { contents: read }
 jobs:
   fix:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      ( github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'ai-autofix') &&
-        ( contains(fromJSON('["coderabbitai[bot]","sonarqubecloud[bot]","sonarcloud[bot]"]'), github.event.review.user.login) ||
-          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association) ) )
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.0.0
+    # Keep the template's `if:` here (see step 5).
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
-      scanning_repo_ref: v2.0.0
+      config_path: scan-config.yaml
+      scanning_repo: OWNER/auto-code-scanning
+      scanning_repo_ref: v2.2.0 # x-release-please-version
     secrets: inherit
 ```
 
-The two-job analyze/apply logic, the allowlist gate, the secret re-scan, the
-`.fix-attempts` cap, and the `flag-human-review` job now come from the platform.
+`OWNER` is the owner of the platform copy you call. The template grants only
+`contents: read` (`templates/fix-loop/autonomous-fix.yml:32-33`), but the called workflow
+needs the four permissions above; see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). For the scan callers,
+move `uses:` and `scanning-repo-ref` together as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 
-## 3. Switch local hooks to the shared dispatcher
+### 5. Check who can start the fix loop
 
-Replace the hand-written `lefthook.yml` commands that call tools directly with the
-platform template (`templates/lefthook/lefthook.yml`), which calls
-`hooks/dispatcher.sh <id>`. Vendor `hooks/` + shared `scripts/` via:
+- **Who:** Operator and Reviewer
+- **Operator STOP:** yes. Do not merge until both agree the caller's `if:` admits only
+  the people and bots you trust.
 
-```powershell
-# from the consumer repo root
-path/to/auto-code-scanning/scripts/setup-scan-fix.ps1 `
-  -Languages csharp,typescript -Tier strict -HooksRunner lefthook -EnableFixLoop
+The caller's `if:` is the privilege boundary: it decides whose review or comment can make
+the loop push with `AUTOFIX_TOKEN` (`templates/fix-loop/autonomous-fix.yml:37-53`). The
+template admits a manual dispatch, or a non-fork pull request with the `ai-autofix`
+label whose review or comment came from a listed bot or from an `OWNER`, `MEMBER` or
+`COLLABORATOR`. Compare it with the rule your inline workflow enforced, and edit the bot
+list to match yours. Read [SECURITY-MODEL.md](SECURITY-MODEL.md) before you widen it.
+
+### 6. Remove the inline copies
+
+- **Who:** Operator
+- **Operator STOP:** no
+
+- Delete any inline fix-loop or scan workflow that the callers replace. Keep each caller
+  in its own workflow file: two calls from one caller workflow share a concurrency group
+  (see [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)).
+- Delete hard-coded paths and build commands from your own hooks and scripts; they are in
+  `scan-config.yaml` now.
+- Delete any local copy of the allowlist gate. The platform runs
+  `scripts/check-fix-allowlist.py` from its own checkout (`autonomous-fix.yml:313`, `385`).
+
+### 7. Create the secrets
+
+- **Who:** Operator (needs permission to manage repository secrets)
+- **Operator STOP:** yes. A person creates the secrets; no script does.
+
+The setup creates the `ai-autofix` and `needs-human-review` labels, and only checks that
+`AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` exist (`setup-scan-fix.py:126-155`). Create any
+that are missing:
+
+```bash
+gh secret set AUTOFIX_TOKEN       # fine-grained token: Contents and Pull requests read/write, this repository only
+gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN
 ```
 
-`setup-scan-fix` also creates the labels and **verifies** `AUTOFIX_TOKEN` /
-`ANTHROPIC_API_KEY` (it never creates them).
+`AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:446-456`).
 
-## 4. Keep `.claude/` local
+### 8. Review and merge
 
-The `.claude/settings.json` + `.claude/hooks/` stay in the consumer repo (they're in
-`fix_loop.gated_paths`, so the fix-loop can never touch them). If you used the
-platform bundle, the per-file PostToolUse scan + the `stop-scan` gate behave the same;
-the only change is that `scan-and-fix` is now the shared, versioned script.
+- **Who:** Operator, CI, then Reviewer
+- **Operator STOP:** no
 
-## 5. Add the scan callers
+Open a pull request. CI runs the scan callers. The Reviewer checks the diff from step 2,
+the pins from step 4 and the boundary from step 5, then approves. The Operator merges.
 
-Drop in `templates/workflows/code-security-scan.yml` (app-code SARIF with distinct
-categories) and remove any bespoke `security-scan.yml` that duplicated it. Terraform
-repos add `terraform-scan.yml` similarly.
+## Verify
 
-## 6. Verify parity
+- `STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml`
+  prints `VALID`.
+- A local commit runs the hooks through `hooks/dispatcher.sh`.
+- Code scanning shows distinct categories: `<prefix>semgrep-csharp`,
+  `<prefix>semgrep-typescript` and `<prefix>trivy-secrets` (`code-security-scan.yml:186`,
+  `242`).
+- On a test pull request labelled `ai-autofix`, a trusted review starts the fix loop. Its
+  Analyze job runs with a read-only token (`autonomous-fix.yml:161-164`, `246`), and only
+  the push step uses `AUTOFIX_TOKEN` (`autonomous-fix.yml:446-456`).
+- A proposed fix that touches `.github/`, or a path containing a gated word such as
+  `auth`, is not pushed. The pull request gets `needs-human-review` and a comment that
+  names the reason (`autonomous-fix.yml:302-320`, `461-520`).
 
-- [ ] `scan-config.yaml` validates; `csharp`/`typescript` enabled; `fix_loop.enabled: true`.
-- [ ] Local commit runs the same scanners (now via `hooks/dispatcher.sh`) in < 15s.
-- [ ] CI uploads **distinct SARIF categories** (`scan-semgrep-csharp`, `scan-semgrep-typescript`, …).
-- [ ] A PR labelled `ai-autofix` triggers the reusable two-job workflow; `analyze` has
-      **no write token**; `apply-and-push` enforces `api/src,api/tests,mobile` and pushes
-      only via `AUTOFIX_TOKEN`.
-- [ ] A patch touching `.github/` or `*Auth*` is rejected to `needs-human-review`.
+## Rollback
 
-## 7. What you can delete
+- **Who:** Operator, with Reviewer approval
 
-- The inline `autonomous-fix.yml` body (replaced by the caller).
-- Hardcoded paths in hooks/scripts (now in `scan-config.yaml`).
-- Any locally-maintained copy of the allowlist/denylist gate (now `check-fix-allowlist.py`).
+1. Revert the migration pull request with `git revert`. The inline workflows and hooks
+   come back from history.
+2. Remove any required status checks you added for the new callers' jobs.
+3. The labels and secrets can stay; nothing uses them without the caller.
 
-Pin everything to `@v2.0.0`. Bump deliberately per `docs/VERSION-PINNING.md`.
+## References
+
+- [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md): inputs, secrets and permissions.
+- [FIX-LOOP.md](FIX-LOOP.md) and [SECURITY-MODEL.md](SECURITY-MODEL.md): how the fix loop
+  works and what it trusts.
+- [VERSION-PINNING.md](VERSION-PINNING.md): pinning rules.
+- [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): later upgrades.
+- [consumer-repo-setup-guide.md](consumer-repo-setup-guide.md): first-time setup.

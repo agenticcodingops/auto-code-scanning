@@ -9,7 +9,7 @@ How to integrate automated agents with the security scanning solution.
 > (`templates/claude/`, which self-corrects edits *inside the session*) and the
 > **CI fix-loop** (`.github/workflows/autonomous-fix.yml`). The `scan.py` interface
 > below is unchanged. Everything is configured in one file, `scan-config.yaml`.
-> **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
+> **Pin consumers to a release tag or a SHA — never `@main`.** The current release is in [VERSION-PINNING.md](VERSION-PINNING.md).
 
 ## Overview
 

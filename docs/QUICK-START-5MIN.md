@@ -8,8 +8,10 @@ runs locally via **Lefthook** (default) or **pre-commit**, and can open an
 optional autonomous **fix-loop** on opted-in PRs. The fastest way in is the
 one-command orchestrator `setup-scan-fix`.
 
-> **Pin consumers to `@v2.0.0`, never `@main`.** The caller workflows that
-> `setup-scan-fix` copies in already reference `@v2.0.0`; keep them pinned.
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.2.0`. <!-- x-release-please-version -->
+> The caller workflows that `setup-scan-fix` copies in pin `@v2.0.0`. Move them to the
+> current release before you commit them; see
+> [VERSION-PINNING.md](VERSION-PINNING.md#cicd-workflow-pinning).
 
 ## Prerequisites
 
@@ -205,6 +207,6 @@ and runs `pre-commit install`. See [SETUP-GUIDE.md](SETUP-GUIDE.md) for full det
 
 - **Upgrade tier**: See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for upgrade instructions
 - **Customize**: Edit `scan-config.yaml` (languages, tools, `fix_loop`) — `csharp.build.solution`/`working_dir` make the `dotnet` path generic
-- **CI/CD**: The caller workflows are already copied in; pin them to `@v2.0.0` (see [SETUP-GUIDE.md](SETUP-GUIDE.md#cicd-integration))
+- **CI/CD**: The caller workflows are already copied in; pin them to the current release (see [SETUP-GUIDE.md](SETUP-GUIDE.md#cicd-integration) and [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md))
 - **AI agents**: Use `python scripts/scan.py` for programmatic scanning (see [AI-AGENT-GUIDE.md](AI-AGENT-GUIDE.md))
 - **All hooks**: See [HOOK-REFERENCE.md](HOOK-REFERENCE.md) for the complete hook reference

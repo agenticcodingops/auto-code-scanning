@@ -91,7 +91,7 @@ Override hook file patterns in your `.pre-commit-config.yaml` to scope tools per
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v1.0.0
+    rev: v2.2.0  # x-release-please-version
     hooks:
       # AWS-scoped hooks
       - id: trivy-iac-critical
@@ -130,24 +130,46 @@ repos:
 
 ### Step 4: CI/CD for Multi-Cloud
 
-Use a matrix strategy in your GitHub Actions workflow:
+Add one caller workflow file per cloud. Do not use a `strategy.matrix` over one call:
+every call from the same caller workflow on the same ref computes the same concurrency
+group, so one matrix leg can cancel the other (see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)). Two SARIF uploads with the
+same tool and category in one workflow run also fail that run
+([GitHub Docs: Uploading a SARIF file to GitHub](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)).
 
 ```yaml
+# .github/workflows/terraform-scan-aws.yml
+name: Terraform Security Scan (AWS)
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
 jobs:
-  security:
-    strategy:
-      matrix:
-        include:
-          - directory: aws
-            provider: aws
-          - directory: azure
-            provider: azure
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v1.0.0
+  scan:
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
     with:
-      terraform-directory: ${{ matrix.directory }}
-      cloud-provider: ${{ matrix.provider }}
-    secrets: inherit
+      terraform-directory: aws
+      cloud-provider: aws
+      scanning-repo-ref: v2.2.0 # x-release-please-version
 ```
+
+Copy it to `.github/workflows/terraform-scan-azure.yml` with
+`name: Terraform Security Scan (Azure)`, `terraform-directory: azure` and
+`cloud-provider: azure`. Each file needs its own `name:`.
+
+Both calls upload SARIF to the same fixed categories: `trivy-iac`, `trivy-secrets`,
+`checkov` and `snyk-iac` (`.github/workflows/reusable-scan.yml:881-908` at commit
+`7cd34a5`). For one commit, a later upload with the same tool and category overwrites the
+earlier results ([GitHub Docs: Uploading a SARIF file to GitHub](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)), so
+code scanning keeps only one cloud's results. Each call's gate and pull request comment
+are not affected. Keep `upload-sarif: true` on the cloud whose alerts you want in code
+scanning, and set `upload-sarif: false` on the others.
 
 ## Monorepo Support
 

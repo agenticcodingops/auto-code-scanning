@@ -4,6 +4,11 @@ How to manage versions of auto-code-scanning in your repository.
 
 The current release is **`v2.2.0`**. <!-- x-release-please-version -->
 
+> **On a release before `v2.1.0`?** Your Terraform scan (`reusable-scan.yml`) did not run Checkov, and TFLint
+> linted at most one directory. Read
+> [Upgrading from a Release Before 2.1.0](#upgrading-from-a-release-before-210) before you
+> bump.
+
 Releases after `v2.1.0` are cut by release-please (see "Release Process" in
 [CONTRIBUTING.md](CONTRIBUTING.md)). Each one has a GitHub Release with its notes, a
 `CHANGELOG.md` entry, and a **Release Verification** run on its tag whose logs and job
@@ -13,7 +18,7 @@ root of each release holds its version.
 ## Pin to a Release Tag — Never `@main`
 
 > **MANDATORY.** Consumers **MUST** pin every reference to this repo to a release
-> tag (e.g. `@v2.0.0`) or a full 40-character commit SHA. **Never** reference
+> tag (e.g. `@v2.2.0`) or a full 40-character commit SHA. **Never** reference <!-- x-release-please-version -->
 > `@main`. This applies to **both**:
 >
 > - pre-commit `rev:` in `.pre-commit-config.yaml`, and
@@ -61,7 +66,7 @@ Consuming repos pin to a specific version via the `rev:` field in `.pre-commit-c
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v2.0.0    # Pinned to exact version — never @main
+    rev: v2.2.0    # Pinned to exact version — never @main  x-release-please-version
     hooks:
       - id: trivy-iac-critical
       - id: trivy-secrets
@@ -121,6 +126,42 @@ This repository follows Semantic Versioning (SemVer):
 
 ## Upgrading Versions
 
+To move a workflow caller to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
+It moves `uses:` and `scanning-repo-ref` together and records the failed checks before
+and after.
+
+### Upgrading from a Release Before 2.1.0
+
+If you pin any release before `v2.1.0` (`v2.0.9` or earlier), `reusable-scan.yml` did not
+scan the way its name suggests. The 2.1.0 entry of [CHANGELOG.md](../CHANGELOG.md)
+records it (`CHANGELOG.md:18-31` at commit `7cd34a5`):
+
+- **Checkov never ran.** It rejected the output list it was given, wrote no report, and
+  `continue-on-error` kept the job green.
+- **TFLint linted at most the scan root.** Every other directory failed to load its
+  config, and those errors were dropped.
+- **No Checkov finding could reach the pull request comment or the metrics.** The
+  Aggregate step read Checkov's JSON at the wrong level.
+- Those releases installed Checkov 2.0.930, the latest TFLint on each run, and
+  Trivy 0.71.0.
+
+So a passing scan on those releases shows only that Trivy found nothing at the gated
+severities. When you move to `v2.1.0` or later:
+
+- Expect findings the scan never showed: TFLint warnings and Checkov failed checks in the
+  pull request comment, and Checkov alerts in code scanning (`CHANGELOG.md:57-59`).
+- Checkov findings normally count as MEDIUM and do not block (`CHANGELOG.md:46-47`). A
+  TFLint rule at `error` level counts as HIGH and does block
+  (`.github/workflows/reusable-scan.yml:646`).
+- Checkov uses this repository's `configs/<cloud>/.checkov.yaml`, not your own Checkov
+  config (`CHANGELOG.md:59-60`).
+- Set `scanning-repo-ref` to the same commit as `uses:` (`CHANGELOG.md:60-61`). If it is
+  unset, it defaults to `v1.0.0` (`.github/workflows/reusable-scan.yml:40-44`), which is
+  not a tag in this repository.
+
+Line references are at commit `7cd34a5`. Follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) for
+the upgrade.
+
 ### Automatic Update
 
 ```bash
@@ -137,7 +178,7 @@ Edit `.pre-commit-config.yaml` directly:
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v2.1.0    # Changed from v2.0.0
+    rev: vX.Y.Z    # The release you are moving to
 ```
 
 ### Verify After Upgrade
@@ -154,26 +195,50 @@ pre-commit install
 ## CI/CD Workflow Pinning
 
 The reusable GitHub Actions workflows are pinned the same way, with `@<tag>` (or a
-full SHA) — **never `@main`**:
+full SHA) — **never `@main`**. Put each call in its own caller workflow file; two calls
+from one caller workflow share a concurrency group (see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)). `OWNER` is the owner of
+your repository: `reusable-scan.yml` reads its configs from `OWNER/auto-code-scanning`
+(see [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
 
 ```yaml
+# .github/workflows/code-security-scan.yml: application code
 jobs:
-  # App-code + IaC scan (v2.0.0 generic reusable workflow)
-  security:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
-
-  # Terraform-only scan (original reusable workflow)
-  iac:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.0.0
-
-  # Optional agentic fix loop (Layer B)
-  autofix:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.0.0
+  code-scan:
+    uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
 ```
 
-The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`)
-already pin to `@v2.0.0`. Update the `@` reference when upgrading. Unlike
-pre-commit, there is no automatic update mechanism for workflow references.
+```yaml
+# .github/workflows/terraform-scan.yml: Terraform
+jobs:
+  terraform-scan:
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
+    with:
+      cloud-provider: aws
+      scanning-repo-ref: v2.2.0 # x-release-please-version
+```
+
+```yaml
+# .github/workflows/autonomous-fix.yml: optional fix loop (Layer B)
+jobs:
+  fix:
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
+    with:
+      pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+      scanning_repo_ref: v2.2.0 # x-release-please-version
+    secrets: inherit
+```
+
+Each excerpt leaves out the triggers and permissions; see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input and the permissions each
+call needs.
+
+The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) still pin
+`@v2.0.0`, and `setup-scan-fix` copies them unchanged. Move them to the current release
+when you copy them. Dependabot can update the `uses:` line of a reusable workflow
+([GitHub Docs](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)),
+but `scanning-repo-ref` and `scanning_repo_ref` are ordinary inputs: move them yourself,
+as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 
 ## Scanner Versions in the Terraform Scan
 
@@ -260,7 +325,7 @@ workflows when you copy the caller templates.
 
 ## Recommended Practices
 
-1. **Pin to exact versions in production**: Use `v2.0.0` (or a full SHA), never `main`
+1. **Pin to exact versions in production**: Use `v2.2.0` (or a full SHA), never `main` <!-- x-release-please-version -->
 2. **Pin pre-commit `rev:` AND workflow `uses:` together**: keep both at the same tag
 3. **Review release notes before upgrading**: Check for breaking changes
 4. **Test after upgrading**: Run `pre-commit run --all-files` to verify
@@ -283,7 +348,10 @@ cat version.txt
 
 ## Rollback
 
-If an upgrade causes issues:
+To roll back a workflow caller, revert the bump commit; see the Rollback section of
+[BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#rollback).
+
+If a pre-commit upgrade causes issues:
 
 1. Edit `.pre-commit-config.yaml` and revert the `rev:` to the previous version
 2. Clear the pre-commit cache:

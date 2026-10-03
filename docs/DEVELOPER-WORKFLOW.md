@@ -226,7 +226,7 @@ Edit `.pre-commit-config.yaml` and uncomment the `snyk-iac` block:
 
 ```yaml
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v1.0.0
+    rev: v2.2.0  # x-release-please-version
     hooks:
       # ... existing hooks ...
       # Uncomment below to enable Snyk IaC scanning
@@ -265,13 +265,21 @@ Add `enable-snyk: true` to your workflow and ensure `SNYK_TOKEN` is in your repo
 ```yaml
 jobs:
   security:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v1.0.0
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"
+      scanning-repo-ref: "v2.2.0" # x-release-please-version
       enable-snyk: true
     secrets: inherit  # Must include SNYK_TOKEN
 ```
+
+The job installs the latest `snyk` CLI from npm on each run; that version is not pinned.
+See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input.
 
 ## Switching Cloud Providers
 
