@@ -158,12 +158,14 @@ Never move, delete or re-create a published tag: consumers pin the commit it poi
   the merged PR, still labelled `autorelease: pending`, and creates the tag and the
   release. Until then it opens no new release PR.
 - **Back to manual releases (rollback):** delete `release.yml`, `release-verify.yml`,
-  `release-please-config.json` and `.release-please-manifest.json`, and remove the
+  `release-please-config.json`, `.release-please-manifest.json` and
+  `tests/python/test_release_config.py` (it reads those files), and remove the
   `workflow_call` trigger from `reusable-scan-self-test.yml`. Then cut releases by hand
-  again, as up to `v2.1.0`: add the `CHANGELOG.md` entry, create an annotated tag on the
-  release commit with `git tag -a vX.Y.Z -m "<summary>"`, and push it. Tags and releases
-  created in the meantime stay valid; `version.txt` and the `x-release-please-version`
-  markers can stay.
+  again, as up to `v2.1.0`: add the `CHANGELOG.md` entry, set the new version in
+  `version.txt` and on the `x-release-please-version` lines of `README.md` and
+  `docs/VERSION-PINNING.md`, create an annotated tag on the release commit with
+  `git tag -a vX.Y.Z -m "<summary>"`, and push it. Tags and releases created in the
+  meantime stay valid.
 
 ## Code Standards
 
