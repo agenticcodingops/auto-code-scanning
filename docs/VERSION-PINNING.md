@@ -24,6 +24,36 @@ root of each release holds its version.
 > the fix-loop privilege boundary under you without warning. A pinned tag/SHA is
 > the only reproducible, reviewable reference.
 
+## Pin the Commit a Release Tag Points To
+
+Pin the commit a release tag points to, and name the version in a comment. Pass the same
+commit as `scanning-repo-ref`, so the configs match the workflow:
+
+```yaml
+jobs:
+  iac:
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@<commit-sha> # vX.Y.Z
+    with:
+      cloud-provider: aws
+      scanning-repo-ref: <commit-sha>
+```
+
+Find the commit with `^{commit}`, which peels a tag to the commit it points to:
+
+```bash
+# In a clone of this repository
+git fetch --tags origin
+git rev-parse 'vX.Y.Z^{commit}'
+
+# Without a clone: an annotated tag lists two lines; use the one ending in ^{}
+git ls-remote https://github.com/agenticcodingops/auto-code-scanning 'refs/tags/vX.Y.Z*'
+```
+
+This works for both kinds of tag here. The tags up to `v2.1.0` were made by hand and are
+**annotated**: for them, `git rev-parse vX.Y.Z` without `^{commit}` returns the SHA of the
+tag object, which is not a commit and not a valid pin. The tags release-please creates
+are **lightweight**, and point straight at the commit.
+
 ## How Version Pinning Works
 
 Consuming repos pin to a specific version via the `rev:` field in `.pre-commit-config.yaml`:
@@ -213,8 +243,9 @@ places together, in the same commit, then re-pin consumers to the new tag:
    `.github/workflows/autonomous-fix.yml`.
 2. Update `fix_loop.claude_code_action_ref` in `scan-config.yaml` to the **same**
    40-char SHA.
-3. Run `validate-scan-config` (it will reject a non-SHA ref) and tag a new release.
-4. Consumers bump their workflow `uses:` `@v2.0.0` reference to the new tag.
+3. Run `validate-scan-config` (it will reject a non-SHA ref), merge the change under a
+   `fix:` or `feat:` PR title, then merge the release PR that follows. Never tag by hand.
+4. Consumers bump their workflow `uses:` pin to the commit of the new release tag.
 
 Keep the new version `>= 1.0.93`. Never downgrade below the CVE-2025-66032 fix.
 
@@ -245,6 +276,9 @@ grep "rev:" .pre-commit-config.yaml
 
 # See available versions
 git ls-remote --tags https://github.com/agenticcodingops/auto-code-scanning
+
+# See which release a checkout of this repository is
+cat version.txt
 ```
 
 ## Rollback
