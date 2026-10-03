@@ -9,11 +9,13 @@
 # create the vX.Y.Z tag on the merge commit and a GitHub Release with the same
 # notes. Publishing the release starts release-verify.yml on the tag.
 #
-# Token: RELEASE_PLEASE_TOKEN, a fine-grained token for this repository only,
-# with Contents and Pull requests read/write (docs/CONTRIBUTING.md names its
-# owner and rotation). A PR, tag or release created with GITHUB_TOKEN starts no
-# workflow: the release PR would get no CI and the release would start no
-# verification run.
+# Token: an installation token of the organization's release GitHub App,
+# minted for each run from the RELEASE_APP_CLIENT_ID variable and the
+# RELEASE_APP_PRIVATE_KEY secret. It covers this repository only, with
+# Contents, Pull requests and Issues write, and is revoked when the job ends
+# (docs/CONTRIBUTING.md describes the App and its key rotation). Unlike
+# GITHUB_TOKEN, whose PRs, tags and releases start no workflow, it lets CI run
+# on the release PR and lets the release start its verification run.
 #
 # Never create release tags by hand. See "Release Process" in docs/CONTRIBUTING.md.
 # ============================================================================
@@ -27,7 +29,8 @@ on:
   workflow_dispatch:
 
 # This block governs only GITHUB_TOKEN, which the job does not use. Every write
-# goes through RELEASE_PLEASE_TOKEN, whose own permissions apply.
+# goes through the App's installation token, whose permissions are requested
+# where it is minted.
 permissions: {}
 
 # One release run at a time, and never cancel one in progress: a cancelled run
@@ -46,21 +49,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Require RELEASE_PLEASE_TOKEN
+      - name: Require the release App's client ID and private key
         env:
-          # A boolean, so the token itself never reaches this step.
-          HAS_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+          # Booleans, so the private key itself never reaches this step.
+          HAS_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID != '' }}
+          HAS_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ]; then
-            echo "::error::The RELEASE_PLEASE_TOKEN secret is not set. See \"Release Process\" in docs/CONTRIBUTING.md."
+          if [ "$HAS_CLIENT_ID" != "true" ] || [ "$HAS_PRIVATE_KEY" != "true" ]; then
+            echo "::error::The RELEASE_APP_CLIENT_ID variable or the RELEASE_APP_PRIVATE_KEY secret is not available to this repository. See \"Release Process\" in docs/CONTRIBUTING.md."
             exit 1
           fi
+
+      - name: Mint the release token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # No owner or repositories: the token covers this repository only.
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 

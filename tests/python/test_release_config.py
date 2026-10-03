@@ -8,8 +8,10 @@ the next release:
   * the manifest, version.txt and every `x-release-please-version` line agree.
   * release-please inserts a new CHANGELOG entry above the latest release's heading,
     so the hand-written history below it is never touched.
-  * release.yml pins the action to a commit SHA, writes with RELEASE_PLEASE_TOKEN,
-    never cancels a run in progress, and never runs on pull_request_target.
+  * release.yml pins the action to a commit SHA, never cancels a run in progress,
+    and never runs on pull_request_target.
+  * release.yml writes with a token minted from the release GitHub App, for this
+    repository only and with only the permissions release-please needs.
   * every published release starts the scan self-test on its own tag.
 """
 import json
@@ -49,6 +51,12 @@ def _workflow(name):
     # PyYAML reads the bare key `on` as the boolean True.
     data["on"] = data.pop(True, data.get("on"))
     return data
+
+
+def _step_using(steps, prefix):
+    matches = [s for s in steps if s.get("uses", "").startswith(prefix)]
+    assert len(matches) == 1, f"expected one step using {prefix}"
+    return matches[0]
 
 
 def test_tags_keep_the_v_prefix_and_no_component(config):
@@ -105,13 +113,34 @@ def test_release_workflow():
     assert "${{" not in wf["concurrency"]["group"], "one group for every release run"
 
     steps = wf["jobs"]["release-please"]["steps"]
-    action = next(s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action@"))
+    action = _step_using(steps, "googleapis/release-please-action@")
     assert re.fullmatch(r"googleapis/release-please-action@[0-9a-f]{40}", action["uses"])
-    assert action["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
     # No step script may read the release notes or the release PR.
     for step in steps:
         for value in (step.get("env") or {}).values():
             assert "outputs.body" not in value and "outputs.pr" not in value
+
+
+def test_release_token_is_minted_from_the_app():
+    steps = _workflow("release.yml")["jobs"]["release-please"]["steps"]
+    mint = _step_using(steps, "actions/create-github-app-token@")
+    assert re.fullmatch(r"actions/create-github-app-token@[0-9a-f]{40}", mint["uses"])
+    inputs = mint["with"]
+    assert inputs["client-id"] == "${{ vars.RELEASE_APP_CLIENT_ID }}"
+    assert inputs["private-key"] == "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"
+    # Without owner or repositories the token covers this repository only.
+    assert "owner" not in inputs and "repositories" not in inputs
+    assert str(inputs.get("skip-token-revoke", "false")).lower() == "false"
+    requested = {k: v for k, v in inputs.items() if k.startswith("permission-")}
+    assert requested == {
+        "permission-contents": "write",
+        "permission-pull-requests": "write",
+        "permission-issues": "write",
+    }
+
+    action = _step_using(steps, "googleapis/release-please-action@")
+    assert steps.index(mint) < steps.index(action)
+    assert action["with"]["token"] == "${{ steps.%s.outputs.token }}" % mint["id"]
 
 
 def test_every_published_release_runs_the_self_test_on_its_tag():

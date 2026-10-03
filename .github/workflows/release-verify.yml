@@ -10,7 +10,8 @@
 # or TFLint reported an error.
 #
 # `release: published` starts a run only because release.yml publishes releases
-# with RELEASE_PLEASE_TOKEN; a release created with GITHUB_TOKEN starts nothing.
+# with the release GitHub App's installation token; a release created with
+# GITHUB_TOKEN starts nothing.
 # A maintainer can also run this workflow by hand on a release tag ("Use
 # workflow from" > Tags), for a tag whose commit contains this file.
 #
