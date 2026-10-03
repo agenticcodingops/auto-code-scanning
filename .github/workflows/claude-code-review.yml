@@ -15,6 +15,12 @@ jobs:
     # Skip PRs a bot opened: the release App's release PRs and dependency updates. The action
     # refuses a non-human actor, so without this every such PR shows a failed check.
     if: github.event.pull_request.user.type != 'Bot'
+    # One run per PR at a time, so a push during a review cannot start a second review before
+    # the first has posted. The later run waits, then the plugin sees the review and stops.
+    # Not cancel-in-progress: cancelling could cut a review off part-way through posting.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
 
     runs-on: ubuntu-latest
     permissions:
