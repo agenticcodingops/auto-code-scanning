@@ -11,7 +11,7 @@ for **autonomous Claude Code** loops and safe for public adoption.
   allowlist, a PR label, and SHA-pinned actions.
 
 > Apache-2.0. Terraform scanning is fully preserved. Pin consumers to a **released tag**
-> (currently `v2.1.0`) or a commit **SHA** — **never `@main`**. <!-- x-release-please-version -->
+> (currently `v2.2.0`) or a commit **SHA** — **never `@main`**. <!-- x-release-please-version -->
 
 ---
 

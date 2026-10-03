@@ -2,7 +2,7 @@
 
 How to manage versions of auto-code-scanning in your repository.
 
-The current release is **`v2.1.0`**. <!-- x-release-please-version -->
+The current release is **`v2.2.0`**. <!-- x-release-please-version -->
 
 Releases after `v2.1.0` are cut by release-please (see "Release Process" in
 [CONTRIBUTING.md](CONTRIBUTING.md)). Each one has a GitHub Release with its notes, a

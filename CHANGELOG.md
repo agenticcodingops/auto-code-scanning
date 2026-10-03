@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.1.0...v2.2.0) (2026-10-03)
+
+
+### Features
+
+* **release:** automate releases with release-please ([638caf9](https://github.com/agenticcodingops/auto-code-scanning/commit/638caf9617fdc802574e7b51566c6d1bf6cb570b))
+
 ## [2.1.0] - Minor — exact scanner pins for the Terraform scan; Checkov and TFLint now scan
 
 `reusable-scan.yml` installed Checkov 2.0.930 (2022), the latest TFLint on each run and
