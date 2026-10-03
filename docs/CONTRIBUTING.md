@@ -118,9 +118,11 @@ release PR, and publishing the release starts its verification run. The workflow
 `permissions:` block governs only `GITHUB_TOKEN`.
 
 - **Owner:** the App belongs to the `agenticcodingops` organization, not to a person.
-  Organization owners, and the App's managers, administer the App, its installation and
-  its private keys. Release PRs, release commits, tags and releases show the App's bot
-  account as their author.
+  Organization owners and the App's managers administer the App's settings and private
+  keys. Only organization owners can change its installation, including which
+  repositories it covers: the App manager role cannot install or uninstall an App.
+  Release PRs, release commits, tags and releases show the App's bot account as their
+  author.
 - **Where its credentials live:** the App's client ID is the organization variable
   `RELEASE_APP_CLIENT_ID`, and its private key the organization secret
   `RELEASE_APP_PRIVATE_KEY` (Organization settings → Secrets and variables → Actions).
