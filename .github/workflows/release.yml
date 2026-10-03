@@ -1,0 +1,79 @@
+# ============================================================================
+# RELEASE
+# auto-code-scanning
+#
+# Runs release-please on every push to main. It keeps one release PR open that
+# proposes the next version from the conventional commits merged since the
+# last release: the CHANGELOG.md entry, and the version in version.txt,
+# README.md and docs/VERSION-PINNING.md. Merging that PR makes the next run
+# create the vX.Y.Z tag on the merge commit and a GitHub Release with the same
+# notes. Publishing the release starts release-verify.yml on the tag.
+#
+# Token: RELEASE_PLEASE_TOKEN, a fine-grained token for this repository only,
+# with Contents and Pull requests read/write (docs/CONTRIBUTING.md names its
+# owner and rotation). A PR, tag or release created with GITHUB_TOKEN starts no
+# workflow: the release PR would get no CI and the release would start no
+# verification run.
+#
+# Never create release tags by hand. See "Release Process" in docs/CONTRIBUTING.md.
+# ============================================================================
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  # Regenerates the release PR without re-running an old run.
+  workflow_dispatch:
+
+# This block governs only GITHUB_TOKEN, which the job does not use. Every write
+# goes through RELEASE_PLEASE_TOKEN, whose own permissions apply.
+permissions: {}
+
+# One release run at a time, and never cancel one in progress: a cancelled run
+# can leave a tag without its release or a release PR half updated. A newer
+# queued run replaces an older queued one, which loses nothing because every
+# run reads main as it is when it starts.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR and tag
+    # A dispatch from another branch would run that branch's copy of this file.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require RELEASE_PLEASE_TOKEN
+        env:
+          # A boolean, so the token itself never reaches this step.
+          HAS_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::The RELEASE_PLEASE_TOKEN secret is not set. See \"Release Process\" in docs/CONTRIBUTING.md."
+            exit 1
+          fi
+
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Summarise the release
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          # The tag name and commit only; the release notes stay out of the shell.
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          {
+            echo "### Released ${TAG_NAME}"
+            echo ""
+            echo "The tag points to commit \`${RELEASE_SHA}\`."
+            echo "Its verification run is in the Release Verification workflow, on ref \`${TAG_NAME}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,127 @@
+"""Tests for the release automation (release-please).
+
+These assert the properties a release depends on, so an edit cannot silently break
+the next release:
+
+  * tags stay `vX.Y.Z`, the package is the `simple` type, and the release PR's
+    footer is the neutral one, not release-please's default.
+  * the manifest, version.txt and every `x-release-please-version` line agree.
+  * release-please inserts a new CHANGELOG entry above the latest release's heading,
+    so the hand-written history below it is never touched.
+  * release.yml pins the action to a commit SHA, writes with RELEASE_PLEASE_TOKEN,
+    never cancels a run in progress, and never runs on pull_request_target.
+  * every published release starts the scan self-test on its own tag.
+"""
+import json
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+# release-please 17.x inserts a new entry before the first match of this pattern
+# (DEFAULT_VERSION_HEADER_REGEX in its updaters/changelog.ts).
+CHANGELOG_INSERT_POINT = re.compile(r"\n###? v?[0-9[]")
+SEMVER = re.compile(r"\d+\.\d+\.\d+")
+
+
+@pytest.fixture(scope="module")
+def config():
+    return json.loads((REPO_ROOT / "release-please-config.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def package(config):
+    return config["packages"]["."]
+
+
+@pytest.fixture(scope="module")
+def manifest_version():
+    manifest = json.loads((REPO_ROOT / ".release-please-manifest.json").read_text(encoding="utf-8"))
+    return manifest["."]
+
+
+def _workflow(name):
+    data = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+    # PyYAML reads the bare key `on` as the boolean True.
+    data["on"] = data.pop(True, data.get("on"))
+    return data
+
+
+def test_tags_keep_the_v_prefix_and_no_component(config):
+    assert config["include-v-in-tag"] is True
+    assert config["include-component-in-tag"] is False
+
+
+def test_package_is_simple_with_the_existing_changelog(package):
+    assert package["release-type"] == "simple"
+    assert package["changelog-path"] == "CHANGELOG.md"
+    assert package["version-file"] == "version.txt"
+
+
+def test_pull_request_footer_is_neutral(config):
+    footer = config.get("pull-request-footer", "")
+    assert footer, "an unset footer falls back to release-please's default"
+    assert not footer.startswith("This PR was generated with")
+
+
+def test_changelog_sections(config):
+    sections = {s["type"]: s for s in config["changelog-sections"]}
+    for visible in ("feat", "fix", "perf", "revert"):
+        assert not sections[visible].get("hidden", False), visible
+    for hidden in ("docs", "chore", "ci", "test", "style", "refactor"):
+        assert sections[hidden].get("hidden") is True, hidden
+
+
+def test_versions_agree(package, manifest_version):
+    assert (REPO_ROOT / "version.txt").read_text(encoding="utf-8") == manifest_version + "\n"
+    for extra in package["extra-files"]:
+        marked = [
+            line for line in (REPO_ROOT / extra).read_text(encoding="utf-8").splitlines()
+            if "x-release-please-version" in line
+        ]
+        assert marked, f"{extra} has no x-release-please-version line"
+        for line in marked:
+            assert SEMVER.findall(line)[:1] == [manifest_version], f"{extra}: {line}"
+
+
+def test_new_changelog_entries_land_above_the_latest_release(manifest_version):
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    match = CHANGELOG_INSERT_POINT.search(changelog)
+    assert match, "release-please would rewrite the whole file"
+    first_heading = changelog[match.start():].lstrip("\n").splitlines()[0]
+    assert first_heading.startswith(f"## [{manifest_version}]"), first_heading
+
+
+def test_release_workflow():
+    wf = _workflow("release.yml")
+    assert "pull_request_target" not in wf["on"]
+    assert wf["on"]["push"]["branches"] == ["main"]
+    assert "workflow_dispatch" in wf["on"]
+    assert wf["concurrency"]["cancel-in-progress"] is False
+    assert "${{" not in wf["concurrency"]["group"], "one group for every release run"
+
+    steps = wf["jobs"]["release-please"]["steps"]
+    action = next(s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action@"))
+    assert re.fullmatch(r"googleapis/release-please-action@[0-9a-f]{40}", action["uses"])
+    assert action["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
+    # No step script may read the release notes or the release PR.
+    for step in steps:
+        for value in (step.get("env") or {}).values():
+            assert "outputs.body" not in value and "outputs.pr" not in value
+
+
+def test_every_published_release_runs_the_self_test_on_its_tag():
+    wf = _workflow("release-verify.yml")
+    assert wf["on"]["release"]["types"] == ["published"]
+    assert "concurrency" not in wf, "it would equal reusable-scan.yml's group"
+    job = wf["jobs"]["self-test"]
+    assert job["uses"] == "./.github/workflows/reusable-scan-self-test.yml"
+    assert "refs/tags/" in job["if"]
+
+    self_test = _workflow("reusable-scan-self-test.yml")
+    assert "workflow_call" in self_test["on"]
+    assert "${{ github.sha }}" in self_test["jobs"]["scan"]["with"]["scanning-repo-ref"]

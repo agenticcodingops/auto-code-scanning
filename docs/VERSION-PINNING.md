@@ -2,7 +2,13 @@
 
 How to manage versions of auto-code-scanning in your repository.
 
-The current release for the v2.0.0 scan→fix platform is **`v2.0.0`**.
+The current release is **`v2.1.0`**. <!-- x-release-please-version -->
+
+Releases after `v2.1.0` are cut by release-please (see "Release Process" in
+[CONTRIBUTING.md](CONTRIBUTING.md)). Each one has a GitHub Release with its notes, a
+`CHANGELOG.md` entry, and a **Release Verification** run on its tag whose logs and job
+summaries record the exact scanner and ruleset versions it installs. `version.txt` at the
+root of each release holds its version.
 
 ## Pin to a Release Tag — Never `@main`
 
