@@ -34,7 +34,9 @@ Changes, all in `reusable-scan.yml` unless stated:
 - **TFLint** gets an absolute `--config`. Its own errors are kept in `tflint-results.json`
   and shown as warnings.
 - **Checkov findings** are read from `results.failed_checks`. Open-source Checkov reports no
-  severity without a platform API key, so they count as MEDIUM and do not block.
+  severity without a platform API key, so they count as MEDIUM and do not block. Checkov
+  runs as root in its container, so the remediation-URL step now replaces its root-owned
+  report instead of writing into it, which failed the job once Checkov wrote a report.
 - **`scan-config.yaml`** and the tier templates no longer carry tool `version:` floors:
   nothing read them. The schema still accepts the key, marked deprecated, so existing
   configs validate.

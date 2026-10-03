@@ -275,7 +275,7 @@ jobs:
         run: |
           if [ -f checkov-results.json ]; then
             python3 -c "
-          import json, sys
+          import json, os, sys
 
           try:
               with open('checkov-results.json', 'r') as f:
@@ -293,8 +293,11 @@ jobs:
                       if check_id.startswith('CKV_'):
                           check['guideline'] = f'https://docs.checkov.io/docs/{check_id}'
 
-          with open('checkov-results.json', 'w') as f:
+          # Checkov runs as root in its container, so its report is root-owned and this
+          # step cannot open it for writing. Write a new file and rename it over the report.
+          with open('checkov-results.json.tmp', 'w') as f:
               json.dump(results if len(results) > 1 else results[0], f, indent=2)
+          os.replace('checkov-results.json.tmp', 'checkov-results.json')
           "
           fi
 
