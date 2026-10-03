@@ -376,7 +376,7 @@ jobs:
 
           while IFS= read -r dir; do
             echo "::group::Scanning $dir"
-            if ! tflint --config="$TFLINT_CONFIG" --chdir="$dir" --format=json > "tflint-${dir//\//-}.json" 2>&1; then
+            if ! tflint --config="$TFLINT_CONFIG" --chdir="$dir" --format=json > "tflint-dir-${dir//\//-}.json" 2>&1; then
               EXIT_CODE=1
             fi
             echo "::endgroup::"
@@ -392,19 +392,27 @@ jobs:
 
           all_issues = []
           all_errors = []
-          for f in glob.glob('tflint-*.json'):
+          # Per-directory reports only: the glob must not also match tflint-results.json.
+          for f in glob.glob('tflint-dir-*.json'):
               try:
                   with open(f) as fh:
                       data = json.load(fh)
-              except (json.JSONDecodeError, FileNotFoundError):
-                  print('::warning::' + annotate(f + ' is not TFLint JSON output'))
-                  continue
-              if isinstance(data, dict):
-                  all_issues.extend(data.get('issues') or [])
-                  # Keep TFLint's own errors (e.g. a config it could not load) visible.
-                  for err in data.get('errors') or []:
-                      all_errors.append(err)
-                      print('::warning::' + annotate('TFLint error in ' + f + ': ' + str(err.get('message', ''))))
+              except (OSError, ValueError):
+                  data = None
+              if not isinstance(data, dict):
+                  # No JSON report: TFLint crashed or stopped before reporting. Record it as
+                  # an error so the run cannot pass for a clean one.
+                  try:
+                      with open(f, errors='replace') as fh:
+                          first_line = ''.join(c if c.isprintable() else '?' for c in fh.readline().strip()[:200])
+                  except OSError:
+                      first_line = ''
+                  data = {'errors': [{'message': 'no JSON report: ' + (first_line or 'empty output'), 'severity': 'error'}]}
+              all_issues.extend(data.get('issues') or [])
+              # Keep TFLint's own errors (e.g. a config it could not load) visible.
+              for err in data.get('errors') or []:
+                  all_errors.append(err)
+                  print('::warning::' + annotate('TFLint error in ' + f + ': ' + str(err.get('message', ''))))
 
           with open('tflint-results.json', 'w') as f:
               json.dump({'issues': all_issues, 'errors': all_errors}, f, indent=2)
