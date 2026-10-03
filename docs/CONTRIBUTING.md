@@ -109,33 +109,51 @@ commit message set to the pull request title:
 - A squash-merged release PR leaves `chore(main): release X.Y.Z (#N)` as the head of
   `main`, and the release tag points to that commit.
 
-### The release token
+### The release GitHub App
 
-`release.yml` writes with the `RELEASE_PLEASE_TOKEN` repository secret, not with
-`GITHUB_TOKEN`. GitHub starts no workflow for a PR, tag or release created with
-`GITHUB_TOKEN`: the release PR would get no CI, and publishing the release would not
-start its verification run. The workflow's `permissions:` block governs only
-`GITHUB_TOKEN`; the token's own permissions are what apply.
+`release.yml` writes with an installation token of the organization's release GitHub
+App, not with `GITHUB_TOKEN`. GitHub starts no workflow for a PR, tag or release created
+with `GITHUB_TOKEN`, but it does for one created with an App's token: CI runs on the
+release PR, and publishing the release starts its verification run. The workflow's
+`permissions:` block governs only `GITHUB_TOKEN`.
 
-- **Owner:** a maintainer with admin access to this repository creates the token, under
-  their own account or a dedicated machine account, and owns its rotation. Release PRs,
-  tags and releases show that account as their author.
-- **Scope:** a fine-grained personal access token, resource owner `agenticcodingops`,
-  repository access to this repository only, with these repository permissions:
-  - Contents: read and write (release branch, commits, tags, releases)
-  - Pull requests: read and write (the release PR, its labels and its comments)
-  - Metadata: read (always included)
+- **Owner:** the App belongs to the `agenticcodingops` organization, not to a person.
+  Organization owners, and the App's managers, administer the App, its installation and
+  its private keys. Release PRs, release commits, tags and releases show the App's bot
+  account as their author.
+- **Where its credentials live:** the App's client ID is the organization variable
+  `RELEASE_APP_CLIENT_ID`, and its private key the organization secret
+  `RELEASE_APP_PRIVATE_KEY` (Organization settings → Secrets and variables → Actions).
+  Both are shared with selected repositories, and this repository must be one of them.
+  The App's installation (Organization settings → GitHub Apps → the App → Configure)
+  must include this repository too.
+- **What each run gets:** the *Mint the release token* step runs
+  `actions/create-github-app-token` with that client ID and key. It sets no `owner` or
+  `repositories`, so the token covers this repository only, and it asks for these
+  permissions and nothing else:
+  - Contents: write (release branch, commits, tags, releases)
+  - Pull requests: write (the release PR)
+  - Issues: write (the labels and comments release-please puts on the release PR)
 
-  Nothing else. GitHub accepts Pull requests write for the labels and comments
-  release-please puts on its PRs, so Issues is not needed. Workflows is not needed
-  either, because the release PR never changes a file under `.github/workflows/`; keep
-  workflow files out of `extra-files`.
-- **Rotation:** give the token an expiry within the organization's limit, and replace it
-  before it expires: create a new token with the same settings, update the secret, then
-  delete the old token. Replace it at once if it may have leaked, or when its owner
-  leaves the project. If the secret is missing, the Release workflow stops at
-  *Require RELEASE_PLEASE_TOKEN*; if the token has expired or been revoked, it fails at
-  *Run release-please*. Nothing is released until the secret is fixed.
+  Metadata read comes with every token. The App's installation must grant at least these
+  permissions, or minting fails. The token expires within an hour and is revoked when the
+  job ends. Workflows permission is not needed, because the release PR never changes a
+  file under `.github/workflows/`; keep workflow files out of `extra-files`.
+- **Rotating the private key:** an App's private key has no expiry date, so rotate it on
+  the organization's schedule, and at once if it may have leaked or when someone who held
+  a copy leaves.
+  1. In the App's settings (Organization settings → Developer settings → GitHub Apps →
+     the App), generate a new private key.
+  2. Replace the value of the `RELEASE_APP_PRIVATE_KEY` organization secret with the new
+     key.
+  3. Run **Actions → Release → Run workflow** on `main` and check that *Mint the release
+     token* passes.
+  4. Delete the old key in the App's settings, and any downloaded copy of either key.
+- **When it fails:** if the variable or the secret is not shared with this repository,
+  the Release workflow stops at *Require the release App's client ID and private key*. If
+  the key was deleted or is wrong, the App is not installed on this repository, or the
+  installation lacks one of the permissions, it fails at *Mint the release token*.
+  Nothing is released until it is fixed.
 
 ### Recovering from a bad release
 
