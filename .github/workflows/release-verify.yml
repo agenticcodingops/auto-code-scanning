@@ -1,0 +1,47 @@
+# ============================================================================
+# RELEASE VERIFICATION
+# auto-code-scanning
+#
+# Runs the reusable scan self-test for every published release, with the
+# release tag as the run's ref and the tagged commit as its SHA. That run's
+# logs and job summaries record what the release installs: the exact Checkov,
+# Trivy and TFLint versions, the TFLint ruleset versions and the digest of the
+# Trivy checks bundle it downloaded. The run fails if a scanner wrote no report
+# or TFLint reported an error.
+#
+# `release: published` starts a run only because release.yml publishes releases
+# with RELEASE_PLEASE_TOKEN; a release created with GITHUB_TOKEN starts nothing.
+# A maintainer can also run this workflow by hand on a release tag ("Use
+# workflow from" > Tags), for a tag whose commit contains this file.
+#
+# Concurrency: reusable-scan.yml groups its runs by github.workflow and
+# github.ref with cancel-in-progress, and a called workflow takes the caller's
+# values. Here the ref is the release tag, so every release gets a group of its
+# own and a later release cannot cancel an earlier verification. Do not move
+# this call to a workflow that runs on main. Do not give this workflow the
+# same github.workflow-github.ref group either: it would equal the scan's
+# group, and GitHub cancels such a run as a concurrency deadlock.
+# ============================================================================
+
+name: Release Verification
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: Self-test on the release tag
+    # A release run's ref is its tag; a dispatch from a branch is not a release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    # reusable-scan.yml declares these on its SARIF and PR-comment jobs, and a caller
+    # must grant them even though the self-test switches both jobs off.
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-scan-self-test.yml

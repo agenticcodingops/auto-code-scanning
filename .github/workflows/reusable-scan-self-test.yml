@@ -11,6 +11,9 @@
 # The fixture carries findings, so the gate is not asserted. The verify job
 # fails instead when a scanner wrote no report or TFLint reported an error:
 # the ways the scan has failed silently before.
+#
+# release-verify.yml calls this workflow for every published release, so each
+# release tag has a run of its own that records the versions it installs.
 # ============================================================================
 
 name: Reusable Scan Self-Test
@@ -31,6 +34,8 @@ on:
       - "configs/**"
       - "tests/fixtures/terraform-valid/**"
   workflow_dispatch:
+  # Called by release-verify.yml on each release tag.
+  workflow_call:
 
 permissions:
   contents: read
@@ -69,9 +74,11 @@ jobs:
         run: |
           python3 << 'PYTHON_SCRIPT'
           import json
+          import os
           import sys
 
           problems = []
+          rows = []  # (report, result) for the job summary
 
           def load(path):
               try:
@@ -87,20 +94,43 @@ jobs:
               reports = checkov if isinstance(checkov, list) else [checkov]
               versions = sorted({(r.get("summary") or r).get("checkov_version") or "unknown" for r in reports})
               print(f"Checkov report written by version {', '.join(versions)}")
+              rows.append(("Checkov", f"written by Checkov {', '.join(versions)}"))
+          else:
+              rows.append(("Checkov", "missing or unreadable"))
 
           tflint = load("scan-artifacts/tflint-results/tflint-results.json")
           if tflint is not None:
               errors = tflint.get("errors") or []
-              print(f"TFLint: {len(tflint.get('issues') or [])} issue(s), {len(errors)} error(s)")
+              counts = f"{len(tflint.get('issues') or [])} issue(s), {len(errors)} error(s)"
+              print(f"TFLint: {counts}")
               problems.extend(f"TFLint error: {err.get('message', err)}" for err in errors)
+              rows.append(("TFLint", counts))
+          else:
+              rows.append(("TFLint", "missing or unreadable"))
 
           for name in ("trivy-iac-results.json", "trivy-secrets-results.json"):
               report = load(f"scan-artifacts/trivy-results/{name}")
-              if report is not None and "SchemaVersion" not in report:
+              if report is None:
+                  rows.append((f"Trivy `{name}`", "missing or unreadable"))
+              elif "SchemaVersion" not in report:
                   problems.append(f"{name} is not a Trivy JSON report")
+                  rows.append((f"Trivy `{name}`", "not a Trivy JSON report"))
+              else:
+                  rows.append((f"Trivy `{name}`", "Trivy JSON report"))
 
           for problem in problems:
               text = str(problem).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(f"::error::{text}")
+
+          # The scan jobs write the versions they installed to their own summaries.
+          summary = ["### Scanner reports", "", "| Report | Result |", "|---|---|"]
+          summary += [f"| {report} | {result} |" for report, result in rows]
+          summary += ["", "Trivy, TFLint and TFLint ruleset versions and the Trivy checks bundle digest:"
+                      " see the Trivy IaC Scan and TFLint Scan job summaries."]
+          if problems:
+              summary += ["", "**Problems**", ""] + [f"- {problem}" for problem in problems]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("\n".join(summary) + "\n")
+
           sys.exit(1 if problems else 0)
           PYTHON_SCRIPT
