@@ -22,7 +22,21 @@
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md",
       "version-file": "version.txt",
-      "extra-files": ["README.md", "docs/VERSION-PINNING.md"]
+      "extra-files": [
+        "README.md",
+        "docs/APP-CODE-SCANNING.md",
+        "docs/BUMP-THE-SCAN.md",
+        "docs/CONSUMER-MIGRATION.md",
+        "docs/DEVELOPER-WORKFLOW.md",
+        "docs/HOOK-REFERENCE.md",
+        "docs/MULTI-CLOUD.md",
+        "docs/QUICK-START-5MIN.md",
+        "docs/REUSABLE-WORKFLOWS.md",
+        "docs/SETUP-GUIDE.md",
+        "docs/TERRAFORM-MODULE-ADOPTION.md",
+        "docs/VERSION-PINNING.md",
+        "docs/consumer-repo-setup-guide.md"
+      ]
     }
   }
 }

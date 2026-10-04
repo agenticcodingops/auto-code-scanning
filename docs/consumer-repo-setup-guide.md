@@ -11,8 +11,13 @@ You get **two layers**, both driven by a single `scan-config.yaml`:
 - **Layer B — Agentic fix-loop** (opt-in): a hardened workflow where an AI agent proposes a
   *minimal* fix to a flagged PR and a separate, locked-down job re-verifies and pushes it.
 
-> **This guide assumes the platform is published and tagged `@v2.0.0`** at
-> `agenticcodingops/auto-code-scanning` (replace the owner/name and tag with yours if you forked it).
+> **This guide uses the current release, `v2.2.0`.** <!-- x-release-please-version -->
+> The examples call `agenticcodingops/auto-code-scanning`. If you use your own copy,
+> change the owner in every `uses:` line, and set the fix loop's `scanning_repo` input to
+> your copy too: it defaults to `agenticcodingops/auto-code-scanning` (see
+> [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml)). `reusable-scan.yml`
+> always reads its configs from `auto-code-scanning` under the calling repository's owner
+> (see [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
 > **Always pin to a release tag — never `@main`.**
 
 ---
@@ -61,7 +66,7 @@ missing tool warns and allows the commit rather than blocking you. Install what'
 **Get the platform locally** (so setup can copy templates and shared scripts into your repo):
 
 ```bash
-git clone --branch v2.0.0 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning
+git clone --branch v2.2.0 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning  # x-release-please-version
 ```
 
 (Or add it as a git submodule if you prefer to track the version in-repo.)
@@ -261,7 +266,7 @@ languages to scan, and Lefthook calls the vendored `hooks/`. So these must be co
 
 ```bash
 git add scan-config.yaml hooks/ lefthook.yml scripts/ .claude/ .github/workflows/
-git commit -m "chore: adopt auto-code-scanning v2.0.0 (scan + fix-loop)"
+git commit -m "chore: adopt auto-code-scanning v2.2.0 (scan + fix-loop)"  # x-release-please-version
 ```
 
 > Add `.scanning/` and `.scan-results/` to your `.gitignore` (setup/hooks write runtime artifacts
@@ -337,7 +342,7 @@ permissions:
   security-events: write    # upload SARIF
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
     with:
       # languages are AUTO-DETECTED from scan-config.yaml; or pin explicitly:
       # languages: "csharp,typescript"
@@ -346,8 +351,9 @@ jobs:
 ```
 
 > Note: the scan workflow reads `scan-config.yaml` itself — there is **no `config_path` input** here.
-> (Terraform repos additionally use `terraform-scan.yml`, which `uses:` `reusable-scan.yml@v2.0.0`
-> with `cloud-provider` + `terraform-directory`.)
+> (Terraform repos additionally use `terraform-scan.yml`, which `uses:` `reusable-scan.yml`
+> with `cloud-provider`, `terraform-directory` and `scanning-repo-ref`; see
+> [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).)
 
 ### Fix-loop caller (only if `--enable-fix-loop`)
 
@@ -363,13 +369,18 @@ jobs:
       ( github.event.pull_request.head.repo.full_name == github.repository &&
         contains(github.event.pull_request.labels.*.name, 'ai-autofix') &&
         ( /* trusted bot OR OWNER/MEMBER/COLLABORATOR */ ) )
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
-      scanning_repo_ref: v2.0.0
+      scanning_repo_ref: v2.2.0 # x-release-please-version
     secrets: inherit
 ```
+
+The template grants only `contents: read`, but the reusable workflow's jobs also need
+`pull-requests: write`, `issues: write` and `actions: read`. Add all four as job-level
+`permissions:` on `fix`; see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml).
 
 ### Branch protection
 
@@ -395,10 +406,15 @@ nothing merges un-scanned. This is what turns the platform from advisory into en
 
 ## 10. Step 8 — Operate & maintain
 
-- **Upgrade the platform:** bump every `@v2.0.0` pin to the next release — the caller workflows'
-  `uses:` lines, `scanning_repo_ref`, and `fix_loop.claude_code_action_ref` — and **re-run
-  `setup-scan-fix`** to re-vendor the updated `hooks/`/`scripts/`. One deliberate change, inherited
-  everywhere. See [`VERSION-PINNING.md`](VERSION-PINNING.md).
+- **Upgrade the platform:** first **re-run `setup-scan-fix`** from the new release to
+  re-vendor the updated `hooks/`/`scripts/`. It also overwrites the caller workflows with
+  the templates, which pin `v2.0.0` (`scripts/setup-scan-fix.py:117-124`). **Then** move
+  every pin to the new release — the callers' `uses:` lines and their
+  `scanning-repo-ref` / `scanning_repo_ref` inputs, as in
+  [`BUMP-THE-SCAN.md`](BUMP-THE-SCAN.md) — and check `git diff .github/workflows/` before
+  you commit. `fix_loop.claude_code_action_ref` is a commit SHA of the action, not a
+  release tag; copy it from the new release's tier template. See
+  [`VERSION-PINNING.md`](VERSION-PINNING.md).
 - **Rotate `AUTOFIX_TOKEN`** before expiry (or switch to a GitHub App to avoid rotation).
 - **Tune the fix-loop scope** by widening `allowlist_paths` as you trust the loop on more paths, or
   tightening `gated_paths`. The config is gated, so the loop can't widen its own scope.
@@ -478,7 +494,7 @@ If you'd rather wire it by hand (or audit what the script does), the equivalent 
    `.claude/hooks/`.
 5. **CI callers:** copy `templates/workflows/code-security-scan.yml` (+ `terraform-scan.yml`) and,
    for the fix-loop, `templates/fix-loop/autonomous-fix.yml` → `.github/workflows/`. **Pin every
-   `uses:`/`scanning_repo_ref`/`claude_code_action_ref` to `@v2.0.0`.**
+   `uses:`, `scanning-repo-ref` and `scanning_repo_ref` to the current release, `v2.2.0`.** <!-- x-release-please-version -->
 6. **Labels + secrets:** create `ai-autofix`/`needs-human-review`; add `AUTOFIX_TOKEN` +
    `ANTHROPIC_API_KEY` (fix-loop only).
 7. **Commit** everything and open a test PR.

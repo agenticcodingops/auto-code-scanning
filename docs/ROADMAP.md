@@ -4,7 +4,7 @@
 
 A major evolution from a Terraform-only, scan-only POC into a reusable, configurable,
 multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchanged.
-**Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
+**Pin consumers to a release tag or a SHA — never `@main`.** The current release is in [VERSION-PINNING.md](VERSION-PINNING.md).
 
 ### Delivered — Layer A: application-code scanning
 

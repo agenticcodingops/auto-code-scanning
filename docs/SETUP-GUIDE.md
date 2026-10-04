@@ -8,7 +8,7 @@ locally via **Lefthook** (default) or **pre-commit**, and can open an optional
 autonomous **fix-loop** on opted-in PRs. The recommended entry point is the
 one-command orchestrator `setup-scan-fix`.
 
-> **Pin consumers to `@v2.0.0`, never `@main`.**
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.2.0`. <!-- x-release-please-version -->
 
 ## Prerequisites
 
@@ -74,7 +74,8 @@ python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard -
 5. **Fix-loop only:** creates the `ai-autofix` + `needs-human-review` labels via `gh label create`, then **verifies** (never creates) `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `gh secret list`, printing exact creation steps if either is missing.
 6. **Runs `verify-scanning`** to prove the install.
 
-The caller workflows it copies already reference `@v2.0.0` — keep them pinned.
+The caller workflows it copies pin `@v2.0.0`. Move them to the current release before
+you commit them, and keep them pinned.
 
 ### Local Runner: Lefthook (default) vs pre-commit
 
@@ -300,14 +301,14 @@ Setup complete (4/5 tools). Run 'git commit' to test hooks.
 ## CI/CD Integration
 
 `setup-scan-fix` copies **thin caller workflows** into `.github/workflows/` that
-`uses:` the reusable workflows in this repo at a pinned tag. **Always pin to
-`@v2.0.0`, never `@main`.**
+`uses:` the reusable workflows in this repo at a pinned tag. **Always pin to a release
+tag or commit SHA, never `@main`.**
 
 - **`code-security-scan.yml`** — app-code scanner (C#/TS/SQL). Omit `languages`
   to auto-detect from `scan-config.yaml`, or pin them explicitly.
 - **`terraform-scan.yml`** — Terraform/IaC scanner (copied when Terraform is enabled).
 - **`autonomous-fix.yml`** — the opt-in fix-loop caller (copied with `-EnableFixLoop`).
-  It owns the privilege boundary and `uses:` the reusable fix-loop at `@v2.0.0`.
+  It owns the privilege boundary and `uses:` the reusable fix-loop at a pinned release.
 
 App-code caller (`code-security-scan.yml`):
 
@@ -327,7 +328,7 @@ permissions:
 
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
     with:
       # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
       # languages: "csharp,typescript"
@@ -340,24 +341,27 @@ Terraform caller (`terraform-scan.yml`):
 ```yaml
 jobs:
   terraform-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"          # aws | azure | gcp
       severity: "CRITICAL,HIGH"
-      scanning-repo-ref: "v2.0.0"
+      scanning-repo-ref: "v2.2.0" # x-release-please-version
     # Optional Snyk IaC (needs SNYK_TOKEN secret):
     # secrets:
     #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
 
+`reusable-scan.yml` reads its configs from `auto-code-scanning` under your repository's
+owner, at `scanning-repo-ref`; see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+
 The fix-loop caller (`autonomous-fix.yml`) runs only when a PR carries the
 `ai-autofix` label and a trusted review/comment triggers it; it passes
 `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `secrets: inherit`. See
 [SECURITY-MODEL.md](SECURITY-MODEL.md) for the privilege boundary,
-[CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md) for end-to-end fix-loop setup, and the
-[workflow interface contract](../specs/001-security-scanning-spec/contracts/workflow-interface.md)
-for all inputs and outputs.
+[CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md) for end-to-end fix-loop setup, and
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input, output and permission.
 
 ## Verification
 
@@ -383,11 +387,13 @@ pre-commit run snyk-iac --all-files --hook-stage pre-push
 
 ## Updating
 
-**Platform version (caller workflows):** the copied callers `uses: ...@v2.0.0`.
-To move to a new release, bump that tag deliberately (and the `scanning-repo-ref` /
-`scanning_repo_ref` inputs where present). Never use `@main`. Re-running
+**Platform version (caller workflows):** the copied callers pin `@v2.0.0`.
+To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): it moves the
+`uses:` reference and the `scanning-repo-ref` / `scanning_repo_ref` inputs together.
+Never use `@main`. Re-running
 `setup-scan-fix` refreshes the vendored `hooks/`, scripts, and `.claude/` bundle
-idempotently.
+idempotently. It also overwrites the caller workflows with the templates, which pin
+`@v2.0.0`, so re-run it before you move the pins, never after.
 
 **pre-commit hooks** (legacy Terraform path):
 

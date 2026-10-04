@@ -24,7 +24,7 @@ python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard
 python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard --enable-fix-loop
 ```
 
-> **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.**
+> **Pin consumers to a release tag or a SHA — never `@main`.** The current release is in [VERSION-PINNING.md](VERSION-PINNING.md).
 
 ## Rollout Philosophy
 

@@ -36,8 +36,13 @@ by hand.** `v2.1.0` was the last release cut by hand.
 1. Every push to `main` runs release-please. It reads the conventional commits merged
    since the last release and keeps one release PR open, titled
    `chore(main): release X.Y.Z`. That PR adds the `CHANGELOG.md` entry and sets the new
-   version in `.release-please-manifest.json`, `version.txt`, `README.md` and
-   `docs/VERSION-PINNING.md` (on the lines marked `x-release-please-version`).
+   version in `.release-please-manifest.json`, `version.txt`, and every file listed under
+   `extra-files` in `release-please-config.json` (on the lines marked
+   `x-release-please-version`). Those are `README.md` and the adopter docs that show a pin.
+   On a marked line, release-please replaces only the first `X.Y.Z`, so a marked line holds
+   one version: the current one. When you add a pin to a doc, mark its line and list the
+   doc under `extra-files`. `tests/python/test_release_config.py` checks that every listed
+   file has at least one marked line, and that each marked line holds the current version.
 2. CI runs on the release PR like on any other. Review it, and squash-merge it when you
    want to release.
 3. The run on that merge creates the tag `vX.Y.Z` on the merge commit and a GitHub
@@ -182,8 +187,8 @@ Never move, delete or re-create a published tag: consumers pin the commit it poi
   `tests/python/test_release_config.py` (it reads those files), and remove the
   `workflow_call` trigger from `reusable-scan-self-test.yml`. Then cut releases by hand
   again, as up to `v2.1.0`: add the `CHANGELOG.md` entry, set the new version in
-  `version.txt` and on the `x-release-please-version` lines of `README.md` and
-  `docs/VERSION-PINNING.md`, create an annotated tag on the release commit with
+  `version.txt` and on the `x-release-please-version` lines of every file listed under
+  `extra-files` in `release-please-config.json`, create an annotated tag on the release commit with
   `git tag -a vX.Y.Z -m "<summary>"`, and push it. Tags and releases created in the
   meantime stay valid.
 

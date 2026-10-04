@@ -91,12 +91,13 @@ under **distinct categories** — `"<ci.sarif.category_prefix>semgrep-<lang>"` (
 `scan-semgrep-csharp`, `scan-semgrep-typescript`) plus `scan-trivy-secrets`. Distinct categories
 are required since GitHub's 2025-07-22 change rejects same tool+category SARIF collisions.
 
-Drop in the thin caller `templates/workflows/code-security-scan.yml` (pinned `@v2.0.0`):
+Drop in the thin caller `templates/workflows/code-security-scan.yml`. The template pins
+`@v2.0.0`; move it to the current release:
 
 ```yaml
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
     with: { category-prefix: "scan-", fail-on-findings: true }   # languages auto-detected
     permissions: { contents: read, security-events: write, pull-requests: write }
 ```
