@@ -34,6 +34,7 @@
         "docs/REUSABLE-WORKFLOWS.md",
         "docs/SETUP-GUIDE.md",
         "docs/TERRAFORM-MODULE-ADOPTION.md",
+        "docs/TESTING-GUIDE-CONSUMING-REPO.md",
         "docs/VERSION-PINNING.md",
         "docs/consumer-repo-setup-guide.md"
       ]

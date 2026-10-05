@@ -2,7 +2,7 @@
 # REUSABLE AGENTIC FIX-LOOP (LAYER B) — two-job, hardened, opt-in
 # auto-code-scanning
 #
-# Reproduces the proven workout-trackroutinely PR #145 design GENERICALLY, driven
+# Reproduces a proven consumer fix-loop design GENERICALLY, driven
 # by the consumer's scan-config.yaml `fix_loop` block. Breaks the "lethal trifecta"
 # (untrusted input + write creds + egress) by SPLITTING work across two jobs:
 #

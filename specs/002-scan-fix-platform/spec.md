@@ -14,8 +14,8 @@ autonomous Claude Code loops and public release — without losing working Terra
 
 1. **App-code scanning (Layer A):** C#/.NET first, plus TypeScript/JS and SQL, implemented as
    plugins under the existing config-driven plugin/adapter design and dispatcher convention.
-2. **Agentic fix-loop (Layer B):** port the proven two-job autonomous-fix design (workout-
-   trackroutinely PR #145) generically, driven by config, opt-in and hardened.
+2. **Agentic fix-loop (Layer B):** port the proven two-job autonomous-fix design (from a
+   private reference consumer) generically, driven by config, opt-in and hardened.
 3. **One config seam:** a single `scan-config.yaml` drives both layers, both runners, and CI.
 4. **Lefthook default** local runner; pre-commit kept as a supported alternative; both invoke
    the same dispatcher scripts.

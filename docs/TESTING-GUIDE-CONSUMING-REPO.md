@@ -7,7 +7,7 @@ This guide walks through testing the `auto-code-scanning` solution on a real con
 > Terraform; **Layer B** adds an optional agentic fix-loop. Tests 1-8 below cover
 > Layer A's Terraform path (unchanged). **Tests 9-11 are new in v2.0.0** and cover
 > app-code hooks, SARIF categories, and the fix-loop privilege boundary. **Pin the
-> consuming repo to `@v2.0.0` (or a SHA) — never `@main`.**
+> consuming repo to `@v2.2.0` (or a SHA) — never `@main`.** <!-- x-release-please-version -->
 
 ## Prerequisites
 
