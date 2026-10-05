@@ -249,7 +249,10 @@ every entry to the scanner exactly as the `tool` column of `new.tsv` shows it (`
 `checkov`, `tflint` or `snyk`). The scan matches on `rule_id` and `tool` only and ignores
 the section name. One unquoted date makes the scan drop every suppression in the file
 without a message (`reusable-scan.yml:695-719`). `scripts/validate-suppressions.py` still
-passes such a file, so a clean validation does not prove the scan applies it. Check the
+passes such a file, so a clean validation does not prove the scan applies it. For `snyk`
+entries use `hooks/validate-suppressions.py`: `scripts/validate-suppressions.py` rejects the
+`snyk` tool with V-004 (`scripts/validate-suppressions.py:58`), although the scan reads
+`snyk_suppressions`. Check the
 **Suppressions applied** count in the next run's pull request comment, or
 `suppressions_applied` in `aggregated.json`. See
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#suppressions-and-baseline).
