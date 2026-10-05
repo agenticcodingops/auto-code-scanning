@@ -62,6 +62,16 @@ on:
         type: boolean
         required: false
         default: true
+      checkov-skip-checks:
+        description: "Comma-separated Checkov IDs to skip, with no spaces; merged with the cloud config"
+        type: string
+        required: false
+        default: ""
+      checkov-render-iter-count:
+        description: "Positive integer override for Checkov variable render iterations; empty keeps its default"
+        type: string
+        required: false
+        default: ""
       apply-baseline:
         description: "Filter baseline findings"
         type: boolean
@@ -116,6 +126,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       config-path: ${{ steps.config.outputs.config-path }}
+      checkov-skip-checks: ${{ steps.checkov-options.outputs.skip-checks }}
+      checkov-render-env: ${{ steps.checkov-options.outputs.render-env }}
     steps:
       - name: Checkout calling repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -129,6 +141,7 @@ jobs:
           sparse-checkout: |
             configs/${{ inputs.cloud-provider }}
             configs/common
+            scripts
 
       - name: Copy configs to .scanning/configs
         id: config
@@ -142,7 +155,18 @@ jobs:
           cp ".scanning-repo/configs/${CLOUD_PROVIDER}/.tflint.hcl" .scanning/configs/.tflint.hcl
           cp ".scanning-repo/configs/${CLOUD_PROVIDER}/policy-overlay.yaml" .scanning/configs/policy-overlay.yaml 2>/dev/null || true
           cp .scanning-repo/configs/common/.trivyignore .scanning/configs/.trivyignore 2>/dev/null || true
+          cp .scanning-repo/scripts/checkov-consumer-options.py .scanning/configs/checkov-consumer-options.py
           echo "config-path=.scanning/configs" >> "$GITHUB_OUTPUT"
+
+      - name: Install YAML reader
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+
+      - name: Validate Checkov consumer settings
+        id: checkov-options
+        env:
+          CHECKOV_SKIP_CHECKS: ${{ inputs.checkov-skip-checks }}
+          CHECKOV_RENDER_ITER_COUNT: ${{ inputs.checkov-render-iter-count }}
+        run: python3 .scanning/configs/checkov-consumer-options.py prepare .scanning/configs/.checkov.yaml
 
       - name: Upload config artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -270,9 +294,13 @@ jobs:
 
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
+        # An empty object leaves the variable unset; an empty env value would break
+        # Checkov's integer parser. Apply the override to this step only.
+        env: ${{ fromJSON(needs.setup.outputs.checkov-render-env) }}
         with:
           directory: ${{ inputs.terraform-directory }}
           config_file: .scanning/configs/.checkov.yaml
+          skip_check: ${{ needs.setup.outputs.checkov-skip-checks }}
           framework: terraform
           output_format: cli,json,sarif
           output_file_path: console,checkov-results.json,checkov-results.sarif
@@ -311,8 +339,16 @@ jobs:
           "
           fi
 
-      - name: Upload Checkov results
+      - name: Remove skipped results from the Checkov artifact
+        id: filter-checkov-artifact
         if: always()
+        run: |
+          if [ -f checkov-results.sarif ]; then
+            python3 .scanning/configs/checkov-consumer-options.py filter-sarif checkov-results.sarif
+          fi
+
+      - name: Upload Checkov results
+        if: always() && steps.filter-checkov-artifact.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: checkov-results
@@ -699,6 +735,9 @@ jobs:
                   for section in ["trivy_suppressions", "checkov_suppressions", "tflint_suppressions", "snyk_suppressions"]:
                       for entry in supp_data.get(section, []) or []:
                           expires = entry.get("expires_date", "")
+                          if not expires:
+                              rule = str(entry.get("rule_id", "(unknown rule)")).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                              print(f"::warning::Ignored {section} entry {rule}: missing expires_date")
                           if expires:
                               try:
                                   exp_date = datetime.strptime(expires, "%Y-%m-%d").date()
@@ -713,10 +752,9 @@ jobs:
                       if key in active_suppressions:
                           finding["suppressed"] = True
                           suppressions_applied += 1
-              except ImportError:
-                  pass
-              except Exception:
-                  pass
+              except Exception as exc:
+                  message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::warning::Could not parse/apply .scan-suppressions.yaml: {message}")
 
           # Apply baseline
           baseline_filtered = 0
@@ -815,6 +853,14 @@ jobs:
         with:
           path: scan-artifacts/
 
+      - name: Remove suppressed Checkov SARIF results
+        id: filter-checkov
+        run: |
+          if [ -f scan-artifacts/checkov-results/checkov-results.sarif ]; then
+            python3 scan-artifacts/scanning-configs/checkov-consumer-options.py filter-sarif \
+              scan-artifacts/checkov-results/checkov-results.sarif
+          fi
+
       - name: Truncate SARIF if needed
         id: truncate
         run: |
@@ -892,7 +938,9 @@ jobs:
 
       - name: Upload Checkov SARIF
         id: upload-checkov
-        if: always()
+        # Never upload raw results after a filter error, even though other uploads
+        # use always() to report scanner failures.
+        if: always() && steps.filter-checkov.outcome == 'success'
         uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
         with:
           sarif_file: scan-artifacts/checkov-results/checkov-results.sarif

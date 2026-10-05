@@ -31,6 +31,7 @@ _import_hyphenated("setup_scanning", "setup-scanning.py")
 _import_hyphenated("check_fix_allowlist", "check-fix-allowlist.py")
 _import_hyphenated("render_scan_config", "render-scan-config.py")
 _import_hyphenated("validate_scan_config", "validate-scan-config.py")
+_import_hyphenated("checkov_consumer_options", "checkov-consumer-options.py")
 
 
 @pytest.fixture
