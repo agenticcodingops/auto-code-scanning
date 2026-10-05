@@ -249,11 +249,12 @@ gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN
 - **Who:** Operator (repository admin)
 - **Operator STOP:** no
 
-Before you merge, remove from the required status checks every job of an inline workflow
-you delete. Otherwise the pull request waits for a check that never runs.
-
-After the merge in step 9, require the scan callers' jobs, as in
-[TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging):
+Swap the requirements together, before you merge, once the scan callers' jobs have run on
+this pull request. In one change, remove every job of an inline workflow you delete (or the
+pull request waits for a check that never runs) and require the scan callers' jobs, as in
+[TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging).
+Requiring the new jobs only after the merge would leave this and any concurrent pull request
+mergeable with no scan gate. The jobs to require:
 
 - for the Terraform scan: Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan,
   TFLint Scan and Aggregate Results;

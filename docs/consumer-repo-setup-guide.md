@@ -229,6 +229,12 @@ repo is what keeps uploads clean.
 STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml   # run from your repo root
 ```
 
+In PowerShell:
+
+```powershell
+$env:STRICT = '1'; python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
+```
+
 (Do not rely on the `validate-scan-config` hook for this. With Lefthook it runs the copy in
 your `scripts/`, which cannot find the schema because setup does not copy `schemas/`, so it
 prints a warning and lets the commit through. With pre-commit on Linux or macOS it

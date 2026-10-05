@@ -364,8 +364,9 @@ jobs:
 owner, at `scanning-repo-ref`; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
 
-The fix-loop caller (`autonomous-fix.yml`) runs only when a PR carries the
-`ai-autofix` label and a trusted review/comment triggers it. The template it copies pins a
+The fix-loop caller (`autonomous-fix.yml`) runs when a PR carries the `ai-autofix` label
+and a trusted review or review comment triggers it, or when a maintainer dispatches it with a
+PR number (`templates/fix-loop/autonomous-fix.yml:18-26`). The template it copies pins a
 tag and says `secrets: inherit`; replace both. Pin the commit, and pass the three secrets
 `autonomous-fix.yml` declares (`AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` and
 `CLAUDE_CODE_OAUTH_TOKEN`) by name, as in

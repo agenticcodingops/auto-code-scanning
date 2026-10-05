@@ -294,7 +294,8 @@ runs the scan on the default branch.
 
   ```bash
   gh run download <run-id> --name trivy-results --dir after-trivy
-  jq -e 'has("SchemaVersion")' after-trivy/trivy-iac-results.json >/dev/null   # do not print trivy-secrets-results.json
+  jq -e 'has("SchemaVersion")' after-trivy/trivy-iac-results.json >/dev/null
+  jq -e 'has("SchemaVersion")' after-trivy/trivy-secrets-results.json >/dev/null   # check it, never print it
   gh run download <run-id> --name tflint-results --dir after-tflint
   jq -e '(.errors | length) == 0' after-tflint/tflint-results.json >/dev/null
   ```
