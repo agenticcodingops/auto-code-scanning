@@ -302,8 +302,8 @@ cat .scanning/last-scan.json
 | Test | Result | Details |
 |------|--------|---------|
 | scan.py + trivy | **PASS** | Findings reported (counts not published), 72.5s, `tools_executed: ["trivy"]` |
-| scan.py + checkov (S3 module) | **PASS** | 170 passed, 21 failed, `tools_executed: ["checkov"]` |
-| scan.py + checkov (full repo) | **PARTIAL** | Checkov invoked successfully but timed out at 300s on ~1,494 files. Use directory argument for large repos. |
+| scan.py + checkov (S3 module) | **PASS** | Checks passed and failed (counts not published), `tools_executed: ["checkov"]` |
+| scan.py + checkov (full repo) | **PARTIAL** | Checkov invoked successfully but timed out at 300s on about 1,500 files. Use directory argument for large repos. |
 
 ---
 
@@ -369,7 +369,7 @@ checkov -d terraform/modules/aws/storage/s3 \
 
 ### Actual Results (reference run)
 
-**PASS** - 170 passed, 21 failed, 0 skipped, Checkov 3.2.497. No config errors.
+**PASS** - Checkov 3.2.497 ran with no config errors and reported failed checks (counts not published).
 
 ---
 
@@ -396,9 +396,9 @@ time pre-commit run trivy-secrets --all-files
 
 | Hook | Duration | Findings |
 |------|----------|----------|
-| trivy-iac-critical | 267s | 15 CRITICAL |
+| trivy-iac-critical | 267s | Findings (counts not published) |
 | trivy-secrets | 22.7s | 0 |
-| gitleaks | 61.3s | 1 HIGH |
+| gitleaks | 61.3s | Findings (counts not published) |
 
 ---
 
@@ -572,10 +572,10 @@ git branch -D test/security-scanning-integration
 | 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS; gitleaks and trivy-iac-critical reported findings, as expected |
 | 3 | Pre-push hooks | **PASS** | Standard tier correctly has no pre-push hooks; strict tier: checkov reported failed checks |
 | 4 | Insecure commit block | **PASS** | Gitleaks blocked fake AWS key `AKIAIOSFODNN7EXAMPLE` |
-| 5 | scan.py | **PASS** | Trivy: 92 findings, Checkov: works on modules, JSON output valid |
+| 5 | scan.py | **PASS** | Findings reported (counts not published), Checkov: works on modules, JSON output valid |
 | 6 | Suppression validation | **PASS** | Validated empty file and template correctly |
-| 7 | Checkov direct | **PASS** | 170/21 pass/fail, no config errors |
-| 8 | Performance | **PASS** | Full-repo times expected for 1,494 files; normal commits scan only changed files |
+| 7 | Checkov direct | **PASS** | No config errors (counts not published) |
+| 8 | Performance | **PASS** | Full-repo times expected for about 1,500 files; normal commits scan only changed files |
 
 **Note**: Snyk IaC tests were not included in this validation run (Snyk is optional and requires a separate license). When enabled, Snyk findings appear alongside Trivy/Checkov results in the scan output.
 

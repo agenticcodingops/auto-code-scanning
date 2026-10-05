@@ -168,7 +168,7 @@ The agent will:
 | 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS; gitleaks and trivy-iac-critical reported findings, as expected |
 | 3 | Insecure commit blocked | **PASS** | Gitleaks blocked fake AWS key |
 | 4 | scan.py + trivy | **PASS** | Findings reported (counts not published) |
-| 5 | scan.py + checkov | **PASS** | 170 passed, 21 failed on S3 module |
+| 5 | scan.py + checkov | **PASS** | Checks reported on the S3 module (counts not published) |
 | 6 | Suppressions | **PASS** | Valid YAML, 0 entries |
-| 7 | Checkov direct | **PASS** | 170/21 pass/fail, no config errors |
-| 8 | Performance | **PASS** | 267s for full repo (expected for 1,494 files) |
+| 7 | Checkov direct | **PASS** | No config errors (counts not published) |
+| 8 | Performance | **PASS** | 267s for the full repository (expected for about 1,500 files) |
