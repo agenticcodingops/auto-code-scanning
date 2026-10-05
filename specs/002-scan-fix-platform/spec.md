@@ -40,7 +40,7 @@ autonomous Claude Code loops and public release — without losing working Terra
 | R5 | App-code scanners emit DISTINCT SARIF categories | `code-security-scan.yml` `<prefix>semgrep-<lang>` |
 | R6 | `dotnet-format` path is config-driven, never hardcoded | `tests/python/test_dotnet_format_path.py` |
 | R7 | analyze job has NO write token; apply enforces the allowlist + only pushes on the `ai-autofix` label | `autonomous-fix.yml` perms; caller `if:`; `check-fix-allowlist.py` |
-| R8 | claude-code-action SHA-pinned ≥ v1.0.93 (CVE-2025-66032), centralized | `autonomous-fix.yml` pin + `fix_loop.claude_code_action_ref` + schema |
+| R8 | claude-code-action SHA-pinned and centralized; its bundled CLI is past 1.0.93, the CVE-2025-66032 fix | `autonomous-fix.yml` pin + `fix_loop.claude_code_action_ref` + schema |
 | R9 | Setup onboards a sample repo, creates labels, VERIFIES secrets | `setup-scan-fix.{ps1,py}` (tested against a throwaway repo) |
 | R10 | Fix-loop gating: a patch touching `.github/` → needs-human-review; allowlist paths pass | `tests/python/test_check_fix_allowlist.py` |
 | R11 | No secret, no consumer-specific path, no unpinned third-party action in the repo | repo-wide audit (all actions SHA-pinned) |

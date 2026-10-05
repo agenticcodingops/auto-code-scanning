@@ -534,7 +534,7 @@ python -m pytest tests/python/test_check_fix_allowlist.py -q
 | Gate on `.github/` patch | `GATED` (exit 1) → `needs-human-review` |
 | Sensitive name in allowlisted dir (`src/AuthService.cs`) | `GATED` (fail closed) |
 | Iteration cap reached (`fix_loop.max_iterations`) | PR labelled `needs-human-review` |
-| `claude-code-action` ref | SHA-pinned v1.0.148 (`>= 1.0.93`, CVE-2025-66032) |
+| `claude-code-action` ref | SHA-pinned v1.0.148 (its bundled CLI is past 1.0.93, the CVE-2025-66032 fix) |
 
 See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the full threat model.
 

@@ -481,8 +481,8 @@ fix_loop:
     - ".env"
     - "LICENSE"
 
-  # Centralized, SHA-pinned claude-code-action reference. MUST be >= v1.0.93
-  # (CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3). All consumers inherit this safe pin.
+  # Centralized, SHA-pinned claude-code-action reference. Its bundled CLI must be past
+  # CLI 1.0.93, the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3. All consumers inherit this pin.
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
 
   # Authoritative re-verification command in JOB B (apply-and-push). Derive from

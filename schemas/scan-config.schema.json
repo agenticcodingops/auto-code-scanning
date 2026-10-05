@@ -156,7 +156,7 @@
         },
         "claude_code_action_ref": {
           "type": "string",
-          "description": "SHA-pinned claude-code-action ref; MUST be >= v1.0.93 (CVE-2025-66032).",
+          "description": "SHA-pinned claude-code-action ref. Its bundled CLI must be past CLI 1.0.93, the fix for CVE-2025-66032.",
           "pattern": "^anthropics/claude-code-action@[0-9a-f]{40}$"
         },
         "build_verify_cmd": {
