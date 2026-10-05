@@ -28,7 +28,7 @@
     Strict validation with 60-day expiry warning.
 
 .NOTES
-    Part of azure-wordpress local scanning infrastructure.
+    Part of the auto-code-scanning local scanning infrastructure.
     Run before each commit to ensure suppression compliance.
 #>
 

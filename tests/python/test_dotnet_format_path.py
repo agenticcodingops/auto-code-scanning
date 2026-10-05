@@ -1,5 +1,5 @@
 """dotnet-format path test — the solution/working-dir must come from CONFIG, never
-hardcoded (the generic fix for the PR #145 api/ path bug).
+hardcoded (the generic fix for the reference consumer's api/ path bug).
 
 Two checks:
   1. Static: the dotnet-format/dotnet-build hooks reference the config keys and

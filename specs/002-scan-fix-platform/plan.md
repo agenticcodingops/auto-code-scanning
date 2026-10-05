@@ -7,7 +7,7 @@ before the next. One feature branch, one PR to `main`, no merge.
 
 | Step | Deliverable | Key files |
 |---|---|---|
-| 0 | Migration analysis (read this repo + PR #145) | `docs/MIGRATION-ANALYSIS.md` |
+| 0 | Migration analysis (read this repo + the reference consumer) | `docs/MIGRATION-ANALYSIS.md` |
 | 1 | Config seam | `scan-config.yaml` (+csharp/typescript/sql/fix_loop/ci.sarif), `schemas/scan-config.schema.json`, `scripts/validate-scan-config.py`, `templates/scan-config/{starter,standard,strict}.yaml` |
 | 2 | App-code hooks | `hooks/{semgrep-csharp,semgrep-typescript,dotnet-format,dotnet-build,eslint,prettier,sqlfluff,validate-scan-config}.{sh,ps1}`, `hooks/lib/common.*` helpers, `.pre-commit-hooks.yaml`, `.gitattributes` |
 | 2b | App-code CI | `.github/workflows/code-security-scan.yml` (distinct SARIF) |

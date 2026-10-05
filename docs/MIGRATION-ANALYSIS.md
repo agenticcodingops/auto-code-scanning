@@ -3,7 +3,7 @@
 **Status:** Analysis for `specs/002-scan-fix-platform`
 **Audience:** maintainers of `auto-code-scanning`; engineers adopting the platform.
 **Method:** Full read of this repository plus the proven fix‑loop reference in
-`workout-trackroutinely` (PR #145). Nothing below is aspirational — it mirrors
+a private consumer repository. Nothing below is aspirational — it mirrors
 what exists today and states exactly what changes.
 
 ---
@@ -43,13 +43,13 @@ scanning**. It already does the hard, unglamorous parts well:
 
 ---
 
-## 2. The reference fix‑loop (workout‑trackroutinely PR #145)
+## 2. The reference fix‑loop
 
-PR #145 is the **source of truth** for the fix‑loop. Its proven shape:
+The reference consumer is the **source of truth** for the fix‑loop. Its proven shape:
 
 ### 2.1 Two‑job `autonomous-fix.yml` — breaks the "lethal trifecta"
 
-The trifecta = *untrusted input* + *write credentials* + *egress*. PR #145 splits
+The trifecta = *untrusted input* + *write credentials* + *egress*. The reference splits
 these so no single job holds all three:
 
 - **JOB A `analyze`** — context: **untrusted input**.
@@ -98,7 +98,7 @@ Commands invoke project scripts (`secret-scan-staged.ps1`) and tools directly
 
 ### 2.4 The path bug we must fix generically
 
-PR #145's hooks hardcode `api/` and `TrackRoutinely.slnx`. That is the **`dotnet-format`
+The reference consumer's hooks hardcode `api/` and its solution file. That is the **`dotnet-format`
 path bug**: it only works for one repo. The platform must read the solution and working
 directory **from config** (`languages.csharp.build.{solution,working_dir}`), never hardcode.
 
@@ -113,10 +113,10 @@ directory **from config** (`languages.csharp.build.{solution,working_dir}`), nev
 - Suppression + baseline tooling (`scripts/`, `hooks/validate-suppressions.*`).
 
 ### 3.2 Parameterize (move hardcoded/POC values into `scan-config.yaml`)
-| Today (POC / PR #145) | Becomes config |
+| Today (the reference consumer) | Becomes config |
 |---|---|
 | Terraform‑only languages | `languages.csharp`, `languages.typescript` blocks |
-| `api/`, `TrackRoutinely.slnx` hardcoded | `languages.csharp.build.{solution,working_dir}` |
+| `api/` and the solution file hardcoded | `languages.csharp.build.{solution,working_dir}` |
 | Allowlist `api/src,api/tests,mobile` baked into YAML | `fix_loop.allowlist_paths` |
 | Sensitive denylist baked into YAML | `fix_loop.gated_paths` |
 | `ai-autofix` / cap `3` / `--max-turns 12` baked in | `fix_loop.{label,human_review_label,max_iterations,max_turns}` |
@@ -153,7 +153,7 @@ a `languages.<lang>` block in `scan-config.yaml`; a "tool adapter" = a pair of
 | TypeScript Language Plugin | `languages.typescript` in `scan-config.yaml` |
 | → ESLint / Prettier Tool Adapters | `hooks/eslint.{sh,ps1}`, `hooks/prettier.{sh,ps1}` |
 | → Semgrep SAST Tool Adapter | `hooks/semgrep-typescript.{sh,ps1}` (`--config p/typescript`) |
-| SQL Tool Adapter (bonus, from PR #145) | `hooks/sqlfluff.{sh,ps1}` |
+| SQL Tool Adapter (bonus, from the reference consumer) | `hooks/sqlfluff.{sh,ps1}` |
 | Results Aggregator | extended `reusable-scan.yml` aggregate job + `schemas/*` |
 
 Every new hook follows the **trivy‑secrets pattern**: `require_tool || exit 0` (fail‑open),

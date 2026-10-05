@@ -212,7 +212,7 @@ defaulted to **Trivy v0.65.0**, which fails to install on the runner ("found ver
 
 ## [2.0.1] - Patch — review hardening (security + correctness)
 
-Fixes from the workout-trackroutinely PR #145 consumer review. No breaking changes;
+Fixes from the reference consumer's review. No breaking changes;
 consumers should bump the pin from `@v2.0.0` to `@v2.0.1` and re-vendor `hooks/`,
 `scripts/`, `schemas/`.
 
@@ -261,7 +261,7 @@ preserved unchanged. **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.*
 - **C#/.NET, TypeScript/JS, and SQL language plugins** in `scan-config.yaml`
   (`languages.csharp`, `languages.typescript`, `languages.sql`), each with a
   per-project `build.{solution,working_dir}` so the dotnet-format path is solved by
-  **config, never hardcoded** (the generic fix for the PR #145 `api/` path bug).
+  **config, never hardcoded** (the generic fix for the reference consumer's `api/` path bug).
 - **New dispatcher hooks** (`.sh` + `.ps1`, same staged-only fail-open pattern):
   `semgrep-csharp`, `semgrep-typescript`, `dotnet-format`, `dotnet-build` (Roslyn),
   `eslint`, `prettier`, `sqlfluff`, `validate-scan-config`. Registered in
@@ -278,7 +278,7 @@ preserved unchanged. **Pin consumers to `@v2.0.0` (or a SHA) — never `@main`.*
 - **`fix_loop:` config section**: `enabled`, `label`, `human_review_label`, `max_turns`,
   `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`,
   `build_verify_cmd`, `required_secrets`.
-- **`autonomous-fix.yml`** reusable two-job workflow (generic PR #145 design): a
+- **`autonomous-fix.yml`** reusable two-job workflow (the reference consumer's design, made generic): a
   read-only `analyze` job (no push creds, no egress, scoped tools, untrusted-text-as-data)
   that emits a patch artifact, and an `apply-and-push` job that re-checks out the exact
   SHA, re-enforces the allowlist gate, re-verifies (secret scan + build), and pushes with

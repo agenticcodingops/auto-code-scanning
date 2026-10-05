@@ -1,13 +1,13 @@
 # Testing Guide: Security Scanning on Consuming Repositories
 
-This guide walks through testing the `auto-code-scanning` solution on a real consuming repository. The Terraform tests (Tests 1-8) were validated against `azure-wordpress` (1,494 .tf files across 11 AWS module categories) on 2026-02-12.
+This guide walks through testing the `auto-code-scanning` solution on a real consuming repository. The Terraform tests (Tests 1-8) were run on 2026-02-12 against a large AWS Terraform repository (about 1,500 .tf files).
 
 > **v2.0.0 — two layers.** The repo is now a reusable **scan→fix platform**.
 > **Layer A** adds app-code scanning (C#/.NET, TypeScript/JS, SQL) alongside
 > Terraform; **Layer B** adds an optional agentic fix-loop. Tests 1-8 below cover
 > Layer A's Terraform path (unchanged). **Tests 9-11 are new in v2.0.0** and cover
 > app-code hooks, SARIF categories, and the fix-loop privilege boundary. **Pin the
-> consuming repo to `@v2.0.0` (or a SHA) — never `@main`.**
+> consuming repo to `@v2.2.0` (or a SHA) — never `@main`.** <!-- x-release-please-version -->
 
 ## Prerequisites
 
@@ -81,10 +81,6 @@ python "<path-to-scanning-repo>\scripts\setup-scanning.py" `
   --tier standard `
   --force
 ```
-OR
-```
-python "C:\Projects\azure-wordpress\auto-code-scanning\scripts\setup-scanning.py" --cloud-provider aws --tier standard --force
-```
 
 ### 1D. Verify setup
 
@@ -108,7 +104,7 @@ ls .git/hooks/pre-commit
 | `.git/hooks/pre-commit` | File exists |
 | Setup exit code | 0 (all tools verified) |
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
 **PASS** - All 10 config files copied, 5/5 tools verified (Trivy 0.68.2, Checkov 3.2.497, tflint 0.60.0, Gitleaks 8.30.0, pre-commit 4.5.1).
 
@@ -149,13 +145,13 @@ pre-commit run --all-files
 - Infrastructure errors (tool not found, DB issues) exit 0 with warning (fail-open)
 - Security findings cause exit code 1 (fail-closed)
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
 | Hook | Result | Duration | Details |
 |------|--------|----------|---------|
 | trivy-secrets | PASS | 22.7s | No secrets above threshold |
-| gitleaks | FAIL (findings) | 61.3s | 1 HIGH finding (pre-existing leaked credential) |
-| trivy-iac-critical | FAIL (findings) | 267s | 15 CRITICAL findings (pre-existing IaC issues) |
+| gitleaks | FAIL (findings) | 61.3s | Findings in the target repository (detail not published) |
+| trivy-iac-critical | FAIL (findings) | 267s | Findings in the target repository (detail not published) |
 
 **Note:** The "FAIL" results above are the hooks **correctly detecting** pre-existing security issues in the consuming repo. This is expected behavior - the scanning solution is working as designed.
 
@@ -188,11 +184,11 @@ pre-commit run validate-suppressions --all-files --hook-stage pre-push
 pre-commit run snyk-iac --all-files --hook-stage pre-push
 ```
 
-### Actual Results (azure-wordpress, strict tier)
+### Actual Results (reference run, strict tier)
 
 | Hook | Result | Details |
 |------|--------|---------|
-| checkov | FAIL (findings) | 186 passed, 49 failed checks |
+| checkov | FAIL (findings) | Failed checks reported (counts not published) |
 | validate-suppressions | PASS | 0 suppression entries, valid YAML |
 
 ---
@@ -225,7 +221,7 @@ git reset HEAD test-insecure.tf
 rm test-insecure.tf
 ```
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
 **PASS** - Gitleaks blocked the commit: `FAIL: 1 findings (0 critical, 1 high, 0 medium, 0 low)`. The fake AWS access key `AKIAIOSFODNN7EXAMPLE` was correctly detected and the commit was rejected.
 
@@ -301,13 +297,13 @@ cat .scanning/last-scan.json
 | `findings[]` | Array with `rule_id`, `tool`, `severity`, `file`, `message`, `line` |
 | Exit code | 0 = no findings, 1 = findings above threshold |
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
 | Test | Result | Details |
 |------|--------|---------|
-| scan.py + trivy | **PASS** | 92 findings (15 CRITICAL, 77 HIGH), 72.5s, `tools_executed: ["trivy"]` |
-| scan.py + checkov (S3 module) | **PASS** | 170 passed, 21 failed, `tools_executed: ["checkov"]` |
-| scan.py + checkov (full repo) | **PARTIAL** | Checkov invoked successfully but timed out at 300s on ~1,494 files. Use directory argument for large repos. |
+| scan.py + trivy | **PASS** | Findings reported (counts not published), 72.5s, `tools_executed: ["trivy"]` |
+| scan.py + checkov (S3 module) | **PASS** | Checks passed and failed (counts not published), `tools_executed: ["checkov"]` |
+| scan.py + checkov (full repo) | **PARTIAL** | Checkov invoked successfully but timed out at 300s on about 1,500 files. Use directory argument for large repos. |
 
 ---
 
@@ -350,7 +346,7 @@ python "<path-to-scanning-repo>/scripts/validate-suppressions.py"
 - Invalid entries: Clear error messages for missing/invalid fields
 - Expired dates: Warnings (not errors) locally
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
 **PASS** - "Validation passed: .scan-suppressions.yaml (0 entries)"
 
@@ -371,9 +367,9 @@ checkov -d terraform/modules/aws/storage/s3 \
 - Reports passed/failed/skipped checks
 - No "unrecognized arguments" or "no-guide" errors
 
-### Actual Results (azure-wordpress)
+### Actual Results (reference run)
 
-**PASS** - 170 passed, 21 failed, 0 skipped, Checkov 3.2.497. No config errors.
+**PASS** - Checkov 3.2.497 ran with no config errors and reported failed checks (counts not published).
 
 ---
 
@@ -396,13 +392,13 @@ time pre-commit run trivy-secrets --all-files
 
 **Important:** During normal git commits, pre-commit only scans **changed files**, not the entire repo. The `--all-files` flag is for initial validation only.
 
-### Actual Results (azure-wordpress, --all-files)
+### Actual Results (reference run, --all-files)
 
 | Hook | Duration | Findings |
 |------|----------|----------|
-| trivy-iac-critical | 267s | 15 CRITICAL |
+| trivy-iac-critical | 267s | Findings (counts not published) |
 | trivy-secrets | 22.7s | 0 |
-| gitleaks | 61.3s | 1 HIGH |
+| gitleaks | 61.3s | Findings (counts not published) |
 
 ---
 
@@ -538,7 +534,7 @@ python -m pytest tests/python/test_check_fix_allowlist.py -q
 | Gate on `.github/` patch | `GATED` (exit 1) → `needs-human-review` |
 | Sensitive name in allowlisted dir (`src/AuthService.cs`) | `GATED` (fail closed) |
 | Iteration cap reached (`fix_loop.max_iterations`) | PR labelled `needs-human-review` |
-| `claude-code-action` ref | SHA-pinned v1.0.148 (`>= 1.0.93`, CVE-2025-66032) |
+| `claude-code-action` ref | SHA-pinned v1.0.148 (its bundled CLI is past 1.0.93, the CVE-2025-66032 fix) |
 
 See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the full threat model.
 
@@ -568,30 +564,20 @@ git branch -D test/security-scanning-integration
 
 ---
 
-## Results Summary (azure-wordpress, 2026-02-12)
+## Results Summary (reference run, 2026-02-12)
 
 | # | Test | Result | Details |
 |---|------|--------|---------|
 | 1 | Setup | **PASS** | All 10 configs copied, 5/5 tools verified |
-| 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS, gitleaks detected 1 HIGH, trivy-iac-critical detected 15 CRITICAL |
-| 3 | Pre-push hooks | **PASS** | Standard tier correctly has no pre-push hooks; strict tier: checkov 186/49 pass/fail |
+| 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS; gitleaks and trivy-iac-critical reported findings, as expected |
+| 3 | Pre-push hooks | **PASS** | Standard tier correctly has no pre-push hooks; strict tier: checkov reported failed checks |
 | 4 | Insecure commit block | **PASS** | Gitleaks blocked fake AWS key `AKIAIOSFODNN7EXAMPLE` |
-| 5 | scan.py | **PASS** | Trivy: 92 findings, Checkov: works on modules, JSON output valid |
+| 5 | scan.py | **PASS** | Findings reported (counts not published), Checkov: works on modules, JSON output valid |
 | 6 | Suppression validation | **PASS** | Validated empty file and template correctly |
-| 7 | Checkov direct | **PASS** | 170/21 pass/fail, no config errors |
-| 8 | Performance | **PASS** | Full-repo times expected for 1,494 files; normal commits scan only changed files |
+| 7 | Checkov direct | **PASS** | No config errors (counts not published) |
+| 8 | Performance | **PASS** | Full-repo times expected for about 1,500 files; normal commits scan only changed files |
 
 **Note**: Snyk IaC tests were not included in this validation run (Snyk is optional and requires a separate license). When enabled, Snyk findings appear alongside Trivy/Checkov results in the scan output.
-
-### Top 5 Findings by Frequency (Trivy)
-
-| Rule ID | Description | Count |
-|---------|-------------|-------|
-| AVD-AWS-0132 | S3 encryption should use Customer Managed Keys | 12 |
-| AVD-AWS-0086 | S3 Access block should block public ACL | 8 |
-| AVD-AWS-0088 | Unencrypted S3 bucket | 7 |
-| AVD-AWS-0087 | S3 Access block should block public policy | 6 |
-| AVD-AWS-0104 | Security group allows unrestricted egress | 5 |
 
 ### Known Issues / Notes
 

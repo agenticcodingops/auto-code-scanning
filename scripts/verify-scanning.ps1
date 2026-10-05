@@ -1,6 +1,6 @@
 # ============================================================================
 # LOCAL SECURITY SCANNING VERIFICATION SCRIPT
-# azure-wordpress
+# auto-code-scanning
 #
 # This script verifies that all security scanning tools are properly installed
 # and configured for local development.

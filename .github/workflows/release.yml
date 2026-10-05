@@ -4,8 +4,10 @@
 #
 # Runs release-please on every push to main. It keeps one release PR open that
 # proposes the next version from the conventional commits merged since the
-# last release: the CHANGELOG.md entry, and the version in version.txt,
-# README.md and docs/VERSION-PINNING.md. Merging that PR makes the next run
+# last release: the CHANGELOG.md entry, and the new version in
+# .release-please-manifest.json, version.txt and the x-release-please-version
+# lines of every file listed under extra-files in release-please-config.json.
+# Merging that PR makes the next run
 # create the vX.Y.Z tag on the merge commit and a GitHub Release with the same
 # notes. Publishing the release starts release-verify.yml on the tag.
 #

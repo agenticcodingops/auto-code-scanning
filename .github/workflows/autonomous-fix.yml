@@ -2,7 +2,7 @@
 # REUSABLE AGENTIC FIX-LOOP (LAYER B) — two-job, hardened, opt-in
 # auto-code-scanning
 #
-# Reproduces the proven workout-trackroutinely PR #145 design GENERICALLY, driven
+# Reproduces a proven consumer fix-loop design GENERICALLY, driven
 # by the consumer's scan-config.yaml `fix_loop` block. Breaks the "lethal trifecta"
 # (untrusted input + write creds + egress) by SPLITTING work across two jobs:
 #
@@ -24,8 +24,8 @@
 # gated_paths, max_iterations) is read from the base ref; build_verify runs with no
 # AUTOFIX_TOKEN in env or .git/config; the gate uses the base config, not PR-head config.
 #
-# claude-code-action is SHA-pinned to v1.0.148 (>= 1.0.93 fixes CVE-2025-66032 /
-# GHSA-xq4m-mc3c-vvg3). This pin is the centralized source of truth; it MUST match
+# claude-code-action is SHA-pinned to v1.0.148, whose bundled CLI is past CLI 1.0.93,
+# the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 (a CLI flaw; the action's own version number is unrelated). This pin is the centralized source of truth; it MUST match
 # fix_loop.claude_code_action_ref in scan-config.yaml.
 # ============================================================================
 
@@ -238,7 +238,7 @@ jobs:
 
       - name: Run Claude Code (FIX-ONLY)
         if: steps.precheck.outputs.capped != 'true'
-        # PIN >= v1.0.93 (CVE-2025-66032). Centralized; matches fix_loop.claude_code_action_ref.
+        # PIN: its bundled CLI is past 1.0.93, the CVE-2025-66032 fix. Centralized; matches fix_loop.claude_code_action_ref.
         uses: anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102  # v1.0.148
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
