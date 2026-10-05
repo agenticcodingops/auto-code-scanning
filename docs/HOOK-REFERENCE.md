@@ -262,8 +262,13 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Tool**: Python (`scripts/validate-scan-config.py`)
 - **Trigger**: Runs **only when `scan-config.yaml` is staged** (checks the git index)
 - **Behavior**: Schema violation -> exit 1; Python not found -> warn and exit 0
-  (fail-open). The schema rejects an invalid `fix_loop.claude_code_action_ref`
-  (it must be a 40-char SHA pin of `anthropics/claude-code-action`)
+  (fail-open). A missing schema, PyYAML or `jsonschema` also warns and exits 0 unless
+  `STRICT=1` is set (`scripts/validate-scan-config.py:40-60`), and the hook does not set
+  it. Setup does not copy `schemas/`. The copied validator still finds a schema beside the
+  script or under the consumer's `schemas/` (`scripts/validate-scan-config.py:40-44`); if
+  neither holds one, validate with the platform clone and `STRICT=1` instead. The schema rejects an
+  invalid `fix_loop.claude_code_action_ref` (it must be a 40-char SHA pin of
+  `anthropics/claude-code-action`) when it does run
 
 ## Override Environment Variables
 

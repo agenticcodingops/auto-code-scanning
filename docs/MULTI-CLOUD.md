@@ -144,6 +144,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -152,16 +153,32 @@ jobs:
       contents: read
       security-events: write
       pull-requests: write
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
     with:
       terraform-directory: aws
       cloud-provider: aws
       scanning-repo-ref: v2.2.0 # x-release-please-version
 ```
 
+`OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
+repository named `auto-code-scanning` under the owner of the calling repository, whatever
+`uses:` names (`reusable-scan.yml:123-131`). That copy must be public (a private copy
+cannot be read) and must hold the ref you pass as `scanning-repo-ref`. Without it, Setup
+Scanning Tools fails, the scan jobs are skipped, Aggregate Results still passes, and the
+pull request comment says "All security checks passed!". Create the copy as in
+[step 2 of TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#2-create-your-owners-copy-of-the-platform).
+Require Setup Scanning Tools as well as Aggregate Results
+([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+
 Copy it to `.github/workflows/terraform-scan-azure.yml` with
 `name: Terraform Security Scan (Azure)`, `terraform-directory: azure` and
 `cloud-provider: azure`. Each file needs its own `name:`.
+
+To bump these callers, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) with each file name in
+place of `terraform-scan.yml`. Run steps 3 and 6 once per file, keeping separate before
+and after files for each cloud, and move the pins in every file in the one pull request
+of step 4.
 
 Both calls upload SARIF to the same fixed categories: `trivy-iac`, `trivy-secrets`,
 `checkov` and `snyk-iac` (`.github/workflows/reusable-scan.yml:881-908` at commit

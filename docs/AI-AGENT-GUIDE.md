@@ -276,9 +276,10 @@ Key guarantees for an agent operating in this flow:
   `.github/` is gated → `needs-human-review`.
 - **Hard iteration cap**: `fix_loop.max_iterations` (tracked in `.fix-attempts`).
   On cap the PR is flagged `needs-human-review` instead of looping forever.
-- **`claude-code-action` is SHA-pinned to v1.0.148** (`>= 1.0.93`, fixes
-  CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3). This pin is the single source of truth and
-  must match `fix_loop.claude_code_action_ref`.
+- **`claude-code-action` is SHA-pinned to v1.0.148**. CVE-2025-66032 /
+  GHSA-xq4m-mc3c-vvg3 is a Claude Code CLI flaw (fixed in CLI 1.0.93), unrelated to the
+  action's own version; see [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b). This pin is the single source of
+  truth and must match `fix_loop.claude_code_action_ref`.
 
 The full threat model and the two-job rationale are in
 [SECURITY-MODEL.md](SECURITY-MODEL.md).

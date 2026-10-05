@@ -153,7 +153,9 @@ The CI loop is engineered to break the "lethal trifecta": a read-only **analyze*
 job (no push creds, no egress, untrusted PR text treated as data) emits a patch
 artifact, and a separate **apply-and-push** job re-enforces the allowlist gate and
 re-verifies (secret scan + `build_verify_cmd`) before pushing with `AUTOFIX_TOKEN`.
-`claude-code-action` is SHA-pinned to v1.0.148 (CVE-2025-66032). Do not adopt the CI
+`claude-code-action` is SHA-pinned to v1.0.148. CVE-2025-66032 is a Claude Code CLI flaw
+(fixed in CLI 1.0.93), unrelated to the action's own version; see
+[VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b). Do not adopt the CI
 loop without reading [SECURITY-MODEL.md](SECURITY-MODEL.md).
 
 ### Layer B Readiness Criteria

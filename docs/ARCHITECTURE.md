@@ -252,7 +252,7 @@ sequenceDiagram
 | **Path allowlist** | `scripts/check-fix-allowlist.py` — only `allowlist_paths`, never `gated_paths` (auth/payment/crypto/`.github`/…); fails **closed** on malformed config |
 | **Re-verification** | `apply-and-push` re-runs the allowlist gate + secret scan + `build_verify_cmd` on the exact SHA before pushing |
 | **Iteration cap** | `max_iterations` via a `.fix-attempts` counter → then `needs-human-review` |
-| **Pinned action** | `claude_code_action_ref` SHA-pinned (≥ v1.0.93, CVE-2025-66032) |
+| **Pinned action** | `claude_code_action_ref` SHA-pinned; CVE-2025-66032 is a CLI flaw fixed in CLI 1.0.93, unrelated to the action's version ([VERSION-PINNING](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b)) |
 | **Token scope** | `AUTOFIX_TOKEN` is injected **only** into the final push URL, never written to disk in `analyze` |
 
 Full write-up: [FIX-LOOP](FIX-LOOP.md) · [SECURITY-MODEL](SECURITY-MODEL.md).
@@ -356,7 +356,7 @@ A quick reference for "what happens when X breaks":
 | A scan tool isn't installed locally | hook **warns, exits 0** | infra ≠ a finding; don't block devs |
 | A tool download 5xx / rate-limits in CI | retry with backoff (e.g. tflint `--init` + `GITHUB_TOKEN`) | transient, not a code problem |
 | A *real* finding ≥ blocking severity | **exit 1 / fail the check** | that's the whole point |
-| `scan-config.yaml` malformed | `validate-scan-config` **fails closed** | a broken gate is worse than a slow one |
+| `scan-config.yaml` malformed | `validate-scan-config` **fails closed** when it can load the schema, PyYAML and `jsonschema`; otherwise it warns and exits 0 unless `STRICT=1`, which no workflow sets | a broken gate is worse than a slow one |
 | Fix-loop fed a malformed/over-broad patch | path gate **fails closed** → `needs-human-review` | never auto-push outside the allowlist |
 | `local_hooks_enabled: false` | all local hooks **skip (exit 0)** | deliberate pause; CI still enforces |
 

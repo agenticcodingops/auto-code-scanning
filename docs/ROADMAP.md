@@ -22,14 +22,14 @@ multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchan
 - [x] **`autonomous-fix.yml`** reusable two-job CI fix-loop: read-only `analyze` (no push creds, no egress, scoped tools, untrusted-text-as-data → patch artifact) + `apply-and-push` (re-checkout exact SHA, re-enforce allowlist gate, re-verify secret scan + `build_verify_cmd`, push with `AUTOFIX_TOKEN`) + `flag-human-review`
 - [x] **`fix_loop:` config block** (`enabled`, `label`, `human_review_label`, `max_turns`, `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`, `build_verify_cmd`, `required_secrets`)
 - [x] `scripts/check-fix-allowlist.py` shared allowlist gate (allowlist + fail-closed gated paths); opt-in per PR via `ai-autofix` label; hard `max_iterations` cap → `needs-human-review`
-- [x] `claude-code-action` **SHA-pinned v1.0.148** (`>= 1.0.93`, CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3)
+- [x] `claude-code-action` **SHA-pinned v1.0.148** (CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 is a Claude Code CLI flaw, fixed in CLI 1.0.93; the action's own version is unrelated)
 - [x] `docs/SECURITY-MODEL.md` (two-job "lethal trifecta" threat model)
 
 ### Delivered — runners, setup, docs
 
 - [x] **Lefthook is the default local runner** (`templates/lefthook/lefthook.yml`), calling the same dispatcher scripts; **pre-commit kept as a supported alternative**
 - [x] One-command `setup-scan-fix.{ps1,py}` (idempotent: writes config from a tier template, installs runner + `.claude` bundle + caller workflows, creates labels, **verifies** secrets, runs verify-scanning)
-- [x] All third-party actions SHA-pinned across this repo's own workflows
+- [x] Third-party actions SHA-pinned across this repo's own workflows, except `claude.yml` and `semgrep.yml` (see [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo))
 - [x] Docs: `SECURITY-MODEL.md`, `FIX-LOOP.md`, `APP-CODE-SCANNING.md`, `MIGRATION-ANALYSIS.md`, `CONSUMER-MIGRATION.md`; `specs/002-scan-fix-platform/`
 - [x] Tests: `tests/integration/test-app-code-hooks.sh`, `tests/python/test_check_fix_allowlist.py`, `tests/python/test_dotnet_format_path.py`
 

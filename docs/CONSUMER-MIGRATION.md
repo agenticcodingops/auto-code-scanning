@@ -83,8 +83,11 @@ python /path/to/auto-code-scanning/scripts/setup-scan-fix.py \
   --languages csharp,typescript --tier standard --hooks-runner lefthook --enable-fix-loop
 ```
 
-Use your own languages and tier. Add `--cloud-provider aws|azure|gcp` for Terraform
-(`setup-scan-fix.py:42-54`). The setup:
+Use your own languages and tier. Add `--cloud-provider aws|azure|gcp` for Terraform. The
+flag only adds `terraform` to the languages (`setup-scan-fix.py:46`, `53-54`). It does not
+set the provider: the copied `terraform-scan.yml` always says `cloud-provider: "aws"`
+(`templates/workflows/terraform-scan.yml:24`), which loads the AWS TFLint ruleset. Step 4
+tells you to change it. The setup:
 
 - writes `scan-config.yaml` from the tier template, but leaves an existing one unless you
   pass `--force` (`setup-scan-fix.py:59-68`; `render-scan-config.py:51-52`);
@@ -125,9 +128,10 @@ fix_loop:
   build_verify_cmd: "cd app && dotnet build Example.slnx --nologo"
 ```
 
-Keep `fix_loop.claude_code_action_ref` as the template wrote it. The schema accepts only a
-40-character commit SHA there (`schemas/scan-config.schema.json:157-161`). Then validate
-with the platform clone's copy of the validator:
+Keep `fix_loop.claude_code_action_ref` as the template wrote it. The schema accepts only
+`anthropics/claude-code-action@` followed by a 40-character lowercase commit SHA
+(`schemas/scan-config.schema.json:157-161`). A bare SHA or a tag is rejected. Then
+validate with the platform clone's copy of the validator:
 
 ```bash
 STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
@@ -137,7 +141,8 @@ The copy the setup put in your `scripts/` cannot find the schema, because the se
 not copy `schemas/`. Without `STRICT=1` it then prints a warning and exits 0 instead of
 validating (`validate-scan-config.py:29`, `40-48`; `setup-scan-fix.py:71-78`).
 
-The fix loop reads this file from the pull request's base commit, never from its head
+The fix loop reads this file from the pull request's base commit, or from the default
+branch on a manual dispatch. It never reads it from the pull request head
 (`autonomous-fix.yml:92-142`). Your changes take effect for the fix loop only after they
 merge.
 
@@ -149,7 +154,9 @@ merge.
 The caller templates pin `v2.0.0` (`templates/workflows/code-security-scan.yml:21`,
 `templates/workflows/terraform-scan.yml:21` and `26`,
 `templates/fix-loop/autonomous-fix.yml:55` and `59`). Move every pin to the release you
-checked out in the prerequisites. For the fix-loop caller:
+checked out in the prerequisites, and pin the commit its tag points to, as in
+[VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). For the
+fix-loop caller:
 
 ```yaml
 jobs:
@@ -160,20 +167,40 @@ jobs:
       pull-requests: write
       issues: write
       actions: read
-    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v2.2.0 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
       scanning_repo: OWNER/auto-code-scanning
-      scanning_repo_ref: v2.2.0 # x-release-please-version
-    secrets: inherit
+      scanning_repo_ref: <commit-sha> # v2.2.0 x-release-please-version
+    secrets:
+      AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
+
+Find `<commit-sha>` as in
+[BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#2-find-the-commit-of-the-target-release). Pass only
+the secrets the workflow declares (`autonomous-fix.yml:56-65`); never `secrets: inherit`,
+which hands the called workflow every secret of your repository and organisation.
 
 `OWNER` is the owner of the platform copy you call. The template grants only
 `contents: read` (`templates/fix-loop/autonomous-fix.yml:32-33`), but the called workflow
 needs the four permissions above; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). For the scan callers,
 move `uses:` and `scanning-repo-ref` together as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
+In `terraform-scan.yml`, also set `cloud-provider` to your provider (`aws`, `azure` or
+`gcp`).
+
+With `--hooks-runner pre-commit`, the setup writes `.pre-commit-config.yaml` from
+`templates/<tier>/pre-commit-config.yaml` when the file does not exist yet
+(`setup-scan-fix.py:92-95`). Those templates pin the `auto-code-scanning` hooks at
+`rev: v1.0.0` (for example `templates/standard/pre-commit-config.yaml:30`). No such tag or
+branch exists, so pre-commit cannot fetch the hooks and every commit through it fails,
+this migration's included. In the same commit as the workflow pins, set that `rev:` to the
+release you checked out, or to its commit SHA. If you call your owner's copy, point that
+entry's `repo:` at it too. If an existing `.pre-commit-config.yaml` already lists
+`auto-code-scanning`, move its `rev:` the same way.
 
 ### 5. Check who can start the fix loop
 
@@ -217,7 +244,26 @@ gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN
 
 `AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:446-456`).
 
-### 8. Review and merge
+### 8. Swap the required status checks
+
+- **Who:** Operator (repository admin)
+- **Operator STOP:** no
+
+Swap the requirements together, before you merge, once the scan callers' jobs have run on
+this pull request. In one change, remove every job of an inline workflow you delete (or the
+pull request waits for a check that never runs) and require the scan callers' jobs, as in
+[TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging).
+Requiring the new jobs only after the merge would leave this and any concurrent pull request
+mergeable with no scan gate. The jobs to require:
+
+- for the Terraform scan: Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan,
+  TFLint Scan and Aggregate Results;
+- for the code scan: the jobs of the `code-scan` call.
+
+Use the names on the pull request's Checks tab. Never require the fix loop's jobs: they
+run only on a trusted review or a dispatch.
+
+### 9. Review and merge
 
 - **Who:** Operator, CI, then Reviewer
 - **Operator STOP:** no
@@ -230,6 +276,8 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
 - `STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml`
   prints `VALID`.
 - A local commit runs the hooks through `hooks/dispatcher.sh`.
+- For Terraform, the TFLint Scan job summary lists your cloud's ruleset (`azurerm`, `aws`
+  or `google`), not another cloud's (`reusable-scan.yml:371-383`).
 - Code scanning shows distinct categories: `<prefix>semgrep-csharp`,
   `<prefix>semgrep-typescript` and `<prefix>trivy-secrets` (`code-security-scan.yml:186`,
   `242`).
@@ -242,12 +290,24 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
 
 ## Rollback
 
-- **Who:** Operator, with Reviewer approval
+- **Who:** Operator (a repository admin), with Reviewer approval
 
-1. Revert the migration pull request with `git revert`. The inline workflows and hooks
-   come back from history.
-2. Remove any required status checks you added for the new callers' jobs.
-3. The labels and secrets can stay; nothing uses them without the caller.
+1. Remove the new callers' jobs from the required status checks first. Otherwise the
+   revert pull request waits for checks that never run.
+2. Decide whether the restored inline fix loop may run. The revert also restores it, and
+   if it reads the same `ai-autofix` label and secrets (`AUTOFIX_TOKEN` and the agent key,
+   which step 7 had you create or check), it can push again as soon as the revert merges.
+   If it may not, do one of these before the merge:
+   - delete the token (`gh secret delete AUTOFIX_TOKEN`), then revoke the token itself;
+   - leave the inline fix-loop file out of the revert.
+
+   `gh workflow disable` finds only active workflows, so use it on the restored file
+   after the merge, not before.
+3. In a new pull request, revert the migration: `git revert <squash-commit>`, or
+   `git revert -m 1 <merge-commit>` for a merge commit. The inline workflows and hooks
+   come back from history. Get Reviewer approval and merge.
+4. If the restored inline workflows had required status checks, add them back. The labels
+   can stay.
 
 ## References
 

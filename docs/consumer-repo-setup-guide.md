@@ -61,7 +61,10 @@ missing tool warns and allows the commit rather than blocking you. Install what'
 
 > **Pre-commit alternative:** if your team standardises on [pre-commit](https://pre-commit.com)
 > instead of Lefthook, install it (`pip install pre-commit`) and pass `--hooks-runner pre-commit`
-> at setup. Both runners call the **same** hook scripts.
+> at setup. Both runners call the **same** hook scripts. Setup copies a
+> `.pre-commit-config.yaml` that pins this repository at `rev: v1.0.0`, which is not a tag
+> here, so set that `rev:` to the current release before your first commit; see
+> [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
 
 **Get the platform locally** (so setup can copy templates and shared scripts into your repo):
 
@@ -223,10 +226,20 @@ repo is what keeps uploads clean.
 ### Validate your config
 
 ```bash
-python /path/to/auto-code-scanning/scripts/validate-scan-config.py   # run from your repo root
+STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml   # run from your repo root
 ```
 
-(The `validate-scan-config` hook also runs this automatically whenever `scan-config.yaml` is staged.)
+In PowerShell:
+
+```powershell
+$env:STRICT = '1'; python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
+```
+
+(Do not rely on the `validate-scan-config` hook for this. With Lefthook it runs the copy in
+your `scripts/`, which cannot find the schema because setup does not copy `schemas/`, so it
+prints a warning and lets the commit through. With pre-commit on Linux or macOS it
+validates the platform's own `scan-config.yaml` instead of yours. Run the command above
+from your repository root.)
 
 ### Fix-loop boundary (only if you enabled Layer B)
 
@@ -357,8 +370,9 @@ jobs:
 
 ### Fix-loop caller (only if `--enable-fix-loop`)
 
-This file owns the **privilege boundary** and `uses:` the reusable two-job workflow with
-`secrets: inherit`. Leave its gating `if:` intact:
+This file owns the **privilege boundary** and `uses:` the reusable two-job workflow, pinned
+to a commit, with the three secrets it declares passed by name. Leave its gating `if:`
+intact:
 
 ```yaml
 # .github/workflows/autonomous-fix.yml (excerpt — setup wrote the full file)
@@ -369,13 +383,22 @@ jobs:
       ( github.event.pull_request.head.repo.full_name == github.repository &&
         contains(github.event.pull_request.labels.*.name, 'ai-autofix') &&
         ( /* trusted bot OR OWNER/MEMBER/COLLABORATOR */ ) )
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v2.2.0 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
-      scanning_repo_ref: v2.2.0 # x-release-please-version
-    secrets: inherit
+      scanning_repo_ref: <commit-sha> # v2.2.0 x-release-please-version
+    secrets:
+      AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
+
+Find `<commit-sha>` as in
+[VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). The file
+setup copies still pins a tag and says `secrets: inherit`; replace both. Never use
+`secrets: inherit` here: it hands the called workflow every secret of your repository and
+organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 
 The template grants only `contents: read`, but the reusable workflow's jobs also need
 `pull-requests: write`, `issues: write` and `actions: read`. Add all four as job-level
@@ -437,7 +460,10 @@ The fix-loop is engineered for a **shared workflow with write access across many
 - **Allowlist (not denylist) path gate**, read from the **trusted base config** (a PR can't widen it).
 - **Label opt-in + non-fork + trusted-reviewer** privilege boundary; hard `max_iterations` cap.
 - **`build_verify_cmd`** is base-sourced and runs token-free; keep it a gated, checked-in script.
-- **claude-code-action SHA-pinned** ≥ v1.0.93 (CVE-2025-66032), centralized; every action pinned.
+- **claude-code-action SHA-pinned**, centralized, and `autonomous-fix.yml` pins every action
+  it uses by commit SHA. CVE-2025-66032 is a Claude Code CLI flaw (fixed in CLI 1.0.93),
+  unrelated to the action's own version; see
+  [`VERSION-PINNING.md`](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b).
 
 Full detail and the "what a prompt-injected PR still cannot do" table:
 [`docs/SECURITY-MODEL.md`](SECURITY-MODEL.md). Fix-loop deep dive: [`docs/FIX-LOOP.md`](FIX-LOOP.md).
@@ -458,7 +484,7 @@ Full detail and the "what a prompt-injected PR still cannot do" table:
 | SARIF upload rejected (category collision) | Give this repo a unique `ci.sarif.category_prefix` (with a trailing separator). |
 | Autofix didn't push / no CI re-run | `AUTOFIX_TOKEN` missing or lacks Contents+PR write; or the PR lacked the `ai-autofix` label / a trusted review. |
 | `dotnet format` can't find the solution | Set `languages.csharp.build.solution` (and `working_dir`) in `scan-config.yaml`. |
-| Config silently has no effect | Run `validate-scan-config.py` — the root schema is strict, so a typo like `fx_loop` is rejected. |
+| Config silently has no effect | Run the platform clone's `validate-scan-config.py` with `STRICT=1`; the root schema is strict, so a typo like `fx_loop` is rejected. |
 
 ---
 
@@ -484,7 +510,7 @@ Full detail and the "what a prompt-injected PR still cannot do" table:
 If you'd rather wire it by hand (or audit what the script does), the equivalent steps are:
 
 1. **Config:** copy `templates/scan-config/<tier>.yaml` → your `scan-config.yaml`; set each
-   language you want to `enabled: true` and fill in `build.*`. Validate with `validate-scan-config.py`.
+   language you want to `enabled: true` and fill in `build.*`. Validate with the platform clone's validator and `STRICT=1`.
 2. **Vendor hooks:** copy the platform's `hooks/` dir and the shared `scripts/` you need
    (`scan-and-fix.*`, `check-fix-allowlist.py`, `validate-scan-config.py`) into your repo.
 3. **Local runner:** copy `templates/lefthook/lefthook.yml` → `lefthook.yml` and run `lefthook install`

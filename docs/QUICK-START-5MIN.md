@@ -12,6 +12,13 @@ one-command orchestrator `setup-scan-fix`.
 > The caller workflows that `setup-scan-fix` copies in pin `@v2.0.0`. Move them to the
 > current release before you commit them; see
 > [VERSION-PINNING.md](VERSION-PINNING.md#cicd-workflow-pinning).
+>
+> With the pre-commit runner (`-HooksRunner pre-commit` or `--hooks-runner pre-commit`)
+> or the legacy `setup-scanning` installer, the copied `.pre-commit-config.yaml` pins this
+> repository at `rev: v1.0.0`. That is not a tag here, so your first `git commit` fails.
+> Before that commit, set the `rev:` to the current release, or run
+> `pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning`;
+> see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
 
 ## Prerequisites
 

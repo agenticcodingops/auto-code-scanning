@@ -37,6 +37,11 @@ Every suppression MUST include:
 | `approved_date` | When approved (YYYY-MM-DD) | `2026-02-01` |
 | `expires_date` | Review/renewal date (YYYY-MM-DD) | `2026-08-01` |
 
+Write both dates as quoted strings in the YAML file (`expires_date: "2026-08-01"`). If one
+`expires_date` is unquoted, the CI scan drops every suppression in the file without a
+message, and `validate-suppressions` does not warn; see
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#suppressions-and-baseline).
+
 ### Additional Fields for HIGH/CRITICAL
 
 | Field | Description | Required For |

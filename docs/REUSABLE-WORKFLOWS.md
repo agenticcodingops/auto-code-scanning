@@ -6,10 +6,11 @@ workflow.
 
 The current release is `v2.2.0`. <!-- x-release-please-version -->
 
-Line references such as `reusable-scan.yml:26` mean line 26 of
-`.github/workflows/reusable-scan.yml` at commit
+Every `file:line` reference on this page, such as `reusable-scan.yml:26`, means that line
+at commit
 [`7cd34a5`](https://github.com/agenticcodingops/auto-code-scanning/tree/7cd34a52c823a725575ef3b59ab34e062d1d83dd)
-on `main`. Other paths are relative to the repository root.
+on `main`. Workflow file names such as `reusable-scan.yml` and `autonomous-fix.yml` are
+under `.github/workflows/`; other paths are relative to the repository root.
 
 ## Choose a workflow
 
@@ -17,7 +18,7 @@ on `main`. Other paths are relative to the repository root.
 |---|---|---|---|
 | `reusable-scan.yml` | Scans Terraform with Trivy (misconfigurations and secrets), Checkov, TFLint and, optionally, Snyk IaC. Gates on CRITICAL and HIGH findings, uploads SARIF and comments on the pull request. | `templates/workflows/terraform-scan.yml` | `reusable-scan.yml:5-6`, `160-503` |
 | `code-security-scan.yml` | Scans C# and TypeScript with Semgrep, and the whole checkout with a Trivy secret scan. Uploads SARIF. | `templates/workflows/code-security-scan.yml` | `code-security-scan.yml:5-7`, `126-250` |
-| `autonomous-fix.yml` | Proposes a minimal fix to an opted-in pull request in one job, then re-checks and pushes it in another. Scans nothing itself. | `templates/fix-loop/autonomous-fix.yml` | `autonomous-fix.yml:1-21` |
+| `autonomous-fix.yml` | Proposes a minimal fix to an opted-in pull request in one job. Another job re-checks it with the path gate, a Trivy secret scan of the changed files and the optional build command, then pushes it. It runs no IaC or code scan of its own. | `templates/fix-loop/autonomous-fix.yml` | `autonomous-fix.yml:9-21`, `381-423` |
 
 For a worked Terraform example, see [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).
 
@@ -108,7 +109,7 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 
 | Input | Type | Required | Default | What it does | Source |
 |---|---|---|---|---|---|
-| `terraform-directory` | string | no | `.` | Directory to scan. Trivy's misconfiguration scan, Checkov and Snyk scan it. TFLint runs once in every directory under it that holds a `.tf` file. | `reusable-scan.yml:26-30`, `180`, `209`, `274`, `389-403`, `477`, `488` |
+| `terraform-directory` | string | no | `.` | Directory to scan. Trivy's misconfiguration scan and Snyk scan it. Checkov scans it too, but skips any path that contains `examples` or `tests` (`skip-path` in `configs/<cloud>/.checkov.yaml`). TFLint runs once in every directory under it that holds a `.tf` file. | `reusable-scan.yml:26-30`, `180`, `209`, `274`, `389-403`, `477`, `488`; `configs/azure/.checkov.yaml:52-58` |
 | `cloud-provider` | string | yes | none | `aws`, `azure` or `gcp`. Selects `configs/<cloud>/` for Checkov, TFLint and the policy overlay, and names the metrics artifact. Any other value fails the setup job: there is no `configs/<value>/.checkov.yaml` to copy. | `reusable-scan.yml:31-34`, `130`, `141-143`, `1074` |
 | `severity` | string | no | `CRITICAL,HIGH` | Severity filter for Trivy's misconfiguration scan only. The Trivy secret scan always uses `HIGH,CRITICAL`. Checkov and TFLint do not read it. The gate counts CRITICAL and HIGH whatever you set. | `reusable-scan.yml:35-39`, `181`, `210`, `223`, `236`, `752-756` |
 | `scanning-repo-ref` | string | no | `v1.0.0` | Tag, branch or SHA of `OWNER/auto-code-scanning` to read the configs from. **Always set it**, to the same tag or commit as `uses:`. This repository has no `v1.0.0` tag or branch (checked with `git ls-remote` on 2026-10-03). If your copy has none either, the default fails the setup job. | `reusable-scan.yml:40-44`, `123-131` |
@@ -160,7 +161,11 @@ Grant all three even when you turn the SARIF or comment job off
   `scan-truncation-warning` result, so a run can hold 5,001 results and a file with
   several runs can hold more (`reusable-scan.yml:825-872`).
 - **Pull request comment:** counts per severity, the number suppressed and baselined,
-  and up to 20 active findings, most severe first (`reusable-scan.yml:956-1008`).
+  and up to 20 active findings (`reusable-scan.yml:956-1008`). The table is not sorted
+  most severe first. Its sort maps CRITICAL to `0` and then applies `|| 4`, so CRITICAL
+  findings sort after LOW (`reusable-scan.yml:970-973`). When 20 or more active findings
+  are HIGH, MEDIUM or LOW, no CRITICAL finding appears in the table. Use the CRITICAL
+  count above the table, or `aggregated.json`.
 - **Artifacts kept for 1 day:** `scanning-configs`, `trivy-results`, `checkov-results`,
   `tflint-results`, `snyk-results` (when Snyk runs) and `aggregated-results`
   (`reusable-scan.yml:147-155`, `241-251`, `314-322`, `444-450`, `495-503`, `789-795`).
@@ -195,7 +200,7 @@ never fail it (`reusable-scan.yml:45-49`, `752-756`). How each tool's severity i
 | Tool | Severity used | Source |
 |---|---|---|
 | Trivy | Trivy's own severity. | `reusable-scan.yml:604` |
-| Checkov | The report's `severity`, or MEDIUM when it has none. Open-source Checkov reports no severity without a platform API key (`CHANGELOG.md:46-47`), so Checkov findings are normally MEDIUM and do not block. | `reusable-scan.yml:624-628` |
+| Checkov | The report's `severity`, or MEDIUM when it has none. Open-source Checkov reports no severity without a platform API key (the 2.1.0 entry of `CHANGELOG.md`), so Checkov findings are normally MEDIUM and do not block. | `reusable-scan.yml:624-628` |
 | TFLint | Rule severity `error` becomes HIGH, `warning` MEDIUM, `notice` LOW. A TFLint rule at `error` level counts toward the gate. | `reusable-scan.yml:646`, `653` |
 | Snyk | `critical`, `high`, `medium`, `low` map to the same level. | `reusable-scan.yml:667`, `675` |
 
@@ -228,8 +233,8 @@ when the Checkov or Trivy report is missing or TFLint reported an error.
 #### Checkov uses this repository's config
 
 Checkov reads `configs/<cloud>/.checkov.yaml` from the configs checkout, not a
-`.checkov.yaml` in your repository (`reusable-scan.yml:141`, `275`;
-`CHANGELOG.md:59-60`).
+`.checkov.yaml` in your repository (`reusable-scan.yml:141`, `275`; the 2.1.0 entry of
+`CHANGELOG.md`).
 
 #### Suppressions and baseline
 
@@ -237,13 +242,21 @@ Checkov reads `configs/<cloud>/.checkov.yaml` from the configs checkout, not a
   the sections `trivy_suppressions`, `checkov_suppressions`, `tflint_suppressions` and
   `snyk_suppressions` (`reusable-scan.yml:691`, `699`). An entry counts only while its
   `expires_date` (`YYYY-MM-DD`) is today or later; an entry with no `expires_date` is
-  ignored (`reusable-scan.yml:701-709`). It matches on `rule_id` and `tool` only, so it
-  suppresses that rule in every file; `tool` must be `trivy`, `checkov`, `tflint` or
-  `snyk` (`reusable-scan.yml:706`, `712`). The workflow does not read `file_pattern`. If
-  PyYAML cannot be imported or the file cannot be parsed, no suppression is applied and
-  no error is shown (`reusable-scan.yml:692-719`). Whether the runner image provides
-  PyYAML is UNKNOWN from this repository. For the approval rules, see
-  [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md).
+  ignored (`reusable-scan.yml:701-709`). Quote the date, for example
+  `expires_date: "2026-12-31"`. PyYAML reads an unquoted `2026-12-31` as a date object.
+  `strptime` then raises `TypeError`, which the `except ValueError` at
+  `reusable-scan.yml:708` does not catch, and the `except Exception` at
+  `reusable-scan.yml:718-719` swallows it. So one such entry, in any section, stops every
+  suppression in the file from being applied, and no error is shown. The same happens
+  with any other non-string value, such as a full timestamp. The local
+  `validate-suppressions` hook accepts the unquoted form
+  (`hooks/validate-suppressions.py:89-90`), so it does not warn you. It matches on
+  `rule_id` and `tool` only, so it suppresses that rule in every file; `tool` must be
+  `trivy`, `checkov`, `tflint` or `snyk` (`reusable-scan.yml:706`, `712`). The workflow
+  does not read `file_pattern`. If PyYAML cannot be imported or the file cannot be
+  parsed, no suppression is applied and no error is shown (`reusable-scan.yml:692-719`).
+  Whether the runner image provides PyYAML is UNKNOWN from this repository. For the
+  approval rules, see [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md).
 - **Baseline.** The step reads `.scan-baseline/baseline.json`. A finding is baselined
   when the SHA-256 of `<rule_id>|<file>` is one of its `entries[].hash` values
   (`reusable-scan.yml:724-735`). `scripts/create-baseline.ps1` writes that file in that

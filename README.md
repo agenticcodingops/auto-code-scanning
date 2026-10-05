@@ -209,7 +209,9 @@ sequenceDiagram
 - **Allowlist (not denylist) path gate** from `fix_loop.allowlist_paths` / `gated_paths`.
 - **Activation reads the BASE ref** — a PR can't enable or widen the loop through its own diff.
 - **Label opt-in + non-fork + trusted reviewer** privilege boundary.
-- **claude-code-action SHA-pinned** (≥ v1.0.93, CVE-2025-66032), centralized.
+- **claude-code-action SHA-pinned**, centralized. CVE-2025-66032 is a Claude Code CLI flaw
+  (fixed in CLI 1.0.93), unrelated to the action's own version; see
+  [VERSION-PINNING](docs/VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b).
 
 Plus an **in-session layer** (`templates/claude/`): a `PostToolUse` hook scans each file the
 agent edits and exits 2 to make it **self-correct in the same session**, and a `Stop` hook runs
@@ -222,7 +224,8 @@ Read **[FIX-LOOP](docs/FIX-LOOP.md)** and **[SECURITY-MODEL](docs/SECURITY-MODEL
 ## Consumer ↔ platform
 
 Consumers **reference** the reusable workflows by pinned SHA and **vendor** byte-identical
-copies of `hooks/` + `scripts/` + `schemas/` (so local hooks have no network dependency).
+copies of `hooks/` and the shared `scripts/` (setup does not copy `schemas/`), so local hooks
+have no network dependency.
 Bump one pin + re-vendor to upgrade. See **[VERSION-PINNING](docs/VERSION-PINNING.md)**.
 
 ```mermaid
@@ -233,7 +236,7 @@ flowchart LR
     end
     subgraph cons["Consumer repo"]
         callers["thin caller workflows<br/>uses: …@SHA"]
-        vend["vendored hooks/ scripts/ schemas/<br/>(byte-identical)"]
+        vend["vendored hooks/ and shared scripts/<br/>(byte-identical)"]
         cfg2["scan-config.yaml + lefthook.yml"]
     end
     callers -.->|"uses: @SHA (referenced)"| rw
