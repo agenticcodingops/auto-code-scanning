@@ -126,6 +126,38 @@ flowchart TD
 Reusable `workflow_call` workflows emit **SARIF per tool under distinct categories**
 (post-2025-07 GitHub rule), aggregate + suppress + gate, and post a PR comment.
 
+Inputs for `.github/workflows/reusable-scan.yml`:
+
+| Input | Default | Purpose |
+|---|---|---|
+| `terraform-directory` | `.` | Root directory to scan. |
+| `cloud-provider` | required | `aws`, `azure` or `gcp`. |
+| `severity` | `CRITICAL,HIGH` | Trivy misconfiguration severity filter. |
+| `scanning-repo-ref` | `v1.0.0` | Configs and helper ref; set it to the same released tag or commit as the workflow call. |
+| `fail-on-findings` | `true` | Fail on active CRITICAL or HIGH findings. |
+| `upload-sarif` | `true` | Upload code scanning reports. |
+| `post-pr-comment` | `true` | Post a summary on pull requests. |
+| `apply-suppressions` | `true` | Filter aggregate findings using `.scan-suppressions.yaml`. |
+| `apply-baseline` | `true` | Filter baseline findings from the aggregate. |
+| `enable-snyk` | `false` | Enable the optional IaC scanner. |
+| `upload-metrics` | `true` | Upload the metrics artifact. |
+| `checkov-skip-checks` | `""` | Comma-separated Checkov IDs, no spaces; merged and deduplicated with the cloud config's `skip-check` list. Invalid IDs fail setup. |
+| `checkov-render-iter-count` | `""` | Positive integer exported as `RENDER_EDGES_DUPLICATE_ITER_COUNT` for the Checkov step only; empty leaves it unset. |
+
+For example, add these to the caller's `with:` block when using a release or commit
+that contains the inputs:
+
+```yaml
+checkov-skip-checks: "CKV_AZURE_35,CKV2_AZURE_1,CKV_TF_1"
+checkov-render-iter-count: "20"
+```
+
+The job summary records the effective skip list and render setting. Skipped Checkov
+results, including inline `#checkov:skip=...` suppressions, are removed from SARIF
+before upload. No upgrade note is needed: the empty defaults keep today's scanner
+selection and render behaviour. See [the reusable workflow reference](docs/REUSABLE-WORKFLOWS.md)
+for permissions, outputs and suppression semantics.
+
 ```mermaid
 flowchart TD
     pr["Pull Request / push"] --> callers["thin caller workflows<br/>uses: …@SHA"]
