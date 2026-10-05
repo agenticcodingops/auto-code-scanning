@@ -52,6 +52,26 @@ jobs:
         uses: anthropics/claude-code-action@8cf3482550831fb35a4fc3fbf7ca139cf8028b4c  # v1.0.233
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The review's sub-agents must run in the foreground. When the plugin starts one
+          # in the background, the main agent ends its turn to wait for it, and that ends
+          # the run: green, nothing posted. This repository's #12 showed it (issue #9, run
+          # 37162508814: 13 turns, nothing posted). In trackroutinely the same action and
+          # plugin posted nothing on 3 of 5 runs on 2026-10-04, each with sub-agents in
+          # the background; after this setting (trackroutinely#155) 3 of 3 runs posted,
+          # every sub-agent completing. The variable turns off background tasks for the
+          # whole run, "including the `run_in_background` parameter on Bash and subagent
+          # tools, auto-backgrounding" (https://code.claude.com/docs/en/env-vars).
+          # It goes through `settings`, not the step's `env:`: at the pinned commit the
+          # action's run step passes only the variables it lists. The action merges this
+          # into ~/.claude/settings.json before it installs the plugin
+          # (base-action/src/setup-claude-code-settings.ts). The POSTING RULES ask for the
+          # foreground too, as a second layer.
+          settings: |
+            {
+              "env": {
+                "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
+              }
+            }
           # The action's own token is in GH_TOKEN while the review runs, so text in a PR could
           # make the review disclose it (see claude_args). The action asks for contents: write by
           # default; the review never pushes, so ask for read and a leaked token cannot push code.
@@ -79,6 +99,8 @@ jobs:
             with no other flags and no other file;
             never use redirects, heredocs, pipes or command substitution in gh commands,
             and never use --jq, -q, --template or -t with gh.
+            Run every sub-agent in the foreground: if the Agent tool takes run_in_background, pass false,
+            and never end your turn while a sub-agent is still running.
           # The plugin's own allowed-tools list plus Write (for the --body-file), so its gh and
           # inline-comment calls are not denied. `gh pr comment` is bound to this PR (by number
           # or URL), as the inline-comment tool already is, so injected PR text cannot make the
