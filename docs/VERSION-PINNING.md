@@ -37,11 +37,22 @@ commit as `scanning-repo-ref`, so the configs match the workflow:
 ```yaml
 jobs:
   iac:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@<commit-sha> # vX.Y.Z
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@<commit-sha> # vX.Y.Z
     with:
       cloud-provider: aws
       scanning-repo-ref: <commit-sha>
 ```
+
+`OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
+repository named `auto-code-scanning` under the owner of the calling repository, whatever
+`uses:` names (`reusable-scan.yml:123-131`). That copy must be public (a private copy
+cannot be read) and must hold the ref you pass as `scanning-repo-ref`. Without it, Setup
+Scanning Tools fails, the scan jobs are skipped, Aggregate Results still passes, and the
+pull request comment says "All security checks passed!". Create the copy as in
+[step 2 of TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#2-create-your-owners-copy-of-the-platform).
+Require Setup Scanning Tools as well as Aggregate Results
+([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
 
 Find the commit with `^{commit}`, which peels a tag to the commit it points to:
 
@@ -142,11 +153,15 @@ records it (`CHANGELOG.md:18-31` at commit `7cd34a5`):
   config, and those errors were dropped.
 - **No Checkov finding could reach the pull request comment or the metrics.** The
   Aggregate step read Checkov's JSON at the wrong level.
-- Those releases installed Checkov 2.0.930, the latest TFLint on each run, and
-  Trivy 0.71.0.
+- Every release before `v2.1.0` used Checkov 2.0.930 and the latest TFLint on each run.
+  `v2.0.5` to `v2.0.9` installed Trivy 0.71.0. `v2.0.0` to `v2.0.4` set no Trivy version,
+  so `trivy-action` fell back to its default, Trivy 0.65.0, which fails to install on the
+  runner, and their TFLint job got no config (the 2.0.5 entry of
+  [CHANGELOG.md](../CHANGELOG.md)).
 
-So a passing scan on those releases shows only that Trivy found nothing at the gated
-severities. When you move to `v2.1.0` or later:
+So a passing scan on `v2.0.5` to `v2.0.9` shows only that Trivy found nothing at the
+gated severities. On `v2.0.0` to `v2.0.4`, Trivy did not scan at all, so a passing scan
+shows nothing. When you move to `v2.1.0` or later:
 
 - Expect findings the scan never showed: TFLint warnings and Checkov failed checks in the
   pull request comment, and Checkov alerts in code scanning (`CHANGELOG.md:57-59`).
@@ -198,8 +213,8 @@ The reusable GitHub Actions workflows are pinned the same way, with `@<tag>` (or
 full SHA) — **never `@main`**. Put each call in its own caller workflow file; two calls
 from one caller workflow share a concurrency group (see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)). `OWNER` is the owner of
-your repository: `reusable-scan.yml` reads its configs from `OWNER/auto-code-scanning`
-(see [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
+your repository, and needs its own public copy of `auto-code-scanning`; see
+[Pin the Commit a Release Tag Points To](#pin-the-commit-a-release-tag-points-to).
 
 ```yaml
 # .github/workflows/code-security-scan.yml: application code
@@ -222,29 +237,51 @@ jobs:
 # .github/workflows/autonomous-fix.yml: optional fix loop (Layer B)
 jobs:
   fix:
-    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.2.0 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v2.2.0 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       scanning_repo: OWNER/auto-code-scanning   # defaults to the upstream repository
-      scanning_repo_ref: v2.2.0 # x-release-please-version
-    secrets: inherit
+      scanning_repo_ref: <commit-sha> # v2.2.0 x-release-please-version
+    secrets:
+      AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
 Each excerpt leaves out the triggers and permissions; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input and the permissions each
 call needs.
 
+The fix loop is the one call that pushes to your repository, so pin the commit and pass
+only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:56-65`). The
+shipped `templates/fix-loop/autonomous-fix.yml` says `secrets: inherit`; replace it. Never
+use `secrets: inherit` there: it hands the called workflow every secret of your repository
+and organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
+
 The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) still pin
 `@v2.0.0`, and `setup-scan-fix` copies them unchanged. Move them to the current release
-when you copy them. Dependabot can update the `uses:` line of a reusable workflow
+when you copy them.
+
+The pre-commit templates are stale too. All six,
+`templates/{starter,standard,strict,aws,azure,gcp}/pre-commit-config.yaml`, pin this
+repository at `rev: v1.0.0`, a tag that does not exist. With `--hooks-runner pre-commit`,
+`setup-scan-fix` copies `templates/<tier>/pre-commit-config.yaml` to
+`.pre-commit-config.yaml` when that file does not exist yet
+(`scripts/setup-scan-fix.py:91-95`, `scripts/setup-scan-fix.ps1:100-102`), and
+[SETUP-GUIDE.md](SETUP-GUIDE.md) has you copy the starter template by hand. Change `rev:`
+to the current release before your first commit or `pre-commit run`, because until then
+pre-commit cannot fetch the hooks.
+
+Dependabot can update the `uses:` line of a reusable workflow
 ([GitHub Docs](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)),
 but `scanning-repo-ref` and `scanning_repo_ref` are ordinary inputs: move them yourself,
 as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 
 ## Scanner Versions in the Terraform Scan
 
-`reusable-scan.yml` installs exact scanner versions, so every consumer that pins a
-release scans with the same tools and rules. Pass the same commit as
+`reusable-scan.yml` installs exact versions of Checkov, Trivy and TFLint, so every
+consumer that pins a release scans with the same tools and rules. The optional Snyk job
+does not pin its CLI. Pass the same commit as
 `scanning-repo-ref`, because the TFLint rulesets come from the configs checked out
 at that ref.
 
@@ -255,10 +292,12 @@ at that ref.
 | TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
 | TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
 
-Every run logs the versions it used: the Checkov step's image tag and banner, the
-`Show Trivy version` step, and the `Show TFLint version` step, which lists each
-ruleset. One input still moves without a pin: Trivy downloads its misconfiguration
-checks bundle at run time, and `Show Trivy version` logs that bundle's digest.
+Every run logs the Checkov, Trivy and TFLint versions it used: the Checkov step's image
+tag and banner, the `Show Trivy version` step, and the `Show TFLint version` step, which
+lists each ruleset. Some inputs still move without a pin. Trivy downloads its
+misconfiguration checks bundle at run time, and `Show Trivy version` logs that bundle's
+digest. When `enable-snyk` is `true`, the Snyk job installs the latest `snyk` package
+from npm (`reusable-scan.yml:471-472`), and no step logs its version.
 
 To bump a scanner, change it in one release:
 
@@ -283,46 +322,70 @@ The agentic fix loop calls Anthropic's `claude-code-action`. That action is
 **SHA-pinned, centrally**, so all consumers inherit a single safe version:
 
 - **Pin**: `anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102` (**v1.0.148**)
-- **Why this version**: it is `>= 1.0.93`, which fixes
-  **CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3**.
+- **Why this version is safe**: CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 is a flaw in the
+  Claude Code CLI (npm `@anthropic-ai/claude-code`, fixed in 1.0.93), not in
+  `claude-code-action`. The two version numbers are unrelated. The pinned action,
+  v1.0.148, locks `@anthropic-ai/claude-agent-sdk` 0.3.177 in its `bun.lock`, and that
+  SDK release matches Claude Code 2.1.177, well past the fix.
 
-This pin lives in two places that **must stay in sync**:
-
-1. **Source of truth**: `.github/workflows/autonomous-fix.yml` (the reusable
-   workflow that actually invokes the action).
-2. **Mirror**: `fix_loop.claude_code_action_ref` in `scan-config.yaml`.
+The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 242;
+the header comment at line 27 names the version). It is mirrored as
+`fix_loop.claude_code_action_ref` in `scan-config.yaml` and in
+`templates/scan-config/starter.yaml`, `standard.yaml` and `strict.yaml`, which
+`setup-scan-fix` copies into a new adopter's `scan-config.yaml`. Nothing checks that
+these agree, and nothing reads the mirror at run time; the schema checks only its format.
 
 The config **schema enforces a SHA pin**: `schemas/scan-config.schema.json`
 constrains `claude_code_action_ref` to the pattern
-`^anthropics/claude-code-action@[0-9a-f]{40}$`, so a tag-only or `@main` ref is
-**rejected** by `validate-scan-config`. Because the action is referenced only from
-the reusable workflow, every consumer that `uses:` `autonomous-fix.yml@v2.0.0`
-gets the safe pin automatically — there is nothing for the consumer to pin
-themselves.
+`^anthropics/claude-code-action@[0-9a-f]{40}$`, so `validate-scan-config` rejects a
+tag-only or `@main` ref when it can run the check. PyYAML and `jsonschema` must be
+installed, and the validator must find `schemas/scan-config.schema.json`. The copy that
+setup puts in an adopter's `scripts/` cannot find it, because setup does not copy
+`schemas/`. Otherwise it prints a warning and exits 0, unless `STRICT=1` is set, which
+turns the skip into a failure (`scripts/validate-scan-config.py:40-60`). No CI workflow
+runs it.
+
+Because the action is referenced only from the reusable workflow, every consumer that
+`uses:` `autonomous-fix.yml@v2.0.0` gets the safe pin automatically — there is nothing
+for the consumer to pin themselves.
 
 ### Bumping the `claude-code-action` Pin Deliberately
 
-To move to a newer (or different) `claude-code-action` release, change it in **both**
-places together, in the same commit, then re-pin consumers to the new tag:
+To move to a newer (or different) `claude-code-action` release, change it in every
+place listed above together, in the same commit, then re-pin consumers to the new tag:
 
-1. Update the `uses:` SHA (and the trailing `# vX.Y.Z` comment) in
+1. Update the `uses:` SHA, the trailing `# vX.Y.Z` comment and the header comment in
    `.github/workflows/autonomous-fix.yml`.
-2. Update `fix_loop.claude_code_action_ref` in `scan-config.yaml` to the **same**
-   40-char SHA.
-3. Run `validate-scan-config` (it will reject a non-SHA ref), merge the change under a
-   `fix:` or `feat:` PR title, then merge the release PR that follows. Never tag by hand.
-4. Consumers bump their workflow `uses:` pin to the commit of the new release tag.
+2. Update `fix_loop.claude_code_action_ref` to the **same** 40-char SHA in
+   `scan-config.yaml` and in the three files under `templates/scan-config/`.
+3. Run `git grep -n -e <old-sha> -e <old-version>` and update every hit except history
+   (`CHANGELOG.md`, `MIGRATION-ANALYSIS.md`, `ROADMAP.md`). Today that also covers this
+   page, `FIX-LOOP.md`, `consumer-repo-setup-guide.md`, `ADOPTION-PLAYBOOK.md`,
+   `AI-AGENT-GUIDE.md`, `SECURITY-MODEL.md` and `TESTING-GUIDE-CONSUMING-REPO.md`.
+4. With `pyyaml` and `jsonschema` installed, run
+   `STRICT=1 python scripts/validate-scan-config.py <file>` on `scan-config.yaml` and on
+   each file in `templates/scan-config/`. Each must print `VALID`. This rejects a non-SHA
+   ref. The pre-commit hook checks only the root `scan-config.yaml`.
+5. Merge the change under a `fix:` or `feat:` PR title, then merge the release PR that
+   follows. Never tag by hand.
+6. Consumers bump their workflow `uses:` pin to the commit of the new release tag.
 
-Keep the new version `>= 1.0.93`. Never downgrade below the CVE-2025-66032 fix.
+When you bump, check the `@anthropic-ai/claude-agent-sdk` version locked in that action
+release's `bun.lock`, and the Claude Code version that SDK release matches (the
+`claudeCodeVersion` field in its package metadata on npm). It must be 1.0.93 or later.
+The action's own version number does not tell you this.
 
 ## Third-Party Action Pinning (This Repo)
 
-Every third-party GitHub Action used by **this repo's own** workflows is SHA-pinned
-(with a trailing `# vX.Y.Z` comment for readability) — for example
-`actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2` and
-`anthropics/claude-code-action@d5726de... # v1.0.148`. SHA pins protect against a
-tag being moved to malicious code. Apply the same discipline in your own
-workflows when you copy the caller templates.
+Every workflow in `.github/workflows/` SHA-pins the third-party actions it uses, with a
+trailing `# vX.Y.Z` comment for readability, except two: `claude.yml`
+(`actions/checkout@v4`, `anthropics/claude-code-action@v1`) and `semgrep.yml`
+(`actions/checkout@v6`). `semgrep.yml` also runs the `semgrep/semgrep` container image
+with no tag or digest. For example, the reusable workflows use
+`actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2`, and
+`autonomous-fix.yml` uses `anthropics/claude-code-action@d5726de... # v1.0.148`. SHA pins
+protect against a tag being moved to malicious code. Apply the same discipline in your
+own workflows when you copy the caller templates.
 
 ## Recommended Practices
 
@@ -349,8 +412,10 @@ cat version.txt
 
 ## Rollback
 
-To roll back a workflow caller, revert the bump commit; see the Rollback section of
-[BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#rollback).
+To roll back a workflow caller, move every pin you changed back to the previous commit, as
+in the Rollback section of [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#rollback). Revert the bump
+commit only if it changed nothing but pins: after a squash merge it also undoes the
+Terraform fixes made in the same pull request.
 
 If a pre-commit upgrade causes issues:
 

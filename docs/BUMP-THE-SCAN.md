@@ -5,10 +5,11 @@ what changes in its results.
 
 The current release is `v2.2.0`. <!-- x-release-please-version -->
 
-Line references such as `reusable-scan.yml:44` mean that line of
-`.github/workflows/reusable-scan.yml` at commit
+Every `file:line` reference on this page, such as `reusable-scan.yml:44`, means that line
+at commit
 [`7cd34a5`](https://github.com/agenticcodingops/auto-code-scanning/tree/7cd34a52c823a725575ef3b59ab34e062d1d83dd)
-on `main`.
+on `main`. Workflow file names such as `reusable-scan.yml` and `autonomous-fix.yml` are
+under `.github/workflows/`; other paths are relative to the repository root.
 
 ## Purpose
 
@@ -52,9 +53,23 @@ pull request. **CI** is GitHub Actions.
 - **Who:** Operator
 - **Operator STOP:** no
 
-Read the `CHANGELOG.md` entries between your current pin and the target release. Note
-every changed scanner version, config and rule. The scanner versions of the current
-release are in
+In a clone of this platform, list what the scan installs and reads between your current
+pin and the target release, and note every changed scanner version, config and rule:
+
+```bash
+git fetch --tags origin
+git diff <current-pin> vX.Y.Z -- .github/workflows/reusable-scan.yml configs/
+```
+
+`CHANGELOG.md` is not enough: release-please leaves out `ci:`, `chore:` and `build:`
+commits (`release-please-config.json:12-18`), and scanner pins have been changed under
+`ci(scan):`.
+
+For a target of `v2.2.0` or later, the tag's Release Verification run
+(`release-verify.yml`) logs the Checkov, Trivy and TFLint versions and the azurerm
+ruleset. The aws and google ruleset versions are the `plugin` blocks in
+`configs/<cloud>/.tflint.hcl` at the target commit (step 2). The scanner versions of the
+current release are also in
 [VERSION-PINNING.md](VERSION-PINNING.md#scanner-versions-in-the-terraform-scan).
 
 ### 2. Find the commit of the target release
@@ -90,9 +105,10 @@ gh run list --workflow terraform-scan.yml --event workflow_dispatch \
   --commit "$(git rev-parse "origin/$BRANCH")" --limit 5 --json databaseId,createdAt,status
 gh run watch <run-id>
 gh run download <run-id> --name aggregated-results --dir before
+# LC_ALL=C sorts by byte, so step 6 can compare this file from any shell.
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
        | [.severity, .tool, .rule_id, .file] | @tsv' before/aggregated.json \
-  | sort -u > before.tsv
+  | LC_ALL=C sort -u > before.tsv
 ```
 
 `aggregated.json` lists every finding with `suppressed` and `baseline` flags
@@ -134,6 +150,17 @@ grep -n -A1 'auto-code-scanning' .pre-commit-config.yaml 2>/dev/null   # the rev
 That includes `scanning_repo_ref` in an `autonomous-fix.yml` caller
 (`autonomous-fix.yml:51-55`) and a pre-commit `rev:`.
 
+If an `autonomous-fix.yml` caller is among the pins, compare
+`.github/workflows/autonomous-fix.yml`, `scripts/check-fix-allowlist.py` and
+`templates/fix-loop/autonomous-fix.yml` between the old and the new commit. For example,
+run `git diff <old-sha> <new-sha> -- <those paths>` in a clone of your owner's copy, or
+use GitHub's compare view. If any of them changed, check each job's `permissions:`
+against the grants on your caller's job, because a called workflow cannot raise them. Have
+the Reviewer read that diff in step 8. After the merge, repeat the fix-loop checks in
+[CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#verify). If you would rather not review the
+fix loop in a scan bump, move its pins in a separate pull request and do these checks
+there.
+
 ### 5. Open the pull request
 
 - **Who:** Operator, then CI
@@ -152,13 +179,19 @@ Take the scan run of the pull request, and compare it with the run from step 3:
 # The pull request run for the commit you pushed in step 5.
 gh run list --workflow terraform-scan.yml --event pull_request \
   --commit "$(git rev-parse HEAD)" --limit 5 --json databaseId,createdAt,status
+gh run watch <run-id>   # the artifact is uploaded even when the gate fails
 gh run download <run-id> --name aggregated-results --dir after
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
        | [.severity, .tool, .rule_id, .file] | @tsv' after/aggregated.json \
-  | sort -u > after.tsv
-comm -13 before.tsv after.tsv > new.tsv     # failing only after the bump
-comm -23 before.tsv after.tsv > gone.tsv    # failing only before the bump
+  | LC_ALL=C sort -u > after.tsv
+LC_ALL=C comm -13 before.tsv after.tsv > new.tsv     # failing only after the bump
+LC_ALL=C comm -23 before.tsv after.tsv > gone.tsv    # failing only before the bump
 ```
+
+`comm` needs both files sorted in the collation it runs under, so keep `LC_ALL=C` on every
+`sort` and `comm`. If you made `before.tsv` without it, re-sort it first with
+`LC_ALL=C sort -u -o before.tsv before.tsv`. If `comm` prints "not in sorted order", do
+not use its output. Download the artifact within a day of the run: it is kept for one day.
 
 Paste `new.tsv` and `gone.tsv` into the pull request description, with the scanner
 versions from both runs' job summaries. Compare the `trivy-secrets` alerts too.
@@ -167,7 +200,7 @@ versions from both runs' job summaries. Compare the `trivy-secrets` alerts too.
 
 - **Who:** Operator and Reviewer
 - **Operator STOP:** yes. Do not merge until every line of `new.tsv` has a recorded
-  decision.
+  decision and every line of `gone.tsv` has a recorded reason.
 
 Only CRITICAL and HIGH findings fail the scan, and only while the caller's
 `fail-on-findings` input is `true`, its default (`reusable-scan.yml:45-49`, `752-756`).
@@ -195,40 +228,102 @@ How each option works in the scan:
 | Option | Effect | Source |
 |---|---|---|
 | Fix the Terraform | The finding disappears from the next run. | none |
-| Baseline | Hides that rule in that one file. Add an entry whose `hash` is the SHA-256 of `<rule_id>\|<file>` to `.scan-baseline/baseline.json`. | `reusable-scan.yml:724-735` |
-| Suppress | Hides that rule for that tool in **every** file, until `expires_date`. Add it to `.scan-suppressions.yaml`; HIGH and CRITICAL need security approval under [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md). | `reusable-scan.yml:688-719`; `configs/common/.scan-suppressions.yaml:8-30` |
+| Baseline | Hides that rule in that one file. Add an entry whose `hash` is the SHA-256 of `<rule_id>\|<file>` to `.scan-baseline/baseline.json`; the format is below. | `reusable-scan.yml:724-735` |
+| Suppress | Hides that rule for that tool in **every** file, until `expires_date`. Add it to `.scan-suppressions.yaml`; HIGH and CRITICAL need security approval under [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md). Quote the date; see below. | `reusable-scan.yml:688-719`; `configs/common/.scan-suppressions.yaml:8-30` |
 
 Prefer a fix, then a baseline, then a suppression: a suppression is the widest.
+
+**Baseline format.** `.scan-baseline/baseline.json` must be a JSON object with an
+`entries` array, and each entry needs a `hash`. Start a new file as `{"entries": []}`. A
+top-level array makes the Aggregate step crash. An entry without `hash` makes it ignore
+the whole file (`reusable-scan.yml:724-735`). The hash is the lowercase hex SHA-256 of
+`<rule_id>|<file>` with no trailing newline. Copy both values exactly from the `rule_id`
+and `file` columns of `new.tsv`, because Checkov paths there start with `/`:
+
+```bash
+printf '%s|%s' '<rule_id>' '<file>' | sha256sum | cut -d' ' -f1
+```
+
+**Suppression format.** Quote the date (`expires_date: "YYYY-MM-DD"`). Set `tool:` on
+every entry to the scanner exactly as the `tool` column of `new.tsv` shows it (`trivy`,
+`checkov`, `tflint` or `snyk`). The scan matches on `rule_id` and `tool` only and ignores
+the section name. One unquoted date makes the scan drop every suppression in the file
+without a message (`reusable-scan.yml:695-719`). `scripts/validate-suppressions.py` still
+passes such a file, so a clean validation does not prove the scan applies it. Check the
+**Suppressions applied** count in the next run's pull request comment, or
+`suppressions_applied` in `aggregated.json`. See
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#suppressions-and-baseline).
+
+**Approval.** A baseline never expires, and the scan never checks who approved it
+(`reusable-scan.yml:724-735`). For a real CRITICAL or HIGH problem you cannot fix now,
+first get the approval that
+[SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md#by-severity) requires for a
+suppression of that severity. Give the tracking issue a review date no later than that
+severity's maximum duration (HIGH three months, CRITICAL one month). Remove the baseline
+entry when the issue closes.
 
 ### 8. Review and merge
 
 - **Who:** Reviewer, then Operator
 - **Operator STOP:** no
 
-The Reviewer checks that both pins name the same commit and that every new failing check
-has a decision. The Operator merges. CI runs the scan on the default branch.
+The Reviewer checks that both pins name the same commit, that every new failing check
+has a decision and that every line of `gone.tsv` has a reason. The Operator merges. CI
+runs the scan on the default branch.
 
 ## Verify
 
 - The pull request run used the new versions: its Trivy and TFLint job summaries, and
-  the Checkov banner in its log, match the versions in the target release's
-  `CHANGELOG.md` entry. For the current release they are also listed in
-  [VERSION-PINNING.md](VERSION-PINNING.md#scanner-versions-in-the-terraform-scan).
+  the Checkov banner in its log, match the scanner versions pinned at the target release.
+  Those versions are listed in
+  [VERSION-PINNING.md](VERSION-PINNING.md#scanner-versions-in-the-terraform-scan) at that
+  release, and recorded by the target tag's Release Verification run (the Trivy and
+  TFLint job summaries, and the Checkov banner in its log). That run covers the azurerm
+  ruleset only: for your cloud's TFLint ruleset, read `configs/<cloud>/.tflint.hcl` at the
+  target commit. For `v2.1.0`, its `CHANGELOG.md` entry lists them. Later entries are
+  generated from commit subjects, so they name a scanner version only when a commit
+  subject does.
 - The Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan, TFLint Scan and Aggregate
   Results jobs all passed. Aggregate runs even when a scan job fails
   (`reusable-scan.yml:514`), so check every job.
 - The `checkov-results` artifact contains `checkov-results.json`. Before `v2.1.0`, Checkov
-  wrote no report (`CHANGELOG.md:23-25`).
+  wrote no report (the 2.1.0 entry of `CHANGELOG.md`).
+- The Trivy and TFLint reports are usable. The scan jobs stay green when a scanner fails
+  (`reusable-scan.yml:187`, `442`). The artifacts are kept for one day
+  (`reusable-scan.yml:251`, `450`). Use the pull request run from step 6:
+
+  ```bash
+  gh run download <run-id> --name trivy-results --dir after-trivy
+  jq -e 'has("SchemaVersion")' after-trivy/trivy-iac-results.json >/dev/null   # do not print trivy-secrets-results.json
+  gh run download <run-id> --name tflint-results --dir after-tflint
+  jq -e '(.errors | length) == 0' after-tflint/tflint-results.json >/dev/null
+  ```
+
+  These are the checks the platform's self-test makes
+  (`reusable-scan-self-test.yml:91-119`). To run them on every pull request, add a job
+  like it to your caller (see
+  [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#a-green-job-does-not-prove-its-scanner-ran)).
+- If every finding of one tool moved to `gone.tsv`, treat that scanner as broken until its
+  log and report show it ran and Aggregate read its findings.
 - The first run on the default branch after the merge passed.
 
 ## Rollback
 
 - **Who:** Operator, with Reviewer approval
 
-1. Revert the bump commit in a new pull request: `git revert <bump-commit>`. Both pins
-   move back together.
+1. On a new branch, move every pin you changed in step 4 back to the previous commit:
+   `uses:`, `scanning-repo-ref`, any `autonomous-fix.yml` caller's `uses:` and
+   `scanning_repo_ref`, and a pre-commit `rev:`. Either `git revert` the original pin
+   commits (still in your clone, or fetch them with `git fetch origin pull/<N>/head`) or
+   edit the pins by hand. Revert the squash commit, or use the pull request's Revert
+   button, only if the bump pull request changed nothing but pins: both also undo the
+   Terraform fixes and baseline entries made in step 7.
 2. Remove any baseline or suppression entries you added only for the new release.
-3. Let CI run the scan on the pull request, check it matches `before.tsv`, and merge.
+3. Check that the pull request run used the previous release's versions (job summaries
+   and the Checkov banner). Its failed checks need not match `before.tsv`: Terraform
+   merged since the bump, including the step 7 fixes, changes them. Record any
+   difference.
+4. The Reviewer approves; the Operator merges.
 
 ## References
 

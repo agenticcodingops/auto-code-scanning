@@ -5,10 +5,11 @@ module.
 
 The current release is `v2.2.0`. <!-- x-release-please-version -->
 
-Line references such as `reusable-scan.yml:126` mean that line of
-`.github/workflows/reusable-scan.yml` at commit
+Every `file:line` reference on this page, such as `reusable-scan.yml:126`, means that line
+at commit
 [`7cd34a5`](https://github.com/agenticcodingops/auto-code-scanning/tree/7cd34a52c823a725575ef3b59ab34e062d1d83dd)
-on `main`.
+on `main`. Workflow file names such as `reusable-scan.yml` are under `.github/workflows/`;
+other paths are relative to the repository root.
 
 ## Purpose
 
@@ -35,8 +36,10 @@ finding.
   [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
   Step 2 creates it.
 - Code scanning available on the module repository, if you want the SARIF results there.
-  A failed upload does not fail the job; `sarif-uploaded` is `false` only when all four
-  uploads fail (`reusable-scan.yml:875-922`).
+  A failed upload does not fail the job; `sarif-uploaded` is `false` when no upload
+  succeeds (`reusable-scan.yml:875-922`). By default three uploads run: the Snyk upload is
+  skipped unless the Snyk job, which needs `enable-snyk: true`, wrote a SARIF file
+  (`reusable-scan.yml:70-74`, `904`).
 
 This example uses the layout below. `OWNER` stands for your user or organisation.
 
@@ -54,9 +57,12 @@ This example uses the layout below. `OWNER` stands for your user or organisation
         └── main.tf
 ```
 
-With `terraform-directory: "."`, Trivy and Checkov scan the whole tree, and TFLint runs
-once in each of `.`, `modules/network` and `examples/basic`
-(`reusable-scan.yml:180`, `274`, `397-403`). Trivy skips `.terraform`, `node_modules` and
+With `terraform-directory: "."`, Trivy scans the whole tree. Checkov scans it too, except
+any path that contains `examples` or `tests`: the platform's `configs/<cloud>/.checkov.yaml`
+lists both under `skip-path`, and Checkov reads each entry as a regular expression
+(`configs/azure/.checkov.yaml:52-58`). So `examples/basic` gets Trivy and TFLint but no
+Checkov. TFLint runs once in each of `.`, `modules/network` and `examples/basic`
+(`reusable-scan.yml:180`, `274-275`, `397-403`). Trivy skips `.terraform`, `node_modules` and
 `.git` (`reusable-scan.yml:186`). Checkov does not download external modules
 (`reusable-scan.yml:280`).
 
@@ -147,9 +153,12 @@ jobs:
 - **Operator STOP:** no
 
 Push the branch and open a pull request. CI runs the scan. Save the findings with the
-commands in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#3-record-the-failed-checks-before-the-bump),
-using this pull request's run. The `aggregated-results` artifact is kept for one day
-(`reusable-scan.yml:795`).
+commands in
+[BUMP-THE-SCAN.md step 6](BUMP-THE-SCAN.md#6-record-the-failed-checks-after-the-bump):
+`gh run list --event pull_request ...` for this pull request's run, then `gh run download`
+and `jq`. Write to `first/` and `first.tsv` instead of `after/` and `after.tsv`, and skip
+the two `comm` lines, since there is no earlier run to compare. The `aggregated-results`
+artifact is kept for one day (`reusable-scan.yml:795`).
 
 ### 5. Decide how each finding is handled
 

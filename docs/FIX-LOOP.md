@@ -129,7 +129,9 @@ Key enforcement (all mechanical, independent of the prompt):
 - **Tighten/loosen scope** by editing `allowlist_paths` / `gated_paths` (config is gated, so the
   loop can't widen its own scope).
 - **Bump the agent version** deliberately: change `fix_loop.claude_code_action_ref` *and* the pin
-  in `autonomous-fix.yml` together (keep ≥ v1.0.93). See [VERSION-PINNING.md](VERSION-PINNING.md).
+  in `autonomous-fix.yml` together, and check that the release bundles Claude Code 1.0.93 or
+  later (CVE-2025-66032 is a CLI flaw; the action's own version number does not tell you).
+  See [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) for every file to change.
 
 ## 6. Limits & non-goals
 

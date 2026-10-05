@@ -26,8 +26,9 @@ Everything below is about LAYER B. Layer A only ever *reports*.
 An autonomous agent becomes dangerous when one execution context holds all three of:
 
 1. **Untrusted input** — PR titles, diffs, review comments, issue comments. On a
-   public repo *anyone* can write these. CVE-2025-66032 (GHSA-xq4m-mc3c-vvg3) showed
-   a malicious comment can poison an agent's instructions.
+   public repo *anyone* can write these. CVE-2025-66032 (GHSA-xq4m-mc3c-vvg3), a
+   command-validation bypass in the Claude Code CLI, needed only untrusted content in the
+   agent's context to run arbitrary code.
 2. **Write credentials** — a token that can push code or change CI.
 3. **Egress** — the ability to make outbound network calls (exfiltration).
 
@@ -115,11 +116,15 @@ Plus a hard **`max_iterations`** cap (`.fix-attempts`, default 3) → `needs-hum
 
 ## 6. Supply-chain pinning
 
-- **`claude-code-action` is SHA-pinned to `v1.0.148`** (≥ `1.0.93`, which fixes
-  CVE-2025-66032). The pin is **centralized**: it lives in `autonomous-fix.yml` and is
-  mirrored in `fix_loop.claude_code_action_ref`, so every consumer inherits the safe
-  version. The config schema rejects a non-SHA ref.
-- **Every third-party action in this repo is SHA-pinned** (not `@v4`/`@master`).
+- **`claude-code-action` is SHA-pinned to `v1.0.148`**. CVE-2025-66032 is a Claude Code
+  CLI flaw (fixed in CLI 1.0.93), unrelated to the action's own version; see
+  [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b). The pin is **centralized**: it lives in
+  `autonomous-fix.yml` and is mirrored in `fix_loop.claude_code_action_ref`, so every
+  consumer inherits the safe version. The config schema rejects a non-SHA ref when the
+  validator runs with its schema (see VERSION-PINNING.md).
+- **Every workflow in this repo SHA-pins the third-party actions it uses** (not
+  `@v4`/`@master`), except `claude.yml` and `semgrep.yml`; see
+  [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo).
 - **Consumers must pin `uses:` to `@vX.Y.Z` (or a SHA) — never `@main`.** All templates
   and docs ship pinned; `VERSION-PINNING.md` explains how to bump deliberately.
 
@@ -158,7 +163,7 @@ and somehow the `ai-autofix` label is present. They **still cannot**:
 | Smuggle a secret into committed code | `apply-and-push` re-scans changed files with Trivy and **fails closed** on a CRITICAL/HIGH secret. |
 | Break the build to slip something through | `build_verify_cmd` must pass before any push. |
 | Run forever / brute-force the gate | Hard `max_iterations` cap → `needs-human-review`. |
-| Swap the action for a malicious version | `claude-code-action` and every action are **SHA-pinned**. |
+| Swap the action for a malicious version | `claude-code-action` and every other action in `autonomous-fix.yml` are **SHA-pinned**. |
 | Race the vetted SHA (TOCTOU) | `apply-and-push` re-checks out the **exact** analyzed SHA; if the branch advanced, the push is rejected. |
 | Trigger from a fork | The caller gate requires a **non-fork, same-repo** head. |
 | Trigger without opt-in | No `ai-autofix` label → the caller `if:` is false → nothing runs. |

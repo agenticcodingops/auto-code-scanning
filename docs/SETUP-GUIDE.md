@@ -77,6 +77,13 @@ python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard -
 The caller workflows it copies pin `@v2.0.0`. Move them to the current release before
 you commit them, and keep them pinned.
 
+With the pre-commit runner (`-HooksRunner pre-commit` or `--hooks-runner pre-commit`), the
+copied `.pre-commit-config.yaml` pins this repository at `rev: v1.0.0`. That is not a tag
+here, so your first `git commit` fails. Before that commit, set the `rev:` to the current
+release, or run
+`pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning`;
+see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
+
 ### Local Runner: Lefthook (default) vs pre-commit
 
 **Lefthook** is the default: a single Go binary with native Windows support
@@ -227,7 +234,8 @@ Uses Scoop and pip for tool installation. No administrator privileges required.
    cp configs/aws/policy-overlay.yaml .scanning/configs/
    ```
 
-3. Copy a tier template:
+3. Copy a tier template, then set the `rev:` of this repository in it to the current
+   release (the template pins `v1.0.0`, which is not a tag here):
    ```bash
    cp templates/starter/pre-commit-config.yaml .pre-commit-config.yaml
    ```
@@ -357,9 +365,12 @@ owner, at `scanning-repo-ref`; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
 
 The fix-loop caller (`autonomous-fix.yml`) runs only when a PR carries the
-`ai-autofix` label and a trusted review/comment triggers it; it passes
-`AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `secrets: inherit`. See
-[SECURITY-MODEL.md](SECURITY-MODEL.md) for the privilege boundary,
+`ai-autofix` label and a trusted review/comment triggers it. The template it copies pins a
+tag and says `secrets: inherit`; replace both. Pin the commit, and pass the three secrets
+`autonomous-fix.yml` declares (`AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` and
+`CLAUDE_CODE_OAUTH_TOKEN`) by name, as in
+[step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
+See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the privilege boundary,
 [CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md) for end-to-end fix-loop setup, and
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input, output and permission.
 
