@@ -1,12 +1,12 @@
 # Automated Test Prompt for Consuming Repos
 
-Copy and paste the prompt below into a new session opened in your **consuming Terraform repo** workspace directory (e.g., `azure-wordpress`).
+Copy and paste the prompt below into a new session opened in your **consuming Terraform repo** workspace directory.
 
 ## Prerequisites
 
 Before running, ensure the scanning repo is cloned locally:
 ```
-git clone https://github.com/agenticcodingops/auto-code-scanning "C:\Projects\azure-wordpress\auto-code-scanning"
+git clone https://github.com/agenticcodingops/auto-code-scanning "<path-to-scanning-repo>"
 ```
 
 Update the path in the prompt below if your scanning repo is in a different location.
@@ -16,7 +16,7 @@ Update the path in the prompt below if your scanning repo is in a different loca
 ## Prompt
 
 ```
-I want you to test the auto-code-scanning solution on this repository. The scanning solution repo is located at "C:\Projects\azure-wordpress\auto-code-scanning" (tagged v1.0.0).
+I want you to test the auto-code-scanning solution on this repository. The scanning solution repo is located at "<path-to-scanning-repo>".
 
 Work autonomously through ALL test steps below. Do NOT ask me questions -- just run each test, record the results, and move to the next. If a test fails, document the failure and continue. At the end, give me a summary table.
 
@@ -31,7 +31,7 @@ IMPORTANT: Create a test branch first. Do NOT modify the main branch. Clean up a
 
 Run the setup script with `--force` to overwrite the existing pre-commit config:
 ```
-python "C:\Projects\azure-wordpress\auto-code-scanning\scripts\setup-scanning.py" --cloud-provider aws --tier standard --force
+python "<path-to-scanning-repo>\scripts\setup-scanning.py" --cloud-provider aws --tier standard --force
 ```
 Verify:
 - Exit code is 0
@@ -69,7 +69,7 @@ rm test-insecure.tf
 
 Run scan.py with trivy only:
 ```
-python "C:\Projects\azure-wordpress\auto-code-scanning\scripts\scan.py" --cloud-provider aws --tools trivy --format json --output-file .scanning/last-scan.json --severity CRITICAL,HIGH
+python "<path-to-scanning-repo>\scripts\scan.py" --cloud-provider aws --tools trivy --format json --output-file .scanning/last-scan.json --severity CRITICAL,HIGH
 ```
 Verify: JSON output created, has `scan_id`, `tools_executed: ["trivy"]`, findings array with severity breakdown.
 
@@ -77,7 +77,7 @@ Verify: JSON output created, has `scan_id`, `tools_executed: ["trivy"]`, finding
 
 For large repos, scan a specific directory to avoid timeouts:
 ```
-python "C:\Projects\azure-wordpress\auto-code-scanning\scripts\scan.py" terraform/modules/aws/storage/s3 --cloud-provider aws --tools checkov --format json --output-file .scanning/last-scan-checkov.json
+python "<path-to-scanning-repo>\scripts\scan.py" terraform/modules/aws/storage/s3 --cloud-provider aws --tools checkov --format json --output-file .scanning/last-scan-checkov.json
 ```
 Verify: checkov runs (not "command not found"), `tools_executed: ["checkov"]`, findings reported.
 
@@ -85,7 +85,7 @@ Verify: checkov runs (not "command not found"), `tools_executed: ["checkov"]`, f
 
 Validate the suppression file copied during setup:
 ```
-python "C:\Projects\azure-wordpress\auto-code-scanning\scripts\validate-suppressions.py"
+python "<path-to-scanning-repo>\scripts\validate-suppressions.py"
 ```
 Record: exit code, validation message.
 
@@ -160,14 +160,14 @@ The agent will:
 
 ---
 
-## Expected Results (azure-wordpress, 2026-02-12)
+## Expected Results (reference run, 2026-02-12)
 
 | # | Test | Result | Details |
 |---|------|--------|---------|
 | 1 | Setup | **PASS** | 10 configs copied, 5/5 tools verified |
-| 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS, gitleaks 1 HIGH, trivy-iac-critical 15 CRITICAL |
+| 2 | Pre-commit hooks | **PASS** | trivy-secrets PASS; gitleaks and trivy-iac-critical reported findings, as expected |
 | 3 | Insecure commit blocked | **PASS** | Gitleaks blocked fake AWS key |
-| 4 | scan.py + trivy | **PASS** | 92 findings (15 CRITICAL, 77 HIGH) |
+| 4 | scan.py + trivy | **PASS** | Findings reported (counts not published) |
 | 5 | scan.py + checkov | **PASS** | 170 passed, 21 failed on S3 module |
 | 6 | Suppressions | **PASS** | Valid YAML, 0 entries |
 | 7 | Checkov direct | **PASS** | 170/21 pass/fail, no config errors |

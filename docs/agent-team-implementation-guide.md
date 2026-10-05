@@ -336,7 +336,7 @@ export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 Open a new Claude Code session in the repository directory:
 
 ```bash
-cd "C:\Projects\azure-wordpress\auto-code-scanning"
+cd "<path-to-scanning-repo>"
 claude
 ```
 

@@ -1,6 +1,6 @@
 # ============================================================================
 # SECURITY SCANNING WORKFLOW
-# azure-wordpress
+# auto-code-scanning
 #
 # This workflow runs security scans on Terraform code in CI/CD pipeline.
 # Scans run on every PR and push to main branch.
