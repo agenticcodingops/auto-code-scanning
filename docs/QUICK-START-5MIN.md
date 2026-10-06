@@ -8,7 +8,7 @@ runs locally via **Lefthook** (default) or **pre-commit**, and can open an
 optional autonomous **fix-loop** on opted-in PRs. The fastest way in is the
 one-command orchestrator `setup-scan-fix`.
 
-> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.2.0`. <!-- x-release-please-version -->
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.3.0`. <!-- x-release-please-version -->
 > The caller workflows that `setup-scan-fix` copies in pin `@v2.0.0`. Move them to the
 > current release before you commit them; see
 > [VERSION-PINNING.md](VERSION-PINNING.md#cicd-workflow-pinning).

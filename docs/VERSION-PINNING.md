@@ -2,7 +2,7 @@
 
 How to manage versions of auto-code-scanning in your repository.
 
-The current release is **`v2.2.0`**. <!-- x-release-please-version -->
+The current release is **`v2.3.0`**. <!-- x-release-please-version -->
 
 > **On a release before `v2.1.0`?** Your Terraform scan (`reusable-scan.yml`) did not run Checkov, and TFLint
 > linted at most one directory. Read
@@ -18,7 +18,7 @@ root of each release holds its version.
 ## Pin to a Release Tag — Never `@main`
 
 > **MANDATORY.** Consumers **MUST** pin every reference to this repo to a release
-> tag (e.g. `@v2.2.0`) or a full 40-character commit SHA. **Never** reference <!-- x-release-please-version -->
+> tag (e.g. `@v2.3.0`) or a full 40-character commit SHA. **Never** reference <!-- x-release-please-version -->
 > `@main`. This applies to **both**:
 >
 > - pre-commit `rev:` in `.pre-commit-config.yaml`, and
@@ -77,7 +77,7 @@ Consuming repos pin to a specific version via the `rev:` field in `.pre-commit-c
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v2.2.0    # Pinned to exact version — never @main  x-release-please-version
+    rev: v2.3.0    # Pinned to exact version — never @main  x-release-please-version
     hooks:
       - id: trivy-iac-critical
       - id: trivy-secrets
@@ -220,28 +220,28 @@ your repository, and needs its own public copy of `auto-code-scanning`; see
 # .github/workflows/code-security-scan.yml: application code
 jobs:
   code-scan:
-    uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.0 # x-release-please-version
 ```
 
 ```yaml
 # .github/workflows/terraform-scan.yml: Terraform
 jobs:
   terraform-scan:
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.2.0 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.0 # x-release-please-version
     with:
       cloud-provider: aws
-      scanning-repo-ref: v2.2.0 # x-release-please-version
+      scanning-repo-ref: v2.3.0 # x-release-please-version
 ```
 
 ```yaml
 # .github/workflows/autonomous-fix.yml: optional fix loop (Layer B)
 jobs:
   fix:
-    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v2.2.0 x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v2.3.0 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       scanning_repo: OWNER/auto-code-scanning   # defaults to the upstream repository
-      scanning_repo_ref: <commit-sha> # v2.2.0 x-release-please-version
+      scanning_repo_ref: <commit-sha> # v2.3.0 x-release-please-version
     secrets:
       AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -389,7 +389,7 @@ own workflows when you copy the caller templates.
 
 ## Recommended Practices
 
-1. **Pin to exact versions in production**: Use `v2.2.0` (or a full SHA), never `main` <!-- x-release-please-version -->
+1. **Pin to exact versions in production**: Use `v2.3.0` (or a full SHA), never `main` <!-- x-release-please-version -->
 2. **Pin pre-commit `rev:` AND workflow `uses:` together**: keep both at the same tag
 3. **Review release notes before upgrading**: Check for breaking changes
 4. **Test after upgrading**: Run `pre-commit run --all-files` to verify

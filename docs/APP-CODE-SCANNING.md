@@ -97,7 +97,7 @@ Drop in the thin caller `templates/workflows/code-security-scan.yml`. The templa
 ```yaml
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.2.0 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.0 # x-release-please-version
     with: { category-prefix: "scan-", fail-on-findings: true }   # languages auto-detected
     permissions: { contents: read, security-events: write, pull-requests: write }
 ```
