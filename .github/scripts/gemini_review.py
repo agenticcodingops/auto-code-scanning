@@ -256,9 +256,9 @@ def find_existing_comment_id(repo: str, pr_number: str, token: str) -> int | Non
         if not comments or not isinstance(comments, list):
             break
         for c in comments:
-            author = c.get("user", {}).get("login", "")
-            user_type = c.get("user", {}).get("type", "")
-            if COMMENT_MARKER in c.get("body", "") and (user_type == "Bot" or "github-actions" in author):
+            user = c.get("user") or {}
+            author = user.get("login", "")
+            if COMMENT_MARKER in c.get("body", "") and author == "github-actions[bot]":
                 return c.get("id")
         if len(comments) < 100:
             break
