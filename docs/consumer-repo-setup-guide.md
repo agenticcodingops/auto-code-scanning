@@ -62,9 +62,10 @@ missing tool warns and allows the commit rather than blocking you. Install what'
 > **Pre-commit alternative:** if your team standardises on [pre-commit](https://pre-commit.com)
 > instead of Lefthook, install it (`pip install pre-commit`) and pass `--hooks-runner pre-commit`
 > at setup. Both runners call the **same** hook scripts. Setup copies a
-> `.pre-commit-config.yaml` that pins this repository at `rev: v1.0.0`, which is not a tag
-> here, so set that `rev:` to the current release before your first commit; see
-> [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
+> `.pre-commit-config.yaml` that pins this repository at the release you ran setup from.
+> Releases up to and including v2.3.1 pinned `rev: v1.0.0`, which is not a tag, so if you
+> set up from one of them, set that `rev:` to the current release before your first commit;
+> see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
 
 **Get the platform locally** (so setup can copy templates and shared scripts into your repo):
 
@@ -431,7 +432,7 @@ nothing merges un-scanned. This is what turns the platform from advisory into en
 
 - **Upgrade the platform:** first **re-run `setup-scan-fix`** from the new release to
   re-vendor the updated `hooks/`/`scripts/`. It also overwrites the caller workflows with
-  the templates, which pin `v2.0.0` (`scripts/setup-scan-fix.py:117-124`). **Then** move
+  the templates, which pin the release you re-ran it from (`scripts/setup-scan-fix.py:117-124`). **Then** move
   every pin to the new release — the callers' `uses:` lines and their
   `scanning-repo-ref` / `scanning_repo_ref` inputs, as in
   [`BUMP-THE-SCAN.md`](BUMP-THE-SCAN.md) — and check `git diff .github/workflows/` before

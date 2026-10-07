@@ -36,7 +36,16 @@
         "docs/TERRAFORM-MODULE-ADOPTION.md",
         "docs/TESTING-GUIDE-CONSUMING-REPO.md",
         "docs/VERSION-PINNING.md",
-        "docs/consumer-repo-setup-guide.md"
+        "docs/consumer-repo-setup-guide.md",
+        "templates/aws/pre-commit-config.yaml",
+        "templates/azure/pre-commit-config.yaml",
+        "templates/fix-loop/autonomous-fix.yml",
+        "templates/gcp/pre-commit-config.yaml",
+        "templates/standard/pre-commit-config.yaml",
+        "templates/starter/pre-commit-config.yaml",
+        "templates/strict/pre-commit-config.yaml",
+        "templates/workflows/code-security-scan.yml",
+        "templates/workflows/terraform-scan.yml"
       ]
     }
   }

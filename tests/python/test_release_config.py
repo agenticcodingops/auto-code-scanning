@@ -29,6 +29,15 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CHANGELOG_INSERT_POINT = re.compile(r"\n###? v?[0-9[]")
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 
+# A pin of this repository in a shipped template: a `uses:` of one of its workflows at a tag, or its
+# `scanning-repo-ref` / `scanning_repo_ref` input set to a tag. A pre-commit entry is two lines: the
+# `repo:` and the `rev:` under it. These are the shapes docs/BUMP-THE-SCAN.md tells an adopter to grep for.
+TEMPLATE_PIN = re.compile(
+    r"auto-code-scanning/\.github/workflows/[\w.-]+\.yml@v\d"
+    r"|scanning[-_]repo[-_]ref:\s*\"?v\d"
+)
+TEMPLATE_REPO = re.compile(r"repo:\s*https://github\.com/[^\s/]+/auto-code-scanning\s*$")
+
 
 @pytest.fixture(scope="module")
 def config():
@@ -94,6 +103,58 @@ def test_versions_agree(package, manifest_version):
         assert marked, f"{extra} has no x-release-please-version line"
         for line in marked:
             assert SEMVER.findall(line)[:1] == [manifest_version], f"{extra}: {line}"
+
+
+def _template_pins():
+    """(path, line number, line) for each line of a shipped template that pins this repository to a tag."""
+    for path in sorted((REPO_ROOT / "templates").rglob("*")):
+        if path.suffix not in (".yml", ".yaml"):
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, start=1):
+            if line.lstrip().startswith("#"):
+                continue
+            if TEMPLATE_PIN.search(line):
+                yield path, number, line
+            elif TEMPLATE_REPO.search(line.strip()):
+                assert number < len(lines), f"{path}:{number}: expected a rev: line after this repository pin"
+                following = lines[number]
+                assert following.strip().startswith("rev:"), f"{path}:{number + 1}: expected the rev: of this repository"
+                yield path, number + 1, following
+
+
+def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(package):
+    # A template that pins a tag no release moves goes stale: the callers said v2.0.0 and the pre-commit
+    # templates v1.0.0, a tag that does not exist, through v2.3.1.
+    pins = list(_template_pins())
+    listed = set(package["extra-files"])
+    pinned = set()
+    for path, number, line in pins:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        pinned.add(rel)
+        assert "x-release-please-version" in line, f"{rel}:{number} pins a tag no release moves: {line.strip()}"
+        assert rel in listed, f"{rel} has a marked pin but is not under extra-files"
+    # The other direction guards the search itself: a listed template in which no pin is found means the
+    # patterns no longer match its shape, and the check above would pass without looking at it.
+    listed_templates = {f for f in listed if f.startswith("templates/")}
+    assert listed_templates, "no template is listed under extra-files"
+    assert listed_templates == pinned, f"listed but no pin found: {sorted(listed_templates - pinned)}"
+
+
+def test_listed_yaml_files_have_no_top_level_version_key(package):
+    # release-please runs GenericYaml('$.version') before the marker updater on every extra-files entry that
+    # ends in .yml or .yaml. With no top-level `version` it leaves the file alone; with one it rewrites the
+    # whole document, which drops every comment, the markers included.
+    checked = 0
+    for extra in package["extra-files"]:
+        if not extra.endswith((".yml", ".yaml")):
+            continue
+        documents = list(yaml.safe_load_all((REPO_ROOT / extra).read_text(encoding="utf-8")))
+        for document in documents:
+            assert not (isinstance(document, dict) and "version" in document), (
+                f"{extra} has a top-level version key; release-please would rewrite the file and drop its comments")
+        checked += 1
+    assert checked, "no YAML file is listed under extra-files"
 
 
 def test_new_changelog_entries_land_above_the_latest_release(manifest_version):

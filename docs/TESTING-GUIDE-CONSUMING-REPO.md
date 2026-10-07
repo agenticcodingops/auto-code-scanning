@@ -100,7 +100,7 @@ ls .git/hooks/pre-commit
 | Check | Expected |
 |-------|----------|
 | `.scanning/configs/` contents | `.checkov.yaml`, `.tflint.hcl`, `.tflint-aws.hcl` (or cloud variant), `.trivyignore`, `policy-overlay.yaml`, `noisy-checks-aws.yaml` (or cloud variant), `.scan-suppressions.yaml` |
-| `.pre-commit-config.yaml` | References `auto-code-scanning` with `rev: v1.0.0` |
+| `.pre-commit-config.yaml` | References `auto-code-scanning` with `rev:` set to the release the template ships in (`v1.0.0` in releases up to and including v2.3.1) |
 | `.git/hooks/pre-commit` | File exists |
 | Setup exit code | 0 (all tools verified) |
 
