@@ -284,7 +284,8 @@ as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 
 `reusable-scan.yml` installs exact versions of Checkov, Trivy and TFLint, so every
 consumer that pins a release scans with the same tools and rules. The optional Snyk job
-does not pin its CLI. Pass the same commit as
+installs an exact CLI version too (up to and including v2.3.2 it installed the latest).
+Pass the same commit as
 `scanning-repo-ref`, because the TFLint rulesets come from the configs checked out
 at that ref.
 
@@ -294,13 +295,15 @@ at that ref.
 | Trivy | 0.75.0 | `version:` on each of the four `aquasecurity/trivy-action` steps |
 | TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
 | TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
+| Snyk CLI (optional job) | 1.1307.4 | `npm install -g snyk@1.1307.4` in the `scan-snyk` job (`reusable-scan.yml:507-508`) |
 
 Every run logs the Checkov, Trivy and TFLint versions it used: the Checkov step's image
 tag and banner, the `Show Trivy version` step, and the `Show TFLint version` step, which
 lists each ruleset. Some inputs still move without a pin. Trivy downloads its
 misconfiguration checks bundle at run time, and `Show Trivy version` logs that bundle's
-digest. When `enable-snyk` is `true`, the Snyk job installs the latest `snyk` package
-from npm (`reusable-scan.yml:471-472`), and no step logs its version.
+digest. When `enable-snyk` is `true`, the Snyk job installs the `snyk` package at the
+exact version above (`reusable-scan.yml:507-508`), but npm still resolves that package's
+own dependencies at run time, and no step logs the version it installed.
 
 To bump a scanner, change it in one release:
 
@@ -312,6 +315,9 @@ To bump a scanner, change it in one release:
    `checksums.txt`.
 4. Rulesets: change the `version` in every `configs/<cloud>/.tflint.hcl` that uses
    the plugin.
+5. Snyk: change the version in `npm install -g snyk@<version>` (`reusable-scan.yml:508`,
+   the job is optional) to the one `npm view snyk dist-tags.latest` reports, and update the
+   table. `tests/python/test_workflow_pins.py` fails if the version is not exact.
 
 `.github/workflows/reusable-scan-self-test.yml` runs the scan on any change to it or
 to `configs/`, and fails if a scanner wrote no report or TFLint reported an error.
