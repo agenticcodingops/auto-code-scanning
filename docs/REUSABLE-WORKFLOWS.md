@@ -4,7 +4,7 @@ This page lists every input, output, secret and permission of the three reusable
 workflows that an adopting repository calls. Use it when you write or review a caller
 workflow.
 
-The current release is `v2.3.1`. <!-- x-release-please-version -->
+The current release is `v2.3.2`. <!-- x-release-please-version -->
 
 Each `file:line` reference on this page refers to the source in this revision.
 Workflow file names such as `reusable-scan.yml` and `autonomous-fix.yml` are

@@ -3,7 +3,7 @@
 Move a repository's Terraform scan caller to a new release of this platform, and record
 what changes in its results.
 
-The current release is `v2.3.1`. <!-- x-release-please-version -->
+The current release is `v2.3.2`. <!-- x-release-please-version -->
 
 Every `file:line` reference on this page, such as `reusable-scan.yml:44`, means that line
 at commit
