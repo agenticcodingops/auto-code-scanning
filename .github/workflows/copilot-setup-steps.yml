@@ -1,5 +1,6 @@
 # Copilot cloud agent environment, from the template in agenticcodingops/dev-environments (copilot/).
-# Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.64.0, and Pester 5.
+# Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.64.0,
+# Trivy v0.75.0, Checkov 3.3.19, and Pester 5.
 # Dropped: .NET and Terraform. This repository holds Terraform fixtures only.
 # The workflow must be on the default branch to take effect, and the job must stay named copilot-setup-steps.
 # It runs before Copilot starts working. The pull_request trigger below tests the file in the PR that adds it.
@@ -66,6 +67,18 @@ jobs:
             done
           done
 
+      # Binary pin matches reusable-scan.yml (version: "v0.75.0").
+      # ci.yml installs Trivy from apt with an unpinned package.
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: "v0.75.0"
+
+      # reusable-scan.yml pins checkov-action v12.3125.0 and notes that equals Checkov 3.3.19.
+      # ci.yml installs Checkov with an unpinned pip install.
+      - name: Install Checkov
+        run: pip install checkov==3.3.19
+
       # PowerShell 7 ships on ubuntu-latest. Install Pester 5 only if the image lacks it.
       # CI imports Pester with -MinimumVersion 5.0.
       - name: Ensure Pester 5
@@ -81,6 +94,8 @@ jobs:
           python --version
           pip --version
           tflint --version
+          trivy --version | head -n 1
+          checkov --version
           # The single quotes are deliberate: the $ variables belong to pwsh, not bash.
           # shellcheck disable=SC2016
           pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString(); (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version.ToString()'
