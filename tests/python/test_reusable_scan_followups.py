@@ -65,7 +65,8 @@ checkov_suppressions:
 def test_a_valid_entry_is_applied(tmp_path, monkeypatch, capsys):
     findings = [finding("CKV_GOOD"), finding("CKV_OTHER")]
     applied, out = apply(tmp_path, monkeypatch, capsys, GOOD, findings)
-    assert applied == 1 and suppressed(findings) == ["CKV_GOOD"]
+    assert applied == 1
+    assert suppressed(findings) == ["CKV_GOOD"]
     assert "::warning::" not in out
 
 
@@ -73,7 +74,8 @@ def test_an_expired_entry_is_not_applied(tmp_path, monkeypatch, capsys):
     contents = f'checkov_suppressions:\n  - {{rule_id: CKV_OLD, tool: checkov, expires_date: "{PAST}"}}\n'
     findings = [finding("CKV_OLD")]
     applied, _ = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert applied == 0 and suppressed(findings) == []
+    assert applied == 0
+    assert suppressed(findings) == []
 
 
 def test_an_unquoted_date_skips_that_entry_only(tmp_path, monkeypatch, capsys):
@@ -85,7 +87,8 @@ def test_an_unquoted_date_skips_that_entry_only(tmp_path, monkeypatch, capsys):
     )
     findings = [finding("CKV_UNQUOTED"), finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert suppressed(findings) == ["CKV_GOOD"] and applied == 1
+    assert suppressed(findings) == ["CKV_GOOD"]
+    assert applied == 1
     assert "::warning::Ignored checkov_suppressions entry CKV_UNQUOTED" in out
     assert "quoted" in out
 
@@ -107,14 +110,17 @@ def test_an_entry_that_is_not_a_mapping_is_skipped(tmp_path, monkeypatch, capsys
     contents = f'checkov_suppressions:\n  - just-a-string\n  - {{rule_id: CKV_GOOD, tool: checkov, expires_date: "{FUTURE}"}}\n'
     findings = [finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert applied == 1 and "entry 1" in out and "not a mapping" in out
+    assert applied == 1
+    assert "entry 1" in out
+    assert "not a mapping" in out
 
 
 def test_an_entry_without_a_rule_id_is_skipped(tmp_path, monkeypatch, capsys):
     contents = f'checkov_suppressions:\n  - {{tool: checkov, expires_date: "{FUTURE}"}}\n  - {{rule_id: CKV_GOOD, tool: checkov, expires_date: "{FUTURE}"}}\n'
     findings = [finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert applied == 1 and "rule_id is missing" in out
+    assert applied == 1
+    assert "rule_id is missing" in out
 
 
 def test_a_missing_expiry_keeps_its_existing_message(tmp_path, monkeypatch, capsys):
@@ -130,7 +136,8 @@ def test_a_section_that_is_not_a_list_is_skipped_and_the_others_apply(tmp_path, 
     )
     findings = [finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert applied == 1 and "Ignored trivy_suppressions: it is not a list" in out
+    assert applied == 1
+    assert "Ignored trivy_suppressions: it is not a list" in out
 
 
 def test_entries_in_every_section_are_applied(tmp_path, monkeypatch, capsys):
@@ -147,21 +154,48 @@ def test_entries_in_every_section_are_applied(tmp_path, monkeypatch, capsys):
 def test_an_unreadable_file_warns_and_applies_nothing(tmp_path, monkeypatch, capsys, contents):
     findings = [finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
-    assert applied == 0 and suppressed(findings) == []
+    assert applied == 0
+    assert suppressed(findings) == []
     assert "::warning::Could not parse/apply .scan-suppressions.yaml" in out
+
+
+@pytest.mark.parametrize("contents", ["[]", "false", "0", '""', "[]\n", "0.0"])
+def test_a_falsy_document_that_is_not_a_mapping_still_warns(tmp_path, monkeypatch, capsys, contents):
+    # `yaml.safe_load(f) or {}` used to turn these into an empty mapping, so nothing was reported.
+    applied, out = apply(tmp_path, monkeypatch, capsys, contents, [finding("CKV_GOOD")])
+    assert applied == 0
+    assert "::warning::Could not parse/apply .scan-suppressions.yaml" in out
+
+
+@pytest.mark.parametrize("value", ["false", "0", '""', "{}", "0.0"])
+def test_a_falsy_section_that_is_not_a_list_still_warns(tmp_path, monkeypatch, capsys, value):
+    contents = f"trivy_suppressions: {value}\n" + GOOD
+    findings = [finding("CKV_GOOD")]
+    applied, out = apply(tmp_path, monkeypatch, capsys, contents, findings)
+    assert applied == 1
+    assert "Ignored trivy_suppressions: it is not a list" in out
+
+
+@pytest.mark.parametrize("contents", ["", "# only a comment\n", "~\n", "trivy_suppressions:\n", "trivy_suppressions: []\n"])
+def test_an_empty_document_or_section_is_not_an_error(tmp_path, monkeypatch, capsys, contents):
+    applied, out = apply(tmp_path, monkeypatch, capsys, contents, [finding("CKV_GOOD")])
+    assert applied == 0
+    assert out == ""
 
 
 def test_text_from_the_file_cannot_start_a_workflow_command(tmp_path, monkeypatch, capsys):
     contents = 'checkov_suppressions:\n  - {rule_id: "X\\n::error::pwn 100%", tool: checkov}\n'
     _, out = apply(tmp_path, monkeypatch, capsys, contents, [])
     assert out.count("\n") == 1, out
-    assert "%0A" in out and "%25" in out
+    assert "%0A" in out
+    assert "%25" in out
 
 
 def test_nothing_is_applied_when_the_input_is_off(tmp_path, monkeypatch, capsys):
     findings = [finding("CKV_GOOD")]
     applied, out = apply(tmp_path, monkeypatch, capsys, GOOD, findings, enabled="false")
-    assert applied == 0 and out == ""
+    assert applied == 0
+    assert out == ""
 
 
 # --- the PR comment's sort ---------------------------------------------------------------------
@@ -189,4 +223,5 @@ def test_the_pr_comment_lists_critical_findings_first():
 
 def test_the_sort_uses_nullish_coalescing_not_or():
     body = comparator_body()
-    assert "?? 4" in body and "|| 4" not in body
+    assert "?? 4" in body
+    assert "|| 4" not in body

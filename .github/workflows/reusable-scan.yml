@@ -733,8 +733,8 @@ jobs:
               try:
                   import yaml
                   with open(".scan-suppressions.yaml") as f:
-                      supp_data = yaml.safe_load(f) or {}
-                  if not isinstance(supp_data, dict):
+                      supp_data = yaml.safe_load(f)
+                  if supp_data is not None and not isinstance(supp_data, dict):
                       raise ValueError("the file is not a mapping of sections")
               except Exception as exc:
                   warn(f"Could not parse/apply .scan-suppressions.yaml: {exc}")
@@ -744,11 +744,11 @@ jobs:
               now = datetime.now(timezone.utc).date()
               active_suppressions = set()
               for section in ["trivy_suppressions", "checkov_suppressions", "tflint_suppressions", "snyk_suppressions"]:
-                  entries = supp_data.get(section) or []
-                  if not isinstance(entries, list):
+                  entries = (supp_data or {}).get(section)
+                  if entries is not None and not isinstance(entries, list):
                       warn(f"Ignored {section}: it is not a list of entries")
                       continue
-                  for position, entry in enumerate(entries, start=1):
+                  for position, entry in enumerate(entries or [], start=1):
                       label = f"entry {position}"
                       try:
                           if not isinstance(entry, dict):
