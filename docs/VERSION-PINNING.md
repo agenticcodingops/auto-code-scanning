@@ -381,14 +381,16 @@ The action's own version number does not tell you this.
 ## Third-Party Action Pinning (This Repo)
 
 Every workflow in `.github/workflows/` SHA-pins the third-party actions it uses, with a
-trailing `# vX.Y.Z` comment for readability, except two: `claude.yml`
-(`actions/checkout@v4`, `anthropics/claude-code-action@v1`) and `semgrep.yml`
-(`actions/checkout@v6`). `semgrep.yml` also runs the `semgrep/semgrep` container image
-with no tag or digest. For example, the reusable workflows use
+trailing `# vX.Y.Z` comment for readability, and `semgrep.yml` runs its container image by
+digest (`semgrep/semgrep@sha256:...`, with the version and the date it was resolved in a
+comment; Dependabot does not update a workflow's container image, so renew it
+deliberately). For example, the reusable workflows use
 `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2`, and
 `autonomous-fix.yml` uses `anthropics/claude-code-action@d5726de... # v1.0.148`. SHA pins
-protect against a tag being moved to malicious code. Apply the same discipline in your
-own workflows when you copy the caller templates.
+protect against a tag being moved to malicious code. `claude.yml` and `semgrep.yml` were
+the two exceptions through v2.3.2. A test (`tests/python/test_workflow_pins.py`) refuses
+an unpinned action, an image without a digest and an unpinned Snyk install. Apply the same
+discipline in your own workflows when you copy the caller templates.
 
 ## Recommended Practices
 

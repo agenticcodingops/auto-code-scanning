@@ -505,7 +505,7 @@ jobs:
           node-version: '20'
 
       - name: Install Snyk CLI
-        run: npm install -g snyk
+        run: npm install -g snyk@1.1307.4
 
       - name: Run Snyk IaC scan
         env:
