@@ -29,7 +29,7 @@ multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchan
 
 - [x] **Lefthook is the default local runner** (`templates/lefthook/lefthook.yml`), calling the same dispatcher scripts; **pre-commit kept as a supported alternative**
 - [x] One-command `setup-scan-fix.{ps1,py}` (idempotent: writes config from a tier template, installs runner + `.claude` bundle + caller workflows, creates labels, **verifies** secrets, runs verify-scanning)
-- [x] Third-party actions SHA-pinned across this repo's own workflows, except `claude.yml` and `semgrep.yml` (see [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo))
+- [x] Third-party actions SHA-pinned across this repo's own workflows, the semgrep image pinned by digest, and the Snyk CLI pinned to an exact version (see [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo))
 - [x] Docs: `SECURITY-MODEL.md`, `FIX-LOOP.md`, `APP-CODE-SCANNING.md`, `MIGRATION-ANALYSIS.md`, `CONSUMER-MIGRATION.md`; `specs/002-scan-fix-platform/`
 - [x] Tests: `tests/integration/test-app-code-hooks.sh`, `tests/python/test_check_fix_allowlist.py`, `tests/python/test_dotnet_format_path.py`
 

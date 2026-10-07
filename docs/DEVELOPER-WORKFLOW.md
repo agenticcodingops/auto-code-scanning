@@ -290,7 +290,7 @@ Require Setup Scanning Tools as well as Aggregate Results
 ([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
 
-The job installs the latest `snyk` CLI from npm on each run; that version is not pinned.
+The job installs an exact `snyk` CLI version from npm (`reusable-scan.yml:508`); bump it deliberately. Up to and including v2.3.2 it installed the latest on each run.
 See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input.
 
 ## Switching Cloud Providers
