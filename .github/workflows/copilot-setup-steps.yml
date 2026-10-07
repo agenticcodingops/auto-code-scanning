@@ -1,0 +1,112 @@
+# Copilot cloud agent environment, from the template in agenticcodingops/dev-environments (copilot/).
+# Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.64.0,
+# Trivy v0.75.0, Checkov 3.3.19, and Pester 5.
+# Dropped: .NET and Terraform. This repository holds Terraform fixtures only.
+# The workflow must be on the default branch to take effect, and the job must stay named copilot-setup-steps.
+# It runs before Copilot starts working. The pull_request trigger below tests the file in the PR that adds it.
+# No secrets and no Azure access unless the commented Azure block at the end is enabled.
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same pin as ci.yml (v5.6.0). The test job uses Python 3.11.
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test tools
+        run: pip install pytest pytest-cov pyyaml pre-commit
+
+      # Binary pin matches reusable-scan.yml. That workflow's setup action is v4.1.1;
+      # this file uses the template's v6.3.2 pin of the same action.
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.64.0
+
+      # The cloud configs declare external rulesets. setup-tflint installs only the binary.
+      # Same retry and token as ci.yml, for aws, azure, and gcp.
+      - name: Initialize TFLint plugins
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for cloud in aws azure gcp; do
+            for attempt in 1 2 3; do
+              if tflint --init --config="configs/${cloud}/.tflint.hcl"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "tflint --init failed for ${cloud} after 3 attempts" >&2
+                exit 1
+              fi
+              echo "tflint --init attempt ${attempt} for ${cloud} failed; retrying in $((attempt * 5))s..." >&2
+              sleep "$((attempt * 5))"
+            done
+          done
+
+      # Binary pin matches reusable-scan.yml (version: "v0.75.0").
+      # ci.yml installs Trivy from apt with an unpinned package.
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: "v0.75.0"
+
+      # reusable-scan.yml pins checkov-action v12.3125.0 and notes that equals Checkov 3.3.19.
+      # ci.yml installs Checkov with an unpinned pip install.
+      - name: Install Checkov
+        run: pip install checkov==3.3.19
+
+      # PowerShell 7 ships on ubuntu-latest. Install Pester 5 only if the image lacks it.
+      # CI imports Pester with -MinimumVersion 5.0.
+      - name: Ensure Pester 5
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
+            Install-Module Pester -MinimumVersion 5.0.0 -MaximumVersion 5.99.99 -Scope CurrentUser -Force
+          }
+
+      - name: Show tool versions
+        shell: bash
+        run: |
+          python --version
+          pip --version
+          tflint --version
+          trivy --version | head -n 1
+          checkov --version
+          # The single quotes are deliberate: the $ variables belong to pwsh, not bash.
+          # shellcheck disable=SC2016
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString(); (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version.ToString()'
+
+      # Azure, optional and read-only. Enable only after the "copilot" environment, its AZURE_* secrets and a
+      # federated credential with subject repo:<owner>/<repo>:environment:copilot exist. To enable:
+      #   1. add `environment: copilot` to this job, and `id-token: write` to the job's permissions;
+      #   2. uncomment the step below.
+      # - name: Azure login with OIDC (no stored secret)
+      #   uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
