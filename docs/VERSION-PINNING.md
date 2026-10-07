@@ -258,19 +258,22 @@ shipped `templates/fix-loop/autonomous-fix.yml` says `secrets: inherit`; replace
 use `secrets: inherit` there: it hands the called workflow every secret of your repository
 and organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 
-The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) still pin
-`@v2.0.0`, and `setup-scan-fix` copies them unchanged. Move them to the current release
-when you copy them.
+The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) pin the release
+they ship in, and release-please moves those pins at each release, as it does the pins in
+these docs. `setup-scan-fix` copies them unchanged. Releases up to and including v2.3.1
+shipped `@v2.0.0` in all of them: if you copied one of those, move the pins to the current
+release.
 
-The pre-commit templates are stale too. All six,
+The pre-commit templates follow the same rule. All six,
 `templates/{starter,standard,strict,aws,azure,gcp}/pre-commit-config.yaml`, pin this
-repository at `rev: v1.0.0`, a tag that does not exist. With `--hooks-runner pre-commit`,
+repository at the release they ship in. Releases up to and including v2.3.1 pinned
+`rev: v1.0.0`, a tag that does not exist. With `--hooks-runner pre-commit`,
 `setup-scan-fix` copies `templates/<tier>/pre-commit-config.yaml` to
 `.pre-commit-config.yaml` when that file does not exist yet
 (`scripts/setup-scan-fix.py:91-95`, `scripts/setup-scan-fix.ps1:100-102`), and
-[SETUP-GUIDE.md](SETUP-GUIDE.md) has you copy the starter template by hand. Change `rev:`
-to the current release before your first commit or `pre-commit run`, because until then
-pre-commit cannot fetch the hooks.
+[SETUP-GUIDE.md](SETUP-GUIDE.md) has you copy the starter template by hand. If you copied
+a template from one of those releases, change `rev:` to the current release before your
+first commit or `pre-commit run`, because until then pre-commit cannot fetch the hooks.
 
 Dependabot can update the `uses:` line of a reusable workflow
 ([GitHub Docs](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)),

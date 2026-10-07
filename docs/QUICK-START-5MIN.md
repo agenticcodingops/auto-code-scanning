@@ -15,7 +15,8 @@ one-command orchestrator `setup-scan-fix`.
 >
 > With the pre-commit runner (`-HooksRunner pre-commit` or `--hooks-runner pre-commit`)
 > or the legacy `setup-scanning` installer, the copied `.pre-commit-config.yaml` pins this
-> repository at `rev: v1.0.0`. That is not a tag here, so your first `git commit` fails.
+> repository at the release you ran setup from. Releases up to and including v2.3.1 pinned
+> `rev: v1.0.0`, which is not a tag, so from one of them your first `git commit` fails.
 > Before that commit, set the `rev:` to the current release, or run
 > `pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning`;
 > see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).

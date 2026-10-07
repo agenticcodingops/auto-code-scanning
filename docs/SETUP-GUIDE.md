@@ -74,12 +74,14 @@ python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard -
 5. **Fix-loop only:** creates the `ai-autofix` + `needs-human-review` labels via `gh label create`, then **verifies** (never creates) `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `gh secret list`, printing exact creation steps if either is missing.
 6. **Runs `verify-scanning`** to prove the install.
 
-The caller workflows it copies pin `@v2.0.0`. Move them to the current release before
-you commit them, and keep them pinned.
+The caller workflows it copies pin the release you ran setup from (`@v2.0.0` in releases up
+to and including v2.3.1: from one of those, move them to the current release before you commit
+them). Keep them pinned.
 
 With the pre-commit runner (`-HooksRunner pre-commit` or `--hooks-runner pre-commit`), the
-copied `.pre-commit-config.yaml` pins this repository at `rev: v1.0.0`. That is not a tag
-here, so your first `git commit` fails. Before that commit, set the `rev:` to the current
+copied `.pre-commit-config.yaml` pins this repository at the release you ran setup from.
+Releases up to and including v2.3.1 pinned `rev: v1.0.0`, which is not a tag, so from one of
+them your first `git commit` fails. Before that commit, set the `rev:` to the current
 release, or run
 `pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning`;
 see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
@@ -235,7 +237,8 @@ Uses Scoop and pip for tool installation. No administrator privileges required.
    ```
 
 3. Copy a tier template, then set the `rev:` of this repository in it to the current
-   release (the template pins `v1.0.0`, which is not a tag here):
+   release (the template pins the release it ships in; releases up to and including v2.3.1 pin
+   `v1.0.0`, which is not a tag here):
    ```bash
    cp templates/starter/pre-commit-config.yaml .pre-commit-config.yaml
    ```
@@ -404,8 +407,8 @@ To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): it moves 
 `uses:` reference and the `scanning-repo-ref` / `scanning_repo_ref` inputs together.
 Never use `@main`. Re-running
 `setup-scan-fix` refreshes the vendored `hooks/`, scripts, and `.claude/` bundle
-idempotently. It also overwrites the caller workflows with the templates, which pin
-`@v2.0.0`, so re-run it before you move the pins, never after.
+idempotently. It also overwrites the caller workflows with the templates, which pin the
+release you re-run it from, so re-run it before you move the pins, never after.
 
 **pre-commit hooks** (legacy Terraform path):
 

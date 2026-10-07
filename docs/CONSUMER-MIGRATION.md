@@ -151,10 +151,12 @@ merge.
 - **Who:** Operator
 - **Operator STOP:** no
 
-The caller templates pin `v2.0.0` (`templates/workflows/code-security-scan.yml:21`,
+The caller templates pin the release they ship in, and release-please moves those pins at
+each release (`templates/workflows/code-security-scan.yml:21`,
 `templates/workflows/terraform-scan.yml:21` and `26`,
-`templates/fix-loop/autonomous-fix.yml:55` and `59`). Move every pin to the release you
-checked out in the prerequisites, and pin the commit its tag points to, as in
+`templates/fix-loop/autonomous-fix.yml:55` and `59`). Releases up to and including v2.3.1
+pinned `v2.0.0` there. Check that every pin is the release you checked out in the
+prerequisites, and pin the commit its tag points to, as in
 [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). For the
 fix-loop caller:
 
@@ -194,12 +196,13 @@ In `terraform-scan.yml`, also set `cloud-provider` to your provider (`aws`, `azu
 
 With `--hooks-runner pre-commit`, the setup writes `.pre-commit-config.yaml` from
 `templates/<tier>/pre-commit-config.yaml` when the file does not exist yet
-(`setup-scan-fix.py:92-95`). Those templates pin the `auto-code-scanning` hooks at
-`rev: v1.0.0` (for example `templates/standard/pre-commit-config.yaml:30`). No such tag or
-branch exists, so pre-commit cannot fetch the hooks and every commit through it fails,
-this migration's included. In the same commit as the workflow pins, set that `rev:` to the
-release you checked out, or to its commit SHA. If you call your owner's copy, point that
-entry's `repo:` at it too. If an existing `.pre-commit-config.yaml` already lists
+(`setup-scan-fix.py:92-95`). Those templates pin the `auto-code-scanning` hooks at the
+release they ship in (for example `templates/standard/pre-commit-config.yaml:30`).
+Releases up to and including v2.3.1 pinned `rev: v1.0.0`, which is no tag or branch, so
+pre-commit could not fetch the hooks and every commit through it failed, this migration's
+included. In the same commit as the workflow pins, check that `rev:` is the release you
+checked out, or set it to that release's commit SHA. If you call your owner's copy, point
+that entry's `repo:` at it too. If an existing `.pre-commit-config.yaml` already lists
 `auto-code-scanning`, move its `rev:` the same way.
 
 ### 5. Check who can start the fix loop

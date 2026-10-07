@@ -137,7 +137,7 @@ When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 
 ## Version Pinning
 
-All templates pin to `rev: v1.0.0`. To update:
+All templates pin `rev:` to the release they ship in (`v1.0.0` in releases up to and including v2.3.1). To update:
 
 ```bash
 pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning

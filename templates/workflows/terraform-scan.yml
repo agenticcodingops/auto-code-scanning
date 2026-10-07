@@ -18,12 +18,12 @@ permissions:
 
 jobs:
   terraform-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.0.0
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.1  # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"        # aws | azure | gcp
       severity: "CRITICAL,HIGH"
-      scanning-repo-ref: "v2.0.0"
+      scanning-repo-ref: "v2.3.1"  # x-release-please-version
     # Optional Snyk IaC (needs SNYK_TOKEN secret):
     # secrets:
     #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
