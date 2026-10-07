@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.1...v2.3.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* **templates:** pin the shipped templates to the release they ship in, and keep them there ([#23](https://github.com/agenticcodingops/auto-code-scanning/issues/23)) ([d63a3cb](https://github.com/agenticcodingops/auto-code-scanning/commit/d63a3cb941f66c5d2c30b5776d967d5d17aa9035))
+
 ## [2.3.1](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.0...v2.3.1) (2026-10-07)
 
 

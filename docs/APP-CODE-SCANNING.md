@@ -97,7 +97,7 @@ release it ships in (`@v2.0.0` up to and including v2.3.1); make sure it is the 
 ```yaml
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.1 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.2 # x-release-please-version
     with: { category-prefix: "scan-", fail-on-findings: true }   # languages auto-detected
     permissions: { contents: read, security-events: write, pull-requests: write }
 ```
