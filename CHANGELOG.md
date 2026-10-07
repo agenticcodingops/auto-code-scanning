@@ -8,6 +8,14 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.0...v2.3.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **ci:** refine automated review prompt context and git diff excludes ([#20](https://github.com/agenticcodingops/auto-code-scanning/issues/20)) ([58e6b56](https://github.com/agenticcodingops/auto-code-scanning/commit/58e6b56ff53c550b09e1834232e02206d3744c82))
+* **scan:** sort CRITICAL first in the PR comment and apply suppressions per entry ([#22](https://github.com/agenticcodingops/auto-code-scanning/issues/22)) ([7406279](https://github.com/agenticcodingops/auto-code-scanning/commit/7406279c53e972d65296fa45a969f3573f337e1a))
+
 ## [2.3.0](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.2.0...v2.3.0) (2026-10-06)
 
 
