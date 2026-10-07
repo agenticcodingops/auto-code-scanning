@@ -31,7 +31,7 @@ SEMVER = re.compile(r"\d+\.\d+\.\d+")
 
 # A pin of this repository in a shipped template: a `uses:` of one of its workflows at a tag, or its
 # `scanning-repo-ref` / `scanning_repo_ref` input set to a tag. A pre-commit entry is two lines: the
-# `repo:` and the `rev:` under it.
+# `repo:` and the `rev:` under it. These are the shapes docs/BUMP-THE-SCAN.md tells an adopter to grep for.
 TEMPLATE_PIN = re.compile(
     r"auto-code-scanning/\.github/workflows/[\w.-]+\.yml@v\d"
     r"|scanning[-_]repo[-_]ref:\s*\"?v\d"
@@ -117,6 +117,7 @@ def _template_pins():
             if TEMPLATE_PIN.search(line):
                 yield path, number, line
             elif TEMPLATE_REPO.search(line.strip()):
+                assert number < len(lines), f"{path}:{number}: expected a rev: line after this repository pin"
                 following = lines[number]
                 assert following.strip().startswith("rev:"), f"{path}:{number + 1}: expected the rev: of this repository"
                 yield path, number + 1, following
@@ -126,12 +127,18 @@ def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(p
     # A template that pins a tag no release moves goes stale: the callers said v2.0.0 and the pre-commit
     # templates v1.0.0, a tag that does not exist, through v2.3.1.
     pins = list(_template_pins())
-    assert len(pins) >= 11, f"found only {len(pins)} pins; the search no longer matches the templates"
     listed = set(package["extra-files"])
+    pinned = set()
     for path, number, line in pins:
         rel = path.relative_to(REPO_ROOT).as_posix()
+        pinned.add(rel)
         assert "x-release-please-version" in line, f"{rel}:{number} pins a tag no release moves: {line.strip()}"
         assert rel in listed, f"{rel} has a marked pin but is not under extra-files"
+    # The other direction guards the search itself: a listed template in which no pin is found means the
+    # patterns no longer match its shape, and the check above would pass without looking at it.
+    listed_templates = {f for f in listed if f.startswith("templates/")}
+    assert listed_templates, "no template is listed under extra-files"
+    assert listed_templates == pinned, f"listed but no pin found: {sorted(listed_templates - pinned)}"
 
 
 def test_new_changelog_entries_land_above_the_latest_release(manifest_version):
