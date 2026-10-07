@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Same pin as ci.yml (v5.6.0). The test job uses Python 3.11.
       - name: Set up Python
@@ -43,6 +45,26 @@ jobs:
         uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:
           tflint_version: v0.64.0
+
+      # The cloud configs declare external rulesets. setup-tflint installs only the binary.
+      # Same retry and token as ci.yml, for aws, azure, and gcp.
+      - name: Initialize TFLint plugins
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for cloud in aws azure gcp; do
+            for attempt in 1 2 3; do
+              if tflint --init --config="configs/${cloud}/.tflint.hcl"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "tflint --init failed for ${cloud} after 3 attempts" >&2
+                exit 1
+              fi
+              echo "tflint --init attempt ${attempt} for ${cloud} failed; retrying in $((attempt * 5))s..." >&2
+              sleep "$((attempt * 5))"
+            done
+          done
 
       # PowerShell 7 ships on ubuntu-latest. Install Pester 5 only if the image lacks it.
       # CI imports Pester with -MinimumVersion 5.0.
