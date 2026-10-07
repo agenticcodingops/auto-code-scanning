@@ -141,6 +141,22 @@ def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(p
     assert listed_templates == pinned, f"listed but no pin found: {sorted(listed_templates - pinned)}"
 
 
+def test_listed_yaml_files_have_no_top_level_version_key(package):
+    # release-please runs GenericYaml('$.version') before the marker updater on every extra-files entry that
+    # ends in .yml or .yaml. With no top-level `version` it leaves the file alone; with one it rewrites the
+    # whole document, which drops every comment, the markers included.
+    checked = 0
+    for extra in package["extra-files"]:
+        if not extra.endswith((".yml", ".yaml")):
+            continue
+        documents = list(yaml.safe_load_all((REPO_ROOT / extra).read_text(encoding="utf-8")))
+        for document in documents:
+            assert not (isinstance(document, dict) and "version" in document), (
+                f"{extra} has a top-level version key; release-please would rewrite the file and drop its comments")
+        checked += 1
+    assert checked, "no YAML file is listed under extra-files"
+
+
 def test_new_changelog_entries_land_above_the_latest_release(manifest_version):
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     match = CHANGELOG_INSERT_POINT.search(changelog)
