@@ -247,9 +247,11 @@ printf '%s|%s' '<rule_id>' '<file>' | sha256sum | cut -d' ' -f1
 **Suppression format.** Quote the date (`expires_date: "YYYY-MM-DD"`). Set `tool:` on
 every entry to the scanner exactly as the `tool` column of `new.tsv` shows it (`trivy`,
 `checkov`, `tflint` or `snyk`). The scan matches on `rule_id` and `tool` only and ignores
-the section name. One unquoted date makes the scan drop every suppression in the file
-without a message (`reusable-scan.yml:695-719`). `scripts/validate-suppressions.py` still
-passes such a file, so a clean validation does not prove the scan applies it. For `snyk`
+the section name. Up to v2.3.0, one unquoted date made the scan drop every suppression in
+the file without a message (`reusable-scan.yml:695-719`). Later releases skip only that
+entry, with a workflow warning in the Aggregate Results job's log, so read that log after a
+bump. `scripts/validate-suppressions.py` still passes such a file, so a clean validation
+does not prove the scan applies it. For `snyk`
 entries use `hooks/validate-suppressions.py`: `scripts/validate-suppressions.py` rejects the
 `snyk` tool with V-004 (`scripts/validate-suppressions.py:58`), although the scan reads
 `snyk_suppressions`. Check the

@@ -108,18 +108,18 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | Input | Type | Required | Default | What it does | Source |
 |---|---|---|---|---|---|
 | `terraform-directory` | string | no | `.` | Directory to scan. Trivy's misconfiguration scan and Snyk scan it. Checkov scans it too, but skips any path that contains `examples` or `tests` (`skip-path` in `configs/<cloud>/.checkov.yaml`). TFLint runs once in every directory under it that holds a `.tf` file. | `reusable-scan.yml:26-30`, `204`, `233`, `301`, `425-439`, `513`, `524`; `configs/azure/.checkov.yaml:52-58` |
-| `cloud-provider` | string | yes | none | `aws`, `azure` or `gcp`. Selects `configs/<cloud>/` for Checkov, TFLint and the policy overlay, and names the metrics artifact. Any other value fails the setup job: there is no `configs/<value>/.checkov.yaml` to copy. | `reusable-scan.yml:31-34`, `142`, `154-156`, `1122` |
-| `severity` | string | no | `CRITICAL,HIGH` | Severity filter for Trivy's misconfiguration scan only. The Trivy secret scan always uses `HIGH,CRITICAL`. Checkov and TFLint do not read it. The gate counts CRITICAL and HIGH whatever you set. | `reusable-scan.yml:35-39`, `205`, `234`, `247`, `260`, `790-794` |
+| `cloud-provider` | string | yes | none | `aws`, `azure` or `gcp`. Selects `configs/<cloud>/` for Checkov, TFLint and the policy overlay, and names the metrics artifact. Any other value fails the setup job: there is no `configs/<value>/.checkov.yaml` to copy. | `reusable-scan.yml:31-34`, `142`, `154-156`, `1140` |
+| `severity` | string | no | `CRITICAL,HIGH` | Severity filter for Trivy's misconfiguration scan only. The Trivy secret scan always uses `HIGH,CRITICAL`. Checkov and TFLint do not read it. The gate counts CRITICAL and HIGH whatever you set. | `reusable-scan.yml:35-39`, `205`, `234`, `247`, `260`, `808-812` |
 | `scanning-repo-ref` | string | no | `v1.0.0` | Tag, branch or SHA of `OWNER/auto-code-scanning` to read the configs and helper from. **Always set it**, to the same tag or commit as `uses:`. This repository has no `v1.0.0` tag or branch (checked with `git ls-remote` on 2026-10-03). If your copy has none either, the default fails the setup job. | `reusable-scan.yml:40-44`, `135-143` |
-| `fail-on-findings` | boolean | no | `true` | When `true`, the Aggregate Results job fails if a CRITICAL or HIGH finding remains after suppressions and the baseline. When `false`, findings never fail it. | `reusable-scan.yml:45-49`, `572`, `789-794`, `823-824` |
-| `upload-sarif` | boolean | no | `true` | Runs the Upload SARIF job. | `reusable-scan.yml:50-54`, `847` |
-| `post-pr-comment` | boolean | no | `true` | Runs the PR Comment job. It runs only on `pull_request` events and posts a new comment on every run. | `reusable-scan.yml:55-59`, `984`, `1058-1063` |
-| `apply-suppressions` | boolean | no | `true` | Marks findings listed in `.scan-suppressions.yaml`, at the caller's repository root, as suppressed. See [Suppressions and baseline](#suppressions-and-baseline). | `reusable-scan.yml:60-64`, `570`, `724-757` |
+| `fail-on-findings` | boolean | no | `true` | When `true`, the Aggregate Results job fails if a CRITICAL or HIGH finding remains after suppressions and the baseline. When `false`, findings never fail it. | `reusable-scan.yml:45-49`, `572`, `807-812`, `841-842` |
+| `upload-sarif` | boolean | no | `true` | Runs the Upload SARIF job. | `reusable-scan.yml:50-54`, `865` |
+| `post-pr-comment` | boolean | no | `true` | Runs the PR Comment job. It runs only on `pull_request` events and posts a new comment on every run. | `reusable-scan.yml:55-59`, `1002`, `1076-1081` |
+| `apply-suppressions` | boolean | no | `true` | Marks findings listed in `.scan-suppressions.yaml`, at the caller's repository root, as suppressed. See [Suppressions and baseline](#suppressions-and-baseline). | `reusable-scan.yml:60-64`, `570`, `724-775` |
 | `checkov-skip-checks` | string | no | `""` | Comma-separated built-in Checkov IDs, with no spaces. Merges with the cloud config's `skip-check` list and deduplicates. Each consumer ID must match `^CKV2?_[A-Z0-9]+_[0-9]+$`; invalid IDs fail setup with the offending value. | `reusable-scan.yml:65-69`; `scripts/checkov-consumer-options.py` |
 | `checkov-render-iter-count` | string | no | `""` | Positive integer. Exports `RENDER_EDGES_DUPLICATE_ITER_COUNT` for the Checkov action step only. Empty leaves it unset; invalid values fail setup. | `reusable-scan.yml:70-74`; `scripts/checkov-consumer-options.py` |
-| `apply-baseline` | boolean | no | `true` | Marks findings listed in `.scan-baseline/baseline.json` as baselined. | `reusable-scan.yml:75-79`, `571`, `759-773` |
+| `apply-baseline` | boolean | no | `true` | Marks findings listed in `.scan-baseline/baseline.json` as baselined. | `reusable-scan.yml:75-79`, `571`, `777-791` |
 | `enable-snyk` | boolean | no | `false` | Runs the Snyk IaC job. Needs the `SNYK_TOKEN` secret. The job installs the `snyk` package from npm without a version pin. | `reusable-scan.yml:80-84`, `497`, `507-508` |
-| `upload-metrics` | boolean | no | `true` | Uploads the artifact `scan-metrics-<cloud-provider>-<run_id>`, kept for 90 days. | `reusable-scan.yml:85-89`, `1074`, `1119-1124` |
+| `upload-metrics` | boolean | no | `true` | Uploads the artifact `scan-metrics-<cloud-provider>-<run_id>`, kept for 90 days. | `reusable-scan.yml:85-89`, `1092`, `1137-1142` |
 
 For a release or commit containing these inputs, add the following to the caller's
 `with:` block and keep `scanning-repo-ref` equal to the workflow call's ref:
@@ -138,11 +138,11 @@ selection and render behaviour. The accepted ID families are documented in the
 
 | Output | Value | Source |
 |---|---|---|
-| `findings-count` | Number of active findings, of every severity. Active means neither suppressed nor baselined. Trivy secret findings are not included. | `reusable-scan.yml:91-93`, `776`, `785`, `810` |
-| `critical-count` | Number of active CRITICAL findings. | `reusable-scan.yml:94-96`, `786`, `811` |
-| `high-count` | Number of active HIGH findings. | `reusable-scan.yml:97-99`, `787`, `812` |
-| `scan-passed` | `true` when no active CRITICAL or HIGH finding remains, or when `fail-on-findings` is `false`. Otherwise `false`. | `reusable-scan.yml:100-102`, `789-794`, `813` |
-| `sarif-uploaded` | `true` when at least one of the four SARIF uploads succeeded, otherwise `false`. Empty when `upload-sarif` is `false`, because the job does not run. | `reusable-scan.yml:103-105`, `847`, `959-970` |
+| `findings-count` | Number of active findings, of every severity. Active means neither suppressed nor baselined. Trivy secret findings are not included. | `reusable-scan.yml:91-93`, `794`, `803`, `828` |
+| `critical-count` | Number of active CRITICAL findings. | `reusable-scan.yml:94-96`, `804`, `829` |
+| `high-count` | Number of active HIGH findings. | `reusable-scan.yml:97-99`, `805`, `830` |
+| `scan-passed` | `true` when no active CRITICAL or HIGH finding remains, or when `fail-on-findings` is `false`. Otherwise `false`. | `reusable-scan.yml:100-102`, `807-812`, `831` |
+| `sarif-uploaded` | `true` when at least one of the four SARIF uploads succeeded, otherwise `false`. Empty when `upload-sarif` is `false`, because the job does not run. | `reusable-scan.yml:103-105`, `865`, `977-988` |
 
 ### Secrets
 
@@ -155,8 +155,8 @@ selection and render behaviour. The accepted ID families are documented in the
 | Permission | Needed by | Source |
 |---|---|---|
 | `contents: read` | every job | `reusable-scan.yml:111-112` |
-| `security-events: write` | Upload SARIF | `reusable-scan.yml:843-845` |
-| `pull-requests: write` | PR Comment | `reusable-scan.yml:980-982` |
+| `security-events: write` | Upload SARIF | `reusable-scan.yml:861-863` |
+| `pull-requests: write` | PR Comment | `reusable-scan.yml:998-1000` |
 
 Grant all three even when you turn the SARIF or comment job off
 (`reusable-scan-self-test.yml:135-140`).
@@ -164,7 +164,7 @@ Grant all three even when you turn the SARIF or comment job off
 ### What a run produces
 
 - **Code scanning categories:** `trivy-iac`, `trivy-secrets`, `checkov` and `snyk-iac`
-  (`reusable-scan.yml:927`, `936`, `947`, `956`). No input changes them. For one commit,
+  (`reusable-scan.yml:945`, `954`, `965`, `974`). No input changes them. For one commit,
   a later upload with the same tool and category overwrites the earlier results, and two
   such uploads in one workflow run fail it ([GitHub Docs: Uploading a SARIF file to
   GitHub][gh-sarif]). So two calls of this workflow on the same commit, for example one
@@ -172,19 +172,19 @@ Grant all three even when you turn the SARIF or comment job off
   uploaded to code scanning. When a SARIF file is over 25 MB or holds more than 5,000
   results, each run in it keeps its 5,000 most severe results and then gets one
   `scan-truncation-warning` result, so a run can hold 5,001 results and a file with
-  several runs can hold more (`reusable-scan.yml:871-918`).
+  several runs can hold more (`reusable-scan.yml:889-936`).
 - **Pull request comment:** counts per severity, the number suppressed and baselined,
-  and up to 20 active findings (`reusable-scan.yml:1004-1056`). The table is not sorted
-  most severe first. Its sort maps CRITICAL to `0` and then applies `|| 4`, so CRITICAL
-  findings sort after LOW (`reusable-scan.yml:1018-1021`). When 20 or more active findings
-  are HIGH, MEDIUM or LOW, no CRITICAL finding appears in the table. Use the CRITICAL
-  count above the table, or `aggregated.json`.
+  and up to 20 active findings (`reusable-scan.yml:1022-1074`). The table lists the most
+  severe first: CRITICAL, HIGH, MEDIUM, LOW (`reusable-scan.yml:1036-1039`). Up to v2.3.0
+  its sort applied `|| 4` to CRITICAL's rank of `0`, so CRITICAL findings sorted after LOW,
+  and a run with 20 or more other findings showed none in the table. The counts above the
+  table were always right.
 - **Artifacts kept for 1 day:** `scanning-configs`, `trivy-results`, `checkov-results`,
   `tflint-results`, `snyk-results` (when Snyk runs) and `aggregated-results`
-  (`reusable-scan.yml:171-179`, `265-275`, `350-358`, `480-486`, `531-539`, `827-833`).
+  (`reusable-scan.yml:171-179`, `265-275`, `350-358`, `480-486`, `531-539`, `845-851`).
   `aggregated-results` holds `aggregated.json`, which lists every finding with its
   `tool`, `rule_id`, `severity`, `file`, `suppressed` and `baseline` fields
-  (`reusable-scan.yml:633-722`, `796-806`).
+  (`reusable-scan.yml:633-722`, `814-824`).
 - **Job summaries:** the Trivy version and the digest of its checks bundle
   (`reusable-scan.yml:213-225`), and the TFLint version with each ruleset version
   (`reusable-scan.yml:407-419`). The setup summary also records the effective Checkov
@@ -209,7 +209,7 @@ does not. Whether an internal copy works is UNKNOWN.
 
 With `fail-on-findings: true`, the default, active CRITICAL and HIGH findings fail the
 Aggregate Results job. MEDIUM and LOW findings are reported in the comment and SARIF, but
-never fail it (`reusable-scan.yml:45-49`, `790-794`). How each tool's severity is mapped:
+never fail it (`reusable-scan.yml:45-49`, `808-812`). How each tool's severity is mapped:
 
 | Tool | Severity used | Source |
 |---|---|---|
@@ -261,26 +261,27 @@ The workflow does not rely on code scanning to honour SARIF suppression metadata
 
 - **Suppressions.** The step reads `.scan-suppressions.yaml` at the repository root, in
   the sections `trivy_suppressions`, `checkov_suppressions`, `tflint_suppressions` and
-  `snyk_suppressions` (`reusable-scan.yml:727`, `735`). An entry counts only while its
-  `expires_date` (`YYYY-MM-DD`) is today or later; an entry with no `expires_date` is
-  ignored with a workflow warning (`reusable-scan.yml:737-748`). Quote the date, for example
-  `expires_date: "2026-12-31"`. PyYAML reads an unquoted `2026-12-31` as a date object.
-  `strptime` then raises `TypeError`, which the `except ValueError` at
-  `reusable-scan.yml:747` does not catch, and the `except Exception` at
-  `reusable-scan.yml:755-757` logs a workflow warning. So one such entry, in any section,
-  stops suppressions in the file from being applied. The same happens
-  with any other non-string value, such as a full timestamp. The local
-  `validate-suppressions` hook accepts the unquoted form
-  (`hooks/validate-suppressions.py:89-90`), so it does not warn you. It matches on
-  `rule_id` and `tool` only, so it suppresses that rule in every file; `tool` must be
-  `trivy`, `checkov`, `tflint` or `snyk` (`reusable-scan.yml:745`, `751`). The workflow
-  does not read `file_pattern`. If PyYAML cannot be imported or the file cannot be
-  parsed, no suppression is applied and a workflow warning is shown (`reusable-scan.yml:728-757`).
-  The setup job installs the YAML reader used by the Checkov options helper. For the
-  approval rules, see [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md).
+  `snyk_suppressions` (`reusable-scan.yml:724-775`). Each entry stands alone. It counts only
+  while its `expires_date` (`YYYY-MM-DD`) is today or later. An entry that is not a mapping,
+  has no `rule_id`, has no `expires_date`, or has an `expires_date` that is not a string or
+  not a valid date is skipped with a workflow warning that names its section and rule
+  (`reusable-scan.yml:751-769`), and the other entries still apply. A section that is not a
+  list is skipped the same way. Quote the date, for example `expires_date: "2026-12-31"`:
+  PyYAML reads an unquoted `2026-12-31` as a date object, and a full timestamp is not a
+  `YYYY-MM-DD` string either, so both are skipped with the warning. Up to v2.3.0 one such
+  entry, in any section, stopped every suppression in the file from being applied, and a
+  malformed date string was skipped without a message. The local `validate-suppressions`
+  hook accepts the unquoted form (`hooks/validate-suppressions.py:89-90`), so it does not warn
+  you. An entry matches on `rule_id` and `tool` only, so it suppresses that rule in every
+  file; `tool` must be `trivy`, `checkov`, `tflint` or `snyk` (`reusable-scan.yml:767`,
+  `772`). The workflow does not read `file_pattern`. If PyYAML cannot be imported, or the file
+  cannot be parsed or is not a mapping, no suppression is applied and a workflow warning is
+  shown (`reusable-scan.yml:732-741`). The setup job installs the YAML reader used by the
+  Checkov options helper. For the approval rules, see
+  [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md).
 - **Baseline.** The step reads `.scan-baseline/baseline.json`. A finding is baselined
   when the SHA-256 of `<rule_id>|<file>` is one of its `entries[].hash` values
-  (`reusable-scan.yml:762-773`). `scripts/create-baseline.ps1` writes that file in that
+  (`reusable-scan.yml:780-791`). `scripts/create-baseline.ps1` writes that file in that
   format (`create-baseline.ps1:49`, `97-107`, `240`). Whether the file paths it records
   locally match the paths in a CI run is UNKNOWN; compare one entry with
   `aggregated.json` before you rely on it.

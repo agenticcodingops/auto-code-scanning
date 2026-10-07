@@ -725,36 +725,54 @@ jobs:
           suppressions_applied = 0
           apply_suppressions = os.environ.get("APPLY_SUPPRESSIONS", "") == "true"
           if apply_suppressions and os.path.exists(".scan-suppressions.yaml"):
+              def warn(message):
+                  # Text from the file must not start a workflow command or add a line.
+                  print("::warning::" + str(message).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+
+              supp_data = {}
               try:
                   import yaml
                   with open(".scan-suppressions.yaml") as f:
                       supp_data = yaml.safe_load(f) or {}
+                  if not isinstance(supp_data, dict):
+                      raise ValueError("the file is not a mapping of sections")
+              except Exception as exc:
+                  warn(f"Could not parse/apply .scan-suppressions.yaml: {exc}")
+                  supp_data = {}
 
-                  now = datetime.now(timezone.utc).date()
-                  active_suppressions = set()
-                  for section in ["trivy_suppressions", "checkov_suppressions", "tflint_suppressions", "snyk_suppressions"]:
-                      for entry in supp_data.get(section, []) or []:
+              # Each entry stands alone: a bad one is skipped with a warning, and the rest still apply.
+              now = datetime.now(timezone.utc).date()
+              active_suppressions = set()
+              for section in ["trivy_suppressions", "checkov_suppressions", "tflint_suppressions", "snyk_suppressions"]:
+                  entries = supp_data.get(section) or []
+                  if not isinstance(entries, list):
+                      warn(f"Ignored {section}: it is not a list of entries")
+                      continue
+                  for position, entry in enumerate(entries, start=1):
+                      label = f"entry {position}"
+                      try:
+                          if not isinstance(entry, dict):
+                              raise ValueError("the entry is not a mapping")
+                          rule = entry.get("rule_id")
+                          if not isinstance(rule, str) or not rule:
+                              raise ValueError("rule_id is missing or not a string")
+                          label = rule
                           expires = entry.get("expires_date", "")
                           if not expires:
-                              rule = str(entry.get("rule_id", "(unknown rule)")).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                              print(f"::warning::Ignored {section} entry {rule}: missing expires_date")
-                          if expires:
-                              try:
-                                  exp_date = datetime.strptime(expires, "%Y-%m-%d").date()
-                                  if exp_date >= now:
-                                      key = (entry.get("rule_id", ""), entry.get("tool", ""))
-                                      active_suppressions.add(key)
-                              except ValueError:
-                                  pass
+                              raise ValueError("missing expires_date")
+                          if not isinstance(expires, str):
+                              raise ValueError("expires_date must be a quoted YYYY-MM-DD string, not an unquoted date")
+                          exp_date = datetime.strptime(expires, "%Y-%m-%d").date()
+                          if exp_date >= now:
+                              active_suppressions.add((rule, entry.get("tool", "")))
+                      except (ValueError, TypeError, AttributeError) as exc:
+                          warn(f"Ignored {section} entry {label}: {exc}")
 
-                  for finding in findings:
-                      key = (finding["rule_id"], finding["tool"])
-                      if key in active_suppressions:
-                          finding["suppressed"] = True
-                          suppressions_applied += 1
-              except Exception as exc:
-                  message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                  print(f"::warning::Could not parse/apply .scan-suppressions.yaml: {message}")
+              for finding in findings:
+                  key = (finding["rule_id"], finding["tool"])
+                  if key in active_suppressions:
+                      finding["suppressed"] = True
+                      suppressions_applied += 1
 
           # Apply baseline
           baseline_filtered = 0
@@ -1017,7 +1035,7 @@ jobs:
               .filter(f => !f.suppressed && !f.baseline)
               .sort((a, b) => {
                 const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-                return (order[a.severity] || 4) - (order[b.severity] || 4);
+                return (order[a.severity] ?? 4) - (order[b.severity] ?? 4);
               })
               .slice(0, 20);
 
