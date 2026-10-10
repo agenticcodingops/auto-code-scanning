@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.2...v2.3.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **setup:** vendor the schemas with the validator, and drop stale pin examples ([#31](https://github.com/agenticcodingops/auto-code-scanning/issues/31)) ([c67b02f](https://github.com/agenticcodingops/auto-code-scanning/commit/c67b02fbc3e58a1febabe1972bf0251c1edaf646))
+
 ## [2.3.2](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.1...v2.3.2) (2026-10-07)
 
 

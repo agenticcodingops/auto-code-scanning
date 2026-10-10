@@ -91,7 +91,7 @@ Override hook file patterns in your `.pre-commit-config.yaml` to scope tools per
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v2.3.2  # x-release-please-version
+    rev: v2.3.3  # x-release-please-version
     hooks:
       # AWS-scoped hooks
       - id: trivy-iac-critical
@@ -153,11 +153,11 @@ jobs:
       contents: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.2 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.3 # x-release-please-version
     with:
       terraform-directory: aws
       cloud-provider: aws
-      scanning-repo-ref: v2.3.2 # x-release-please-version
+      scanning-repo-ref: v2.3.3 # x-release-please-version
 ```
 
 `OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
