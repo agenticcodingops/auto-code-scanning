@@ -17,4 +17,5 @@ Closes #
 - Commands run, with exit codes (or "not run here; CI verifies"):
 - CI run URL:
 - Open questions:
-- Risk: low | high, and why (see the repo's merge rules)
+- Risk: low | high, and why. High: a workflow or release change, anything that changes what adopters' scans run,
+  block or report, secrets or settings, an irreversible step such as a tag or release, or low confidence.
