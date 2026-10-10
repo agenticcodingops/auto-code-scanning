@@ -3,7 +3,7 @@
 # Consuming repos reference these via:
 #   repos:
 #     - repo: https://github.com/agenticcodingops/auto-code-scanning
-#       rev: v1.0.0
+#       rev: <release tag>
 #       hooks:
 #         - id: trivy-iac-critical
 

@@ -27,7 +27,7 @@ repos:
           - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v1.0.0
+    rev: <release tag>
     hooks:
       - id: trivy-secrets
         stages: [pre-commit]

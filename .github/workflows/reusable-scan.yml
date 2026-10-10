@@ -8,7 +8,7 @@
 # Usage in consuming repo:
 #   jobs:
 #     security-scan:
-#       uses: {org}/auto-code-scanning/.github/workflows/reusable-scan.yml@v1.0.0
+#       uses: {org}/auto-code-scanning/.github/workflows/reusable-scan.yml@<release tag>
 #       with:
 #         terraform-directory: "terraform/"
 #         cloud-provider: "aws"

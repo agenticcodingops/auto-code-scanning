@@ -77,10 +77,11 @@ if ($py) {
 Step "Vendoring shared hooks + scripts"
 if ($RepoPath -ne $PlatformRoot) {
     Copy-Item -Path (Join-Path $PlatformRoot "hooks") -Destination $RepoPath -Recurse -Force
+    Copy-Item -Path (Join-Path $PlatformRoot "schemas") -Destination $RepoPath -Recurse -Force
     foreach ($s in @("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py", "validate-scan-config.py", "render-scan-config.py")) {
         Copy-IfNewer (Join-Path $PlatformRoot "scripts/$s") (Join-Path $RepoPath "scripts/$s")
     }
-    Ok "Copied hooks/ and shared scripts/"
+    Ok "Copied hooks/, schemas/, and shared scripts/"
 } else {
     Info "Running inside the platform repo; hooks/scripts already present"
 }

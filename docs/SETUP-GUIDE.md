@@ -68,7 +68,7 @@ python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard -
 **What it does (in order):**
 
 1. **Renders `scan-config.yaml`** from `templates/scan-config/<tier>.yaml` via `scripts/render-scan-config.py`, flipping `enabled: true` for your chosen languages (and `fix_loop`, if requested). Re-running with the same args is deterministic.
-2. **Vendors `hooks/` + shared scripts** (`scan-and-fix`, `check-fix-allowlist.py`, `validate-scan-config.py`, `render-scan-config.py`) into the consumer repo so the runner and Claude bundle have what they need.
+2. **Vendors `hooks/`, `schemas/` + shared scripts** (`scan-and-fix`, `check-fix-allowlist.py`, `validate-scan-config.py`, `render-scan-config.py`) into the consumer repo so the runner and Claude bundle have what they need. Vendoring `schemas/` ensures the copied config validator can find `schemas/scan-config.schema.json`.
 3. **Installs the local runner.** Lefthook (default): copies `templates/lefthook/lefthook.yml` to `lefthook.yml` and runs `lefthook install`. pre-commit: writes `.pre-commit-config.yaml` from the tier template and runs `pre-commit install` (+ `--hook-type pre-push`). Both call the **same** `hooks/dispatcher.sh` scripts.
 4. **Copies the Claude Code in-session bundle** (`templates/claude` -> `.claude/`) and the thin caller workflows: `code-security-scan.yml`, `terraform-scan.yml` (when Terraform is enabled), and `autonomous-fix.yml` (when the fix-loop is on).
 5. **Fix-loop only:** creates the `ai-autofix` + `needs-human-review` labels via `gh label create`, then **verifies** (never creates) `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `gh secret list`, printing exact creation steps if either is missing.
@@ -406,7 +406,7 @@ pre-commit run snyk-iac --all-files --hook-stage pre-push
 To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): it moves the
 `uses:` reference and the `scanning-repo-ref` / `scanning_repo_ref` inputs together.
 Never use `@main`. Re-running
-`setup-scan-fix` refreshes the vendored `hooks/`, scripts, and `.claude/` bundle
+`setup-scan-fix` refreshes the vendored `hooks/`, `schemas/`, scripts, and `.claude/` bundle
 idempotently. It also overwrites the caller workflows with the templates, which pin the
 release you re-run it from, so re-run it before you move the pins, never after.
 
