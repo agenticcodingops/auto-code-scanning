@@ -33,6 +33,7 @@ def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=300,
     )
     assert setup.returncode == 0, setup.stdout + setup.stderr
 
@@ -45,6 +46,7 @@ def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=60,
     )
     assert valid.returncode == 0, valid.stdout + valid.stderr
 
@@ -57,6 +59,7 @@ def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=60,
     )
     assert invalid.returncode == 1, invalid.stdout + invalid.stderr
 
