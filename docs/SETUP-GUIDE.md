@@ -8,7 +8,7 @@ locally via **Lefthook** (default) or **pre-commit**, and can open an optional
 autonomous **fix-loop** on opted-in PRs. The recommended entry point is the
 one-command orchestrator `setup-scan-fix`.
 
-> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.3.2`. <!-- x-release-please-version -->
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v2.3.3`. <!-- x-release-please-version -->
 
 ## Prerequisites
 
@@ -339,7 +339,7 @@ permissions:
 
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.2 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.3 # x-release-please-version
     with:
       # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
       # languages: "csharp,typescript"
@@ -352,12 +352,12 @@ Terraform caller (`terraform-scan.yml`):
 ```yaml
 jobs:
   terraform-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.2 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v2.3.3 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"          # aws | azure | gcp
       severity: "CRITICAL,HIGH"
-      scanning-repo-ref: "v2.3.2" # x-release-please-version
+      scanning-repo-ref: "v2.3.3" # x-release-please-version
     # Optional Snyk IaC (needs SNYK_TOKEN secret):
     # secrets:
     #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
