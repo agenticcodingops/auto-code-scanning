@@ -348,11 +348,11 @@ The config **schema enforces a SHA pin**: `schemas/scan-config.schema.json`
 constrains `claude_code_action_ref` to the pattern
 `^anthropics/claude-code-action@[0-9a-f]{40}$`, so `validate-scan-config` rejects a
 tag-only or `@main` ref when it can run the check. PyYAML and `jsonschema` must be
-installed, and the validator must find `schemas/scan-config.schema.json`. The copy that
-setup puts in an adopter's `scripts/` cannot find it, because setup does not copy
-`schemas/`. Otherwise it prints a warning and exits 0, unless `STRICT=1` is set, which
-turns the skip into a failure (`scripts/validate-scan-config.py:40-60`). No CI workflow
-runs it.
+installed, and the validator must find `schemas/scan-config.schema.json`.
+`setup-scan-fix` vendors `schemas/` with the validator, so an adopter gets the schema at
+the path the validator expects. If the schema is later removed, the validator prints a
+warning and exits 0 unless `STRICT=1` is set, which turns the skip into a failure
+(`scripts/validate-scan-config.py:40-60`). No CI workflow runs it.
 
 Because the action is referenced only from the reusable workflow, every consumer that
 `uses:` `autonomous-fix.yml@v2.0.0` gets the safe pin automatically — there is nothing

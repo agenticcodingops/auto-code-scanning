@@ -131,15 +131,15 @@ fix_loop:
 Keep `fix_loop.claude_code_action_ref` as the template wrote it. The schema accepts only
 `anthropics/claude-code-action@` followed by a 40-character lowercase commit SHA
 (`schemas/scan-config.schema.json:157-161`). A bare SHA or a tag is rejected. Then
-validate with the platform clone's copy of the validator:
+validate with the copy setup installed in the consumer:
 
 ```bash
-STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
+STRICT=1 python scripts/validate-scan-config.py scan-config.yaml
 ```
 
-The copy the setup put in your `scripts/` cannot find the schema, because the setup does
-not copy `schemas/`. Without `STRICT=1` it then prints a warning and exits 0 instead of
-validating (`validate-scan-config.py:29`, `40-48`; `setup-scan-fix.py:71-78`).
+Setup copies `schemas/` alongside the validator, so it finds the schema in your repository.
+If the schema is later removed, without `STRICT=1` the validator prints a warning and exits
+0 instead of validating (`validate-scan-config.py:29`, `40-48`).
 
 The fix loop reads this file from the pull request's base commit, or from the default
 branch on a manual dispatch. It never reads it from the pull request head

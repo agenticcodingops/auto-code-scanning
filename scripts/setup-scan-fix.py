@@ -72,10 +72,11 @@ def main(argv) -> int:
     step("Vendoring shared hooks + scripts")
     if repo != PLATFORM_ROOT:
         shutil.copytree(PLATFORM_ROOT / "hooks", repo / "hooks", dirs_exist_ok=True)
+        shutil.copytree(PLATFORM_ROOT / "schemas", repo / "schemas", dirs_exist_ok=True)
         for s in ("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py",
                   "validate-scan-config.py", "render-scan-config.py"):
             copy(PLATFORM_ROOT / "scripts" / s, repo / "scripts" / s)
-        ok("Copied hooks/ and shared scripts/")
+        ok("Copied hooks/, schemas/, and shared scripts/")
     else:
         info("Running inside the platform repo; hooks/scripts already present")
 

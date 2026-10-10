@@ -9,7 +9,7 @@
 # Usage in a consuming repo (pin to a release tag!):
 #   jobs:
 #     code-scan:
-#       uses: {org}/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.0.0
+#       uses: {org}/auto-code-scanning/.github/workflows/code-security-scan.yml@<release tag>
 #       with:
 #         languages: "csharp,typescript"   # or omit to auto-detect from scan-config.yaml
 #       permissions:

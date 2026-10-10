@@ -227,20 +227,19 @@ repo is what keeps uploads clean.
 ### Validate your config
 
 ```bash
-STRICT=1 python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml   # run from your repo root
+STRICT=1 python scripts/validate-scan-config.py scan-config.yaml   # run from your repo root
 ```
 
 In PowerShell:
 
 ```powershell
-$env:STRICT = '1'; python /path/to/auto-code-scanning/scripts/validate-scan-config.py scan-config.yaml
+$env:STRICT = '1'; python scripts/validate-scan-config.py scan-config.yaml
 ```
 
-(Do not rely on the `validate-scan-config` hook for this. With Lefthook it runs the copy in
-your `scripts/`, which cannot find the schema because setup does not copy `schemas/`, so it
-prints a warning and lets the commit through. With pre-commit on Linux or macOS it
-validates the platform's own `scan-config.yaml` instead of yours. Run the command above
-from your repository root.)
+(Do not rely only on the `validate-scan-config` hook for this. With Lefthook it runs the
+copy in your `scripts/`, which finds the schema setup copied into `schemas/`. With
+pre-commit on Linux or macOS it validates the platform's own `scan-config.yaml` instead
+of yours. Run the command above from your repository root.)
 
 ### Fix-loop boundary (only if you enabled Layer B)
 
