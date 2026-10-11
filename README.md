@@ -133,7 +133,7 @@ Inputs for `.github/workflows/reusable-scan.yml`:
 | `terraform-directory` | `.` | Root directory to scan. |
 | `cloud-provider` | required | `aws`, `azure` or `gcp`. |
 | `severity` | `CRITICAL,HIGH` | Trivy misconfiguration severity filter. |
-| `scanning-repo-ref` | `v1.0.0` | Configs and helper ref; set it to the same released tag or commit as the workflow call. |
+| `scanning-repo-ref` | the current release tag (release-please keeps it current) | Configs and helper ref; set it to the same released tag or commit as the workflow call. |
 | `fail-on-findings` | `true` | Fail on active CRITICAL or HIGH findings. |
 | `upload-sarif` | `true` | Upload code scanning reports. |
 | `post-pr-comment` | `true` | Post a summary on pull requests. |

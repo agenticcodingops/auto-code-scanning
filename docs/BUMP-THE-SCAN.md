@@ -137,8 +137,9 @@ jobs:
 
 The `uses:` ref selects the workflow. `scanning-repo-ref` selects the configs it scans
 with (`reusable-scan.yml:123-131`). If they differ, the run uses one release's workflow
-with another release's configs. Never leave `scanning-repo-ref` unset: its default,
-`v1.0.0`, is not a tag in this repository (`reusable-scan.yml:40-44`).
+with another release's configs. Set `scanning-repo-ref` explicitly whenever `uses:` is not
+the current release: unset, it defaults to the current release tag, which release-please keeps
+current (`reusable-scan.yml:40-44`), so an older `uses:` would read newer configs.
 
 Find every other pin to this platform and move it in the same pull request:
 

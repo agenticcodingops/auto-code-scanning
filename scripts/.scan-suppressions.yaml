@@ -14,7 +14,8 @@
 #   - expires_date: When suppression must be reviewed (YYYY-MM-DD, max 180 days)
 #
 # OPTIONAL FIELDS:
-#   - file_pattern: Limit suppression to specific files (glob pattern)
+#   - file_pattern: Not read by the scan today: a suppression applies by rule id and tool across
+#     the whole repository, whatever this field says. Kept only so existing files stay valid.
 #   - severity: Original severity of the finding (CRITICAL, HIGH, MEDIUM, LOW)
 #   - ticket: Link to approval ticket (JIRA, etc.)
 #   - approved_by: Security team approver (required for HIGH/CRITICAL)
