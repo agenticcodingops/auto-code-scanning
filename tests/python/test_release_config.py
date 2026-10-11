@@ -195,6 +195,7 @@ def test_release_token_is_minted_from_the_app():
     requested = {k: v for k, v in inputs.items() if k.startswith("permission-")}
     assert requested == {
         "permission-contents": "write",
+        "permission-workflows": "write",
         "permission-pull-requests": "write",
         "permission-issues": "write",
     }

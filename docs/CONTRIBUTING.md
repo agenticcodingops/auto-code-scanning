@@ -38,7 +38,8 @@ by hand.** `v2.1.0` was the last release cut by hand.
    `chore(main): release X.Y.Z`. That PR adds the `CHANGELOG.md` entry and sets the new
    version in `.release-please-manifest.json`, `version.txt`, and every file listed under
    `extra-files` in `release-please-config.json` (on the lines marked
-   `x-release-please-version`). Those are `README.md` and the adopter docs that show a pin.
+   `x-release-please-version`). Those include `README.md`, adopter docs that show a pin,
+   and the current release tag used as `reusable-scan.yml`'s `scanning-repo-ref` default.
    On a marked line, release-please replaces only the first `X.Y.Z`, so a marked line holds
    one version: the current one. When you add a pin to a doc, mark its line and list the
    doc under `extra-files`. `tests/python/test_release_config.py` checks that every listed
@@ -139,13 +140,14 @@ release PR, and publishing the release starts its verification run. The workflow
   `repositories`, so the token covers this repository only, and it asks for these
   permissions and nothing else:
   - Contents: write (release branch, commits, tags, releases)
+  - Workflows: write (the release-managed default tag in `reusable-scan.yml`)
   - Pull requests: write (the release PR)
   - Issues: write (the labels and comments release-please puts on the release PR)
 
   Metadata read comes with every token. The App's installation must grant at least these
   permissions, or minting fails. The token expires within an hour and is revoked when the
-  job ends. Workflows permission is not needed, because the release PR never changes a
-  file under `.github/workflows/`; keep workflow files out of `extra-files`.
+  job ends. Workflows permission lets release-please update the marked default in
+  `reusable-scan.yml`; without it, GitHub rejects the release PR's workflow-file change.
 - **Rotating the private key:** an App's private key has no expiry date, so rotate it on
   the organization's schedule, and at once if it may have leaked or when someone who held
   a copy leaves.

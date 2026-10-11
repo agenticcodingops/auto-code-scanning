@@ -14,7 +14,7 @@
 # Token: an installation token of the organization's release GitHub App,
 # minted for each run from the RELEASE_APP_CLIENT_ID variable and the
 # RELEASE_APP_PRIVATE_KEY secret. It covers this repository only, with
-# Contents, Pull requests and Issues write, and is revoked when the job ends
+# Contents, Workflows, Pull requests and Issues write, and is revoked when the job ends
 # (docs/CONTRIBUTING.md describes the App and its key rotation). Unlike
 # GITHUB_TOKEN, whose PRs, tags and releases start no workflow, it lets CI run
 # on the release PR and lets the release start its verification run.
@@ -70,6 +70,8 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           # No owner or repositories: the token covers this repository only.
           permission-contents: write
+          # Required because reusable-scan.yml contains the release-managed default tag.
+          permission-workflows: write
           permission-pull-requests: write
           permission-issues: write
 
