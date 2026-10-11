@@ -121,6 +121,56 @@ flowchart TD
 | **Lefthook** | **default** | single Go binary, native Windows, parallel, no Python/cp1252 fragility → friction-free for autonomous loops |
 | **pre-commit** | supported alternative | for teams standardised on pre-commit + public-ecosystem distribution |
 
+## Local CI parity
+
+Run these before pushing. They are what CI runs on a pull request. Prerequisites: Python 3.11 with `pip install pytest pytest-cov pyyaml jsonschema`, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. CI installs Trivy, Checkov and PyYAML unpinned on the runner, so the versions are close, not exact; the pinned ones are named per job.
+
+```bash
+set -euo pipefail   # a failed check stays a failure, loops included
+# ci.yml "Lint & Validate": Python 3, PyYAML from `pip install pre-commit pyyaml` (unpinned)
+python -c "import yaml; yaml.safe_load(open('.pre-commit-hooks.yaml'))"
+python -c "import yaml; yaml.safe_load(open('configs/common/.scan-suppressions.yaml'))"
+for f in templates/*/pre-commit-config.yaml configs/*/.checkov.yaml configs/*/policy-overlay.yaml configs/common/noisy-checks-*.yaml; do python -c "import yaml; yaml.safe_load(open('$f'))"; done
+for f in schemas/*.json; do python -c "import json; json.load(open('$f'))"; done
+for f in configs/*/.checkov.yaml; do python -c "import yaml,sys; d=yaml.safe_load(open('$f')); sys.exit(1 if d and 'check' in d else 0)"; done
+
+# ci.yml "Run Python tests": Python 3.11 (setup-python v5.6.0), pytest
+pip install pytest pytest-cov pyyaml jsonschema
+pytest tests/python/ -v --tb=short
+
+# ci.yml "Run Pester tests": Pester 5, shell pwsh
+pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
+
+# ci.yml "test-hooks": Trivy from apt (unpinned), Checkov from `pip install checkov` (unpinned), TFLint latest (setup-tflint v4.1.1). Matrix aws, azure, gcp.
+for cloud in aws azure gcp; do
+  FIXTURE="tests/fixtures/terraform-valid/"; [ -d "${FIXTURE}${cloud}" ] && FIXTURE="${FIXTURE}${cloud}"   # the cloud's own fixture, as CI selects it
+  trivy config "$FIXTURE" --severity CRITICAL --exit-code 1 --quiet --skip-check-update
+  trivy fs "$FIXTURE" --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet
+  checkov -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
+  tflint --init --config="configs/${cloud}/.tflint.hcl"
+done
+
+# reusable-scan-self-test.yml "Prepare both consumer inputs": PyYAML 6.0.3
+python -m pip install --disable-pip-version-check PyYAML==6.0.3
+GITHUB_OUTPUT=$(mktemp) GITHUB_STEP_SUMMARY=$(mktemp) CHECKOV_SKIP_CHECKS=CKV_AZURE_33,CKV_AZURE_33 CHECKOV_RENDER_ITER_COUNT=20 python scripts/checkov-consumer-options.py prepare configs/azure/.checkov.yaml   # the script appends to GITHUB_OUTPUT and GITHUB_STEP_SUMMARY, so give it files
+
+# terraform-security-scan.yml: dormant here (see the CI-only list below); its secret scan is the one command that applies to this tree
+trivy fs . --scanners secret --severity HIGH,CRITICAL --exit-code 1
+```
+
+On Windows the checkout is CRLF. Run the commands on an LF copy: `tmp=$(mktemp -d) && git -c core.autocrlf=false archive HEAD | tar -x -C "$tmp" && cd "$tmp"` (`git archive` applies the checkout-time line-ending conversion unless told not to, and it copies the last commit only, so commit what you want checked first). A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
+
+Measured on a Windows machine on 2026-10-11: every command above passed except the consumer-options script, which exited 1 until `GITHUB_OUTPUT` pointed at a file (now part of the command), and the terraform-security-scan commands, which cannot run here because the tree has no `terraform/`, `.checkov.yaml`, `.trivyignore` or `.tflint.hcl`; that workflow triggers only on those paths, so it is dormant in this repository and its commands are listed below instead. Checkov 2.0.930, the version that workflow's action pins, does not install on Python 3.13; the run used 3.3.8.
+
+- semgrep.yml: runs in CI only: `semgrep ci` needs SEMGREP_APP_TOKEN (semgrep 1.178.0).
+- ci.yml integration: runs in CI only: it installs Trivy with apt on the runner and builds a throwaway git repository.
+- reusable-scan-self-test.yml scan and verify: runs in CI only: the reusable workflow uploads SARIF, and verify reads those artifacts.
+- performance-check.yml times Trivy CRITICAL, secret and CRITICAL/HIGH/MEDIUM scans, Checkov, and a TFLint scan against the fixtures, and fails above 5000 ms per hook, 10000 ms for the pre-commit total or 60000 ms for the pre-push total; the local loop above covers less. The script writes the runner step summary.
+- bypass-detection.yml: runs in CI only: it reads the push event and only warns.
+- terraform-security-scan.yml: dormant in this repository (it triggers only on `terraform/**`, `.checkov.yaml`, `.trivyignore` and `.tflint.hcl` at the root, none of which exist here; adding any of them starts it, so add the Terraform tree and all three root files together). When a Terraform tree is added, its commands are `trivy config terraform --severity CRITICAL,HIGH --exit-code 1 --ignorefile .trivyignore --skip-dirs .terraform,examples,tests` (trivy-action v0.33.1), `checkov -d terraform --config-file .checkov.yaml --framework terraform --download-external-modules false` (checkov-action v12.1347.0, Checkov 2.0.930), and `tflint --init --config=.tflint.hcl` then `tflint --config=.tflint.hcl --chdir=<each dir with .tf files> --format=compact` (setup-tflint v4.1.1, latest TFLint). Its SARIF uploads and pull-request comment need a GitHub token.
+- the environment-setup workflow: runs in CI only: it runs only when its own workflow file changes.
+- the automated review workflows: runs in CI only: they post a review and need a token.
+
 ### How CI scans run
 
 Reusable `workflow_call` workflows emit **SARIF per tool under distinct categories**
