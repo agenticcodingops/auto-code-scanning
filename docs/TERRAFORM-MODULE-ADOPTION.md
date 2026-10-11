@@ -135,10 +135,11 @@ jobs:
 ```
 
 - Replace `OWNER`, the branch name and `cloud-provider` with yours.
-- Keep `uses:` and `scanning-repo-ref` on the same release. Set `scanning-repo-ref`
-  explicitly whenever `uses:` is not the current release: unset, it defaults to the current
-  release tag, which release-please keeps current (`reusable-scan.yml:40-44`), so an older
-  `uses:` would read newer configs. To pin a commit instead of a tag, see
+- Keep `uses:` and `scanning-repo-ref` on the same release. The default lives inside the
+  workflow revision that `uses:` pins (`reusable-scan.yml:40-44`): from the release that
+  carries this change on, release-please sets it to that release's tag, so an unset input
+  reads the same release's configs. Earlier releases default to `v1.0.0`, which is not a tag,
+  so a caller pinned to one of them must set it. To pin a commit instead of a tag, see
   [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to).
 - The permissions follow [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#permissions-to-grant-on-the-calling-job).
 - Do not add a workflow-level `concurrency` group of `${{ github.workflow }}-${{ github.ref }}`.
