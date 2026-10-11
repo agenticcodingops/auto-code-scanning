@@ -123,9 +123,10 @@ flowchart TD
 
 ## Local CI parity
 
-Run these before pushing. They are what CI runs on a pull request, at the same versions.
+Run these before pushing. They are what CI runs on a pull request. Prerequisites: Python 3.11 with `pip install pytest pytest-cov pyyaml jsonschema`, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. CI installs Trivy, Checkov and PyYAML unpinned on the runner, so the versions are close, not exact; the pinned ones are named per job.
 
 ```bash
+set -euo pipefail   # a failed check stays a failure, loops included
 # ci.yml "Lint & Validate": Python 3, PyYAML from `pip install pre-commit pyyaml` (unpinned)
 python -c "import yaml; yaml.safe_load(open('.pre-commit-hooks.yaml'))"
 python -c "import yaml; yaml.safe_load(open('configs/common/.scan-suppressions.yaml'))"
@@ -138,13 +139,14 @@ pip install pytest pytest-cov pyyaml jsonschema
 pytest tests/python/ -v --tb=short
 
 # ci.yml "Run Pester tests": Pester 5, shell pwsh
-pwsh -NoProfile -Command "if (Test-Path 'tests/unit/*.Tests.ps1') { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = 'tests/unit/'; $c.Run.Exit = $true; $c.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration $c } else { Write-Host 'No Pester tests found' }"
+pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
 
 # ci.yml "test-hooks": Trivy from apt (unpinned), Checkov from `pip install checkov` (unpinned), TFLint latest (setup-tflint v4.1.1). Matrix aws, azure, gcp.
 for cloud in aws azure gcp; do
-  trivy config tests/fixtures/terraform-valid/ --severity CRITICAL --exit-code 1 --quiet --skip-check-update
-  trivy fs tests/fixtures/terraform-valid/ --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet
-  checkov -d tests/fixtures/terraform-valid/ --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
+  FIXTURE="tests/fixtures/terraform-valid/"; [ -d "${FIXTURE}${cloud}" ] && FIXTURE="${FIXTURE}${cloud}"   # the cloud's own fixture, as CI selects it
+  trivy config "$FIXTURE" --severity CRITICAL --exit-code 1 --quiet --skip-check-update
+  trivy fs "$FIXTURE" --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet
+  checkov -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
   tflint --init --config="configs/${cloud}/.tflint.hcl"
 done
 
@@ -162,14 +164,14 @@ tflint --init --config=.tflint.hcl
 find terraform -name '*.tf' -type f -exec dirname {} \; | sort -u | while read -r dir; do tflint --config=.tflint.hcl --chdir="$dir" --format=compact || exit 1; done
 ```
 
-On Windows the checkout is CRLF. Run the commands on an LF copy: `git archive HEAD | tar -x -C "$tmp"` (or `git archive HEAD --format=tar | tar -x -C "$tmp"`). Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
+On Windows the checkout is CRLF. Run the commands on an LF copy: `tmp=$(mktemp -d) && git archive HEAD | tar -x -C "$tmp" && cd "$tmp"`. A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
 
 Fails on the default branch when measured on a Windows machine on 2026-10-11: scripts/checkov-consumer-options.py prepare exits 1 because GITHUB_OUTPUT is unset; trivy config exits 1 because .trivyignore is not in the tree; checkov exits 2 because .checkov.yaml is not at the repo root (Checkov 2.0.930 did not install on Python 3.13, so this run used 3.3.8); tflint --init exits 1 because .tflint.hcl is not at the repo root.
 
 - semgrep.yml: runs in CI only: `semgrep ci` needs SEMGREP_APP_TOKEN (semgrep 1.178.0).
 - ci.yml integration: runs in CI only: it installs Trivy with apt on the runner and builds a throwaway git repository.
 - reusable-scan-self-test.yml scan and verify: runs in CI only: the reusable workflow uploads SARIF, and verify reads those artifacts.
-- performance-check.yml times the same Trivy, Checkov and TFLint commands and fails above 5000 ms. The script writes the runner step summary.
+- performance-check.yml times Trivy CRITICAL, secret and CRITICAL/HIGH/MEDIUM scans, Checkov, and a TFLint scan against the fixtures, and fails above 5000 ms per hook, 10000 ms for the pre-commit total or 60000 ms for the pre-push total; the local loop above covers less. The script writes the runner step summary.
 - bypass-detection.yml: runs in CI only: it reads the push event and only warns.
 - terraform-security-scan.yml SARIF uploads and the pull-request comment: runs in CI only: they need a GitHub token.
 - the environment-setup workflow: runs in CI only: it runs only when its own workflow file changes.
