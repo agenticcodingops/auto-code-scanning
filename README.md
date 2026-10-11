@@ -158,7 +158,7 @@ GITHUB_OUTPUT=$(mktemp) CHECKOV_SKIP_CHECKS=CKV_AZURE_33,CKV_AZURE_33 CHECKOV_RE
 trivy fs . --scanners secret --severity HIGH,CRITICAL --exit-code 1
 ```
 
-On Windows the checkout is CRLF. Run the commands on an LF copy: `tmp=$(mktemp -d) && git archive HEAD | tar -x -C "$tmp" && cd "$tmp"` (it copies the last commit only, so commit what you want checked first). A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
+On Windows the checkout is CRLF. Run the commands on an LF copy: `tmp=$(mktemp -d) && git -c core.autocrlf=false archive HEAD | tar -x -C "$tmp" && cd "$tmp"` (`git archive` applies the checkout-time line-ending conversion unless told not to, and it copies the last commit only, so commit what you want checked first). A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
 
 Measured on a Windows machine on 2026-10-11: every command above passed except the consumer-options script, which exited 1 until `GITHUB_OUTPUT` pointed at a file (now part of the command), and the terraform-security-scan commands, which cannot run here because the tree has no `terraform/`, `.checkov.yaml`, `.trivyignore` or `.tflint.hcl`; that workflow triggers only on those paths, so it is dormant in this repository and its commands are listed below instead. Checkov 2.0.930, the version that workflow's action pins, does not install on Python 3.13; the run used 3.3.8.
 
