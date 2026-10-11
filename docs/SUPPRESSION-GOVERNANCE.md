@@ -50,7 +50,7 @@ v2.3.0 it dropped every suppression in the file without a message), and
 | `severity` | Original finding severity | Recommended for all |
 | `approved_by` | Security approver email | HIGH, CRITICAL |
 | `ticket` | Tracking ticket (Jira, etc.) | HIGH, CRITICAL |
-| `file_pattern` | Limit scope (glob pattern) | Optional |
+| `file_pattern` | Metadata only; the scan does not read this field today | Optional |
 
 ## Approval Requirements
 
@@ -88,6 +88,10 @@ trivy_suppressions:
     expires_date: "2026-08-01"
     ticket: "BDCD-123"
 ```
+
+`file_pattern` documents the intended scope for reviewers, but the reusable scan does
+not read it and it does not limit which findings this entry suppresses. A suppression
+matches by the fields the workflow reads, such as `rule_id` and `tool`.
 
 ### Step 2: Run Validation
 

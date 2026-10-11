@@ -23,6 +23,7 @@
       "changelog-path": "CHANGELOG.md",
       "version-file": "version.txt",
       "extra-files": [
+        ".github/workflows/reusable-scan.yml",
         "README.md",
         "docs/APP-CODE-SCANNING.md",
         "docs/BUMP-THE-SCAN.md",

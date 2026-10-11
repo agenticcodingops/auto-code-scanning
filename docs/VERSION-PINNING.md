@@ -170,9 +170,11 @@ shows nothing. When you move to `v2.1.0` or later:
   (`.github/workflows/reusable-scan.yml:646`).
 - Checkov uses this repository's `configs/<cloud>/.checkov.yaml`, not your own Checkov
   config (`CHANGELOG.md:59-60`).
-- Set `scanning-repo-ref` to the same commit as `uses:` (`CHANGELOG.md:60-61`). If it is
-  unset, it defaults to `v1.0.0` (`.github/workflows/reusable-scan.yml:40-44`), which is
-  not a tag in this repository.
+- Set `scanning-repo-ref` to the same commit as `uses:` (`CHANGELOG.md:60-61`). Unset, it
+  takes the default baked into the pinned workflow revision
+  (`.github/workflows/reusable-scan.yml:40-44`): that release's own tag from the release that
+  carries this change on, and `v1.0.0`, which is not a tag, on earlier releases. A commit pin
+  therefore needs an explicit value whenever the configs at the tag and at the commit differ.
 
 Line references are at commit `7cd34a5`. Follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) for
 the upgrade.
