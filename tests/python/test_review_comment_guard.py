@@ -96,10 +96,18 @@ class WorkflowWiringTests(unittest.TestCase):
             done = subprocess.run(["node", "--check", path], capture_output=True, text=True, check=False)
             self.assertEqual(done.returncode, 0, done.stderr)
 
-    def test_the_hook_covers_every_tool_that_can_run_a_command_or_write_a_file(self):
+    def test_the_hook_sees_every_tool(self):
+        # Shell tools other than Bash (Monitor, PowerShell) reach a hook under a name that depends on the CLI
+        # version, and a tool added later would not be on any list. The guard blocks what it does not know.
         match = re.search(r'"matcher":\s*"([^"]+)"', TEXT)
         self.assertIsNotNone(match, "no PreToolUse matcher found")
-        self.assertEqual(set(match.group(1).split("|")), {"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"})
+        self.assertEqual(match.group(1), "*")
+
+    def test_settings_from_the_checkout_cannot_turn_the_hook_off(self):
+        # A pull request can add .claude/settings.json with {"disableAllHooks": true}; measured on CLI 2.1.316, a
+        # project setting like that stopped a loaded hook. The action loads user, project and local settings
+        # unless told otherwise, and the hook is installed in the user settings.
+        self.assertRegex(TEXT, r"--setting-sources user\s*\n")
 
     def test_the_hook_fails_closed(self):
         command = re.search(r'"command":\s*"(node [^"]*review-comment-guard\.js[^"]*)"', TEXT)
@@ -245,7 +253,41 @@ FILE_CASES = [
 ]
 
 
+PLAIN = "gh pr view 48 --json headRefOid"
+OTHER_PR = "gh pr comment 999 --repo o/r --body-file " + SUMMARY
+UNKNOWN_TOOLS = [
+    "WebFetch", "WebSearch", "Skill", "SlashCommand", "CronCreate", "CronDelete", "EnterWorktree", "ExitWorktree",
+    "RemoteTrigger", "SendMessage", "PushNotification", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode",
+    "ListMcpResourcesTool", "ReadMcpResourceTool", "mcp__other__tool", "mcp__github_comment_server__update_claude_comment",
+    "SomeToolAddedLater", "",
+]
+TOOL_CASES = (
+    # shell tools other than Bash get the same grammar, whatever name the CLI reports for them
+    [["allow", tool, {"command": PLAIN}] for tool in ("Monitor", "PowerShell")]
+    + [["allow", tool, {"command": "gh pr comment 48 --body-file " + SUMMARY}] for tool in ("Monitor", "PowerShell")]
+    + [["block", tool, {"command": OTHER_PR}] for tool in ("Monitor", "PowerShell")]
+    + [["block", tool, {"command": "gh pr view 48; id"}] for tool in ("Monitor", "PowerShell")]
+    + [["block", tool, {"command": "gh pr view 48 # '\ngh pr comment 999 --body-file x\n#'"}] for tool in ("Monitor", "PowerShell")]
+    + [["block", tool, {}] for tool in ("Monitor", "PowerShell")]
+    # a tool the guard has never heard of is blocked, even if it carries a command that looks harmless
+    + [["block", tool, {"command": PLAIN}] for tool in UNKNOWN_TOOLS]
+    + [["block", tool, {"command": OTHER_PR}] for tool in UNKNOWN_TOOLS]
+    + [["block", None, {}]]
+    # tools that run nothing and write nothing go on to the normal permission check
+    + [["allow", tool, {}] for tool in ("Read", "Grep", "Glob", "LS", "Agent", "Task", "TaskCreate", "TaskGet", "TaskList",
+                                       "TaskUpdate", "TaskOutput", "TaskStop", "BashOutput", "KillShell", "TodoWrite",
+                                       "ToolSearch", "mcp__github_inline_comment__create_inline_comment")]
+)
+
+
 class GuardDecisionTests(GuardTestCase):
+    def test_other_shell_tools_and_unknown_tools(self):
+        failures = []
+        for expected, tool, tool_input in TOOL_CASES:
+            if self.verdict(tool, tool_input) != expected:
+                failures.append((expected, tool, tool_input))
+        self.assertEqual(failures, [])
+
     def test_bash_commands(self):
         failures = []
         for expected, tool, command in CASES:
@@ -369,7 +411,9 @@ class BashDifferentialTests(GuardTestCase):
 
     def test_every_accepted_command_is_one_gh_call_with_the_predicted_arguments(self):
         rng = random.Random(20261031)
-        candidates = list({generate(rng) for _ in range(60000)})
+        # dict.fromkeys keeps generation order; a set would reorder by the per-process hash seed and make a
+        # failure impossible to replay from the random seed.
+        candidates = list(dict.fromkeys(generate(rng) for _ in range(60000)))
         driver = os.path.join(self.tmp, "driver.js")
         with open(driver, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(DRIVER)
