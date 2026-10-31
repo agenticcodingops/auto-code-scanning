@@ -80,9 +80,10 @@ The dispatcher sets these environment variables for hook scripts:
 
 - **Purpose**: Detects leaked credentials and secrets using pattern matching
 - **Stage**: pre-commit
-- **Tool**: Gitleaks
+- **Tool**: Gitleaks 8.19 or newer (`gitleaks git --staged`)
 - **Target**: <5 seconds
-- **Note**: Complements trivy-secrets with different detection patterns
+- **Flags**: `--report-format json --report-path - --redact --no-banner --exit-code 1 --log-level error`
+- **Note**: Prints each staged finding's rule, file, and line. It does not print the secret. A config Gitleaks cannot load warns and allows the commit (fail-open) and is not counted as a finding. On the inputs in [SECRET-SCANNER-EVALUATION.md](SECRET-SCANNER-EVALUATION.md), Trivy found AWS access-key ids that Gitleaks did not. Gitleaks' extra hit on that file was a Slack webhook, which Trivy rates MEDIUM and the CI HIGH,CRITICAL gate does not block. CI secret scans stay on Trivy.
 
 #### validate-suppressions
 

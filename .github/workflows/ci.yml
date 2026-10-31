@@ -8,6 +8,7 @@
 # Jobs:
 #   1. lint: Validate YAML, JSON schemas, PowerShell syntax
 #   2. test-hooks: Run each hook against all test fixtures
+#   2b. test-gitleaks-hook: pinned Gitleaks 8.30.1, staged-findings regression
 #   3. test-scripts: Run Pester tests (PowerShell) + pytest (Python)
 #   4. integration: Simulate consuming repo setup + scan cycle
 #   5. performance: Run performance check workflow
@@ -268,6 +269,33 @@ jobs:
           } else {
             Write-Host "No Pester tests found"
           }
+
+  # ==========================================================================
+  # GITLEAKS HOOK
+  # Pinned official binary. Not part of the cloud matrix: one Linux run.
+  # ==========================================================================
+  test-gitleaks-hook:
+    name: Test Gitleaks hook
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install pinned Gitleaks 8.30.1
+        run: |
+          set -euo pipefail
+          version="8.30.1"
+          asset="gitleaks_${version}_linux_x64.tar.gz"
+          expected="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${asset}"
+          curl -fsSL -o "${asset}" "${url}"
+          echo "${expected}  ${asset}" | sha256sum -c -
+          tar -xzf "${asset}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          test "$(gitleaks version)" = "8.30.1"
+
+      - name: Run the staged-findings regression
+        run: bash tests/integration/test-gitleaks-hook.sh sh
 
   # ==========================================================================
   # INTEGRATION

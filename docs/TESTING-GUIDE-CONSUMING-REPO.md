@@ -212,7 +212,7 @@ git commit -m "test: insecure commit"
 
 ### 4C. Expected: commit is BLOCKED
 
-The `gitleaks` hook should detect the hardcoded AWS access key and block the commit.
+The `gitleaks` hook blocks the commit when Gitleaks reports a staged finding, and prints the rule, file, and line. The AWS example in `tests/fixtures/terraform-secret` is not detected by Gitleaks 8.30.1. See [SECRET-SCANNER-EVALUATION.md](SECRET-SCANNER-EVALUATION.md). Generate a value Gitleaks reports, at runtime, when you need to see a block. Do not commit that value.
 
 ### 4D. Clean up
 
