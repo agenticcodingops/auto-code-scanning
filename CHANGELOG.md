@@ -8,6 +8,14 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.3...v2.3.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* default scanning-repo-ref to the current release tag, and correct the file_pattern doc ([#35](https://github.com/agenticcodingops/auto-code-scanning/issues/35)) ([586623e](https://github.com/agenticcodingops/auto-code-scanning/commit/586623e315218ef55e1a88f9c36d48eb342e96e4))
+* **hooks:** report each staged Gitleaks finding and fail open on a bad config ([#40](https://github.com/agenticcodingops/auto-code-scanning/issues/40)) ([8d89553](https://github.com/agenticcodingops/auto-code-scanning/commit/8d89553ee9b30aedeff8087e2432dce0df837636))
+
 ## [2.3.3](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.2...v2.3.3) (2026-10-10)
 
 
