@@ -196,7 +196,7 @@ jobs:
           # into ~/.claude/settings.json before it installs the plugin
           # (base-action/src/setup-claude-code-settings.ts). The POSTING RULES ask for the
           # foreground too, as a second layer.
-          # The same input carries the comment guard written above, as a PreToolUse hook on Bash.
+          # The same input carries the comment guard written above, as a PreToolUse hook on every tool.
           settings: |
             {
               "env": {
