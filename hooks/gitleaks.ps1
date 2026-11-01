@@ -66,42 +66,96 @@ function ConvertFrom-GitleaksReport {
     param([string]$ReportText)
 
     if ([string]::IsNullOrWhiteSpace($ReportText)) {
-        return @{ Ok = $false; Rows = @() }
+        return @{ Ok = $false; Unparsed = $false; Rows = @() }
     }
     $trim = $ReportText.Trim()
     if (-not $trim.StartsWith('[')) {
-        return @{ Ok = $false; Rows = @() }
+        return @{ Ok = $false; Unparsed = $false; Rows = @() }
     }
-    try {
-        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('NoEnumerate')) {
-            $data = $trim | ConvertFrom-Json -NoEnumerate
-        } else {
-            $data = $trim | ConvertFrom-Json
+    # ConvertFrom-Json accepts truncated JSON. System.Text.Json does not, and
+    # a truncated findings array must not become a pass. Never read Secret or Match.
+    # Windows PowerShell 5.1 has no System.Text.Json; fall back there.
+    if (-not ('System.Text.Json.JsonDocument' -as [type])) {
+        try {
+            if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('NoEnumerate')) {
+                $data = $trim | ConvertFrom-Json -NoEnumerate -ErrorAction Stop
+            } else {
+                $data = $trim | ConvertFrom-Json -ErrorAction Stop
+            }
+        } catch {
+            $compact = [regex]::Replace($trim, '\s', '')
+            $unparsed = $compact.StartsWith('[') -and $compact -ne '[]'
+            return @{ Ok = $false; Unparsed = $unparsed; Rows = @() }
         }
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($item in @($data)) {
+            if ($null -eq $item -or -not $item.RuleID) { continue }
+            $start = 0
+            if ($null -ne $item.StartLine) { $start = [int]$item.StartLine }
+            $end = $start
+            if ($null -ne $item.EndLine) { $end = [int]$item.EndLine }
+            $desc = ''
+            if ($null -ne $item.Description) { $desc = [string]$item.Description }
+            $path = ''
+            if ($null -ne $item.File) { $path = [string]$item.File }
+            $rows.Add([pscustomobject]@{
+                RuleId      = [string]$item.RuleID
+                File        = $path
+                Start       = $start
+                End         = $end
+                Description = $desc
+            }) | Out-Null
+        }
+        return @{ Ok = $true; Unparsed = $false; Rows = $rows }
+    }
+    $doc = $null
+    try {
+        $doc = [System.Text.Json.JsonDocument]::Parse($trim)
     } catch {
-        return @{ Ok = $false; Rows = @() }
+        $compact = [regex]::Replace($trim, '\s', '')
+        $unparsed = $compact.StartsWith('[') -and $compact -ne '[]'
+        return @{ Ok = $false; Unparsed = $unparsed; Rows = @() }
     }
 
-    $rows = New-Object System.Collections.Generic.List[object]
-    foreach ($item in @($data)) {
-        if ($null -eq $item -or -not $item.RuleID) { continue }
-        $start = 0
-        if ($null -ne $item.StartLine) { $start = [int]$item.StartLine }
-        $end = $start
-        if ($null -ne $item.EndLine) { $end = [int]$item.EndLine }
-        $desc = ''
-        if ($null -ne $item.Description) { $desc = [string]$item.Description }
-        $path = ''
-        if ($null -ne $item.File) { $path = [string]$item.File }
-        $rows.Add([pscustomobject]@{
-            RuleId      = [string]$item.RuleID
-            File        = $path
-            Start       = $start
-            End         = $end
-            Description = $desc
-        }) | Out-Null
+    try {
+        if ($doc.RootElement.ValueKind -ne [System.Text.Json.JsonValueKind]::Array) {
+            return @{ Ok = $false; Unparsed = $false; Rows = @() }
+        }
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($item in $doc.RootElement.EnumerateArray()) {
+            if ($item.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) { continue }
+            $rule = ''
+            $path = ''
+            $desc = ''
+            $start = 0
+            $end = 0
+            foreach ($prop in $item.EnumerateObject()) {
+                if ($prop.Name -eq 'RuleID' -and $prop.Value.ValueKind -eq [System.Text.Json.JsonValueKind]::String) {
+                    $rule = $prop.Value.GetString()
+                } elseif ($prop.Name -eq 'File' -and $prop.Value.ValueKind -eq [System.Text.Json.JsonValueKind]::String) {
+                    $path = $prop.Value.GetString()
+                } elseif ($prop.Name -eq 'Description' -and $prop.Value.ValueKind -eq [System.Text.Json.JsonValueKind]::String) {
+                    $desc = $prop.Value.GetString()
+                } elseif ($prop.Name -eq 'StartLine' -and $prop.Value.ValueKind -eq [System.Text.Json.JsonValueKind]::Number) {
+                    $start = $prop.Value.GetInt32()
+                } elseif ($prop.Name -eq 'EndLine' -and $prop.Value.ValueKind -eq [System.Text.Json.JsonValueKind]::Number) {
+                    $end = $prop.Value.GetInt32()
+                }
+            }
+            if (-not $rule) { continue }
+            if ($end -eq 0) { $end = $start }
+            $rows.Add([pscustomobject]@{
+                RuleId      = $rule
+                File        = $path
+                Start       = $start
+                End         = $end
+                Description = $desc
+            }) | Out-Null
+        }
+        return @{ Ok = $true; Unparsed = $false; Rows = $rows }
+    } finally {
+        if ($null -ne $doc) { $doc.Dispose() }
     }
-    return @{ Ok = $true; Rows = $rows }
 }
 
 function Write-GitleaksPass {
@@ -116,9 +170,26 @@ if ($null -ne $stdout) {
 }
 $parsed = ConvertFrom-GitleaksReport -ReportText $text
 
-# Same fail-open as the bash hook: process exit 0, not 2. pre-commit blocks
-# every non-zero status. Exit 1 is only a parsed findings array.
+# A non-array report is a tool failure. Gitleaks uses exit 1 for a config it
+# cannot load, so that exit alone cannot mean "finding". pre-commit blocks
+# every non-zero status, so fail-open is a warning and process exit 0.
+# An array-shaped report that cannot be parsed is different: the scan wrote
+# findings and failing open would allow them. Block, and do not print the
+# report. The bash hook does the same when neither Python nor jq is installed.
 if (-not $parsed.Ok) {
+    if ($parsed.Unparsed) {
+        $durationMs = Stop-ScanTimer
+        $unparsedMessage = 'Gitleaks wrote a JSON findings report that could not be parsed, so rule, file, and line were not read. The report was not printed.'
+        Write-HookWarn 'gitleaks wrote a JSON findings report that could not be parsed. The commit is blocked and the report was not printed.'
+        Write-HookLog ''
+        Write-HookLog '  HIGH  gitleaks-report-unparsed  .:0-0'
+        Write-HookLog "    $unparsedMessage"
+        Write-HookLog ''
+        Write-HookLog "FAIL: $(Format-FindingSummary -High 1)"
+        $findingsJson = '[{"rule_id":"gitleaks-report-unparsed","tool":"gitleaks","severity":"HIGH","file":".","line":0,"message":"' + $unparsedMessage + '","fixable":false,"fixed":false}]'
+        Write-ScanJson (Build-FindingsJson -Tool 'gitleaks' -DurationMs $durationMs -FindingsArray $findingsJson -High 1)
+        exit 1
+    }
     Write-HookWarn "gitleaks exited $exitCode without a JSON findings report - allowing commit (fail-open)"
     Write-GitleaksPass -DurationMs (Stop-ScanTimer)
     exit 0

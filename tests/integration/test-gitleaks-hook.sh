@@ -43,8 +43,10 @@ fi
 
 work="$(mktemp -d)"
 empty_hooks="$(mktemp -d)"
+parser_free="$(mktemp -d)"
+stub_dir="$(mktemp -d)"
 cleanup() {
-    rm -rf "${work}" "${empty_hooks}"
+    rm -rf "${work}" "${empty_hooks}" "${parser_free}" "${stub_dir}"
 }
 trap cleanup EXIT
 
@@ -100,6 +102,51 @@ export SCAN_HOOK_ID="gitleaks"
 export SCAN_CONFIG_DIR="${work}/.scanning/configs"
 mkdir -p "${SCAN_CONFIG_DIR}"
 
+# PATH for the hook under test. The default is this process's PATH.
+# Invoke bash by absolute path: a PATH= prefix is applied before command
+# lookup, so `PATH=<dir> bash` cannot find bash when <dir> has no bash.
+hook_path="${PATH}"
+hook_path_prefix_win=""
+bash_bin="$(command -v bash)"
+
+# Bash-only. Copy the hook's external commands into one directory so python
+# and jq, wherever they live on this machine, are not visible. Each wrapper
+# execs the real binary by absolute path.
+write_exec_wrapper() {
+    local name="$1"
+    local target="$2"
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "${target}" > "${parser_free}/${name}"
+    chmod +x "${parser_free}/${name}"
+}
+
+prepare_parser_free_path() {
+    local tool target
+    for tool in gitleaks git mktemp wc date mkdir rm cat dirname; do
+        target="$(command -v "${tool}" 2>/dev/null || true)"
+        if [[ -z "${target}" ]]; then
+            echo "FAIL: ${tool} is required to build a parser-free PATH" >&2
+            exit 1
+        fi
+        write_exec_wrapper "${tool}" "${target}"
+    done
+    if command -v cygpath >/dev/null 2>&1; then
+        write_exec_wrapper cygpath "$(command -v cygpath)"
+        # gitleaks.exe looks up git with Windows PATHEXT. A shell script named
+        # git is invisible to it, so the scan exits 1 with no JSON report.
+        # git.cmd is the same git binary, and bash still prefers the `git` script.
+        win_git="$(cygpath -w "$(command -v git)")"
+        printf '@echo off\r\n"%s" %%*\r\n' "${win_git}" > "${parser_free}/git.cmd"
+    fi
+    if env PATH="${parser_free}" "${bash_bin}" -c 'command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v jq >/dev/null 2>&1'; then
+        echo "FAIL: parser-free PATH still contains python or jq" >&2
+        exit 1
+    fi
+    if ! env PATH="${parser_free}" "${bash_bin}" -c 'command -v gitleaks >/dev/null && command -v git >/dev/null && command -v mktemp >/dev/null'; then
+        echo "FAIL: parser-free PATH is missing gitleaks, git, or mktemp" >&2
+        exit 1
+    fi
+}
+
 run_hook() {
     local out_file="$1"
     local err_file="$2"
@@ -109,9 +156,16 @@ run_hook() {
         if command -v cygpath >/dev/null 2>&1; then
             hook_ps1="$(cygpath -w "${hook_ps1}")"
         fi
-        pwsh -NoProfile -File "${hook_ps1}" >"${out_file}" 2>"${err_file}" || status=$?
+        # -File, not -Command. A script's exit is the process exit only when
+        # that script is the -File target. Prepend the stub directory in this
+        # shell so MSYS converts PATH for pwsh and `exit` in the hook is kept.
+        if [[ -n "${hook_path_prefix_win}" ]]; then
+            PATH="${hook_path_prefix_win}:${PATH}" pwsh -NoProfile -File "${hook_ps1}" >"${out_file}" 2>"${err_file}" || status=$?
+        else
+            pwsh -NoProfile -File "${hook_ps1}" >"${out_file}" 2>"${err_file}" || status=$?
+        fi
     else
-        bash "${REPO_ROOT}/hooks/gitleaks.sh" >"${out_file}" 2>"${err_file}" || status=$?
+        PATH="${hook_path}" "${bash_bin}" "${REPO_ROOT}/hooks/gitleaks.sh" >"${out_file}" 2>"${err_file}" || status=$?
     fi
     printf '%s' "${status}"
 }
@@ -212,6 +266,103 @@ for item in findings:
 print("PASS: 3 findings with rule, file, and line, and no secret value")
 PY
 
+if [[ "${impl}" == "sh" ]]; then
+    echo "=== sh: JSON findings report and no parser ==="
+    prepare_parser_free_path
+    hook_path="${parser_free}"
+    status="$(run_hook "${out_file}" "${err_file}")"
+    hook_path="${PATH}"
+    if [[ "${status}" -ne 1 ]]; then
+        echo "FAIL: no-parser findings expected exit 1, got ${status}" >&2
+        echo "---- stdout ----" >&2
+        cat "${out_file}" >&2
+        echo "---- stderr ----" >&2
+        cat "${err_file}" >&2
+        exit 1
+    fi
+    assert_no_secrets "no-parser" "${out_file}" "${err_file}"
+    "${py}" - "${out_file}" "${err_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+out_path, err_path = sys.argv[1:3]
+shown = (
+    pathlib.Path(out_path).read_text(encoding="utf-8", errors="replace")
+    + pathlib.Path(err_path).read_text(encoding="utf-8", errors="replace")
+)
+if "fail-open" in shown.lower():
+    sys.stderr.write("FAIL: no-parser findings fail-opened\n")
+    sys.stderr.write(shown + "\n")
+    sys.exit(1)
+if "RuleID" in shown or "Secret" in shown or "Match" in shown:
+    sys.stderr.write("FAIL: no-parser path printed the Gitleaks report\n")
+    sys.exit(1)
+scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
+findings = scan["findings"]
+if scan["summary"]["total_findings"] != 1 or len(findings) != 1:
+    sys.stderr.write(
+        "FAIL: no-parser findings count total="
+        + str(scan["summary"]["total_findings"])
+        + " rules="
+        + str([item.get("rule_id") for item in findings])
+        + "\n"
+    )
+    sys.exit(1)
+item = findings[0]
+if item["rule_id"] != "gitleaks-report-unparsed" or item["tool"] != "gitleaks":
+    sys.stderr.write(f"FAIL: no-parser finding={item}\n")
+    sys.exit(1)
+if "Python" not in item["message"] and "jq" not in item["message"]:
+    sys.stderr.write("FAIL: no-parser message does not name a parser\n")
+    sys.exit(1)
+if "gitleaks-report-unparsed" not in shown:
+    sys.stderr.write("FAIL: no-parser stdout missing the rule id\n")
+    sys.exit(1)
+print("PASS: no parser blocked and did not print the report")
+PY
+fi
+
+if [[ "${impl}" == "ps1" ]]; then
+    echo "=== ps1: array-shaped report that cannot be parsed ==="
+    # The stub replaces gitleaks. Its stdout is not valid JSON and must not
+    # be copied into the hook output. ConvertFrom-Json is built in, so this
+    # is the PowerShell twin of the bash no-parser block.
+    printf '%s\r\n' '@echo off' 'echo [{"Secret":"SENTINEL-DO-NOT-LEAK"' 'exit /b 1' > "${stub_dir}/gitleaks.cmd"
+    # Unix path. The bash PATH= prefix is what pwsh inherits.
+    hook_path_prefix_win="${stub_dir}"
+    status="$(run_hook "${out_file}" "${err_file}")"
+    hook_path_prefix_win=""
+    if [[ "${status}" -ne 1 ]]; then
+        echo "FAIL: unparsed report expected exit 1, got ${status}" >&2
+        echo "---- stdout ----" >&2
+        cat "${out_file}" >&2
+        echo "---- stderr ----" >&2
+        cat "${err_file}" >&2
+        exit 1
+    fi
+    assert_no_secrets "unparsed" "${out_file}" "${err_file}"
+    if grep -q "SENTINEL-DO-NOT-LEAK" "${out_file}" "${err_file}" ".scanning/last-scan.json"; then
+        echo "FAIL: unparsed report leaked the stub marker" >&2
+        exit 1
+    fi
+    "${py}" - <<'PY'
+import json
+import pathlib
+import sys
+
+scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
+findings = scan["findings"]
+if scan["summary"]["total_findings"] != 1 or len(findings) != 1:
+    sys.stderr.write("FAIL: unparsed findings count\n")
+    sys.exit(1)
+if findings[0]["rule_id"] != "gitleaks-report-unparsed":
+    sys.stderr.write("FAIL: unparsed rule id\n")
+    sys.exit(1)
+print("PASS: unparsed array blocked and was not printed")
+PY
+fi
+
 echo "=== ${impl}: broken config fail-open ==="
 printf 'this is not toml [[[[\n' > "${SCAN_CONFIG_DIR}/.gitleaks.toml"
 status="$(run_hook "${out_file}" "${err_file}")"
@@ -249,6 +400,37 @@ if scan["summary"]["total_findings"] != 0 or scan["findings"]:
 print("PASS: broken config warned and allowed the commit")
 PY
 
+if [[ "${impl}" == "sh" ]]; then
+    echo "=== sh: broken config and no parser ==="
+    hook_path="${parser_free}"
+    status="$(run_hook "${out_file}" "${err_file}")"
+    hook_path="${PATH}"
+    if [[ "${status}" -ne 0 ]]; then
+        echo "FAIL: no-parser broken config expected exit 0, got ${status}" >&2
+        cat "${out_file}" >&2
+        cat "${err_file}" >&2
+        exit 1
+    fi
+    assert_no_secrets "no-parser-broken-config" "${out_file}" "${err_file}"
+    if ! grep -q "fail-open" "${out_file}" "${err_file}"; then
+        echo "FAIL: no-parser broken config did not warn fail-open" >&2
+        cat "${out_file}" >&2
+        cat "${err_file}" >&2
+        exit 1
+    fi
+    "${py}" - <<'PY'
+import json
+import pathlib
+import sys
+
+scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
+if scan["summary"]["total_findings"] != 0 or scan["findings"]:
+    sys.stderr.write("FAIL: no-parser broken config stored findings\n")
+    sys.exit(1)
+print("PASS: no-parser broken config still fail-open")
+PY
+fi
+
 echo "=== ${impl}: clean staged file ==="
 rm -f "${SCAN_CONFIG_DIR}/.gitleaks.toml"
 printf 'hello\n' > sample.txt
@@ -271,6 +453,30 @@ if scan["summary"]["total_findings"] != 0 or scan["findings"]:
     sys.exit(1)
 print("PASS: clean staged file")
 PY
+
+if [[ "${impl}" == "sh" ]]; then
+    echo "=== sh: clean file and no parser ==="
+    hook_path="${parser_free}"
+    status="$(run_hook "${out_file}" "${err_file}")"
+    hook_path="${PATH}"
+    if [[ "${status}" -ne 0 ]]; then
+        echo "FAIL: no-parser clean file expected exit 0, got ${status}" >&2
+        cat "${out_file}" >&2
+        cat "${err_file}" >&2
+        exit 1
+    fi
+    "${py}" - <<'PY'
+import json
+import pathlib
+import sys
+
+scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
+if scan["summary"]["total_findings"] != 0 or scan["findings"]:
+    sys.stderr.write("FAIL: no-parser clean file stored findings\n")
+    sys.exit(1)
+print("PASS: no-parser clean file")
+PY
+fi
 
 echo "=== ${impl}: nothing staged ==="
 git -c "core.hooksPath=${empty_hooks}" add sample.txt

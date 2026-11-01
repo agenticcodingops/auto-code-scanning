@@ -65,6 +65,11 @@ exit_code=$?
 set -e
 printf '%s' "${output}" > "${report_file}"
 
+# Used only to tell an empty array from any other array when no parser is
+# installed. The compact text is never printed: a findings array can hold a
+# credential even after --redact.
+report_compact="${output//[[:space:]]/}"
+
 # Windows Git bash mktemp paths are not paths Windows python can open.
 to_py_path() {
     if command -v cygpath >/dev/null 2>&1; then
@@ -156,6 +161,22 @@ elif command -v jq >/dev/null 2>&1; then
         # Safe fields only. Never select .Match or .Secret.
         jq -c '[.[] | {rule_id:(.RuleID // ""), tool:"gitleaks", severity:"HIGH", file:(.File // ""), line:(.StartLine // 0), message:(.Description // ""), fixable:false, fixed:false}]' "${report_file}" > "${findings_file}"
         jq -r '.[] | "  HIGH  \(.RuleID)  \(.File):\(.StartLine)-\(.EndLine)", (if .Description then "    \(.Description)" else empty end)' "${report_file}" > "${details_file}"
+    fi
+else
+    # No Python and no jq. `[]` is a clean report. Any other JSON array is a
+    # findings report we cannot read: block, and do not copy the report.
+    # Failing open here would allow the staged credentials. A non-array
+    # report (a config Gitleaks cannot load) stays fail-open below.
+    if [[ "${report_compact}" == "[]" ]]; then
+        parse_status=0
+        total_high=0
+    elif [[ "${report_compact}" == \[* ]]; then
+        parse_status=0
+        total_high=1
+        unparsed_message="Gitleaks wrote a JSON findings report, but neither Python nor jq is available, so rule, file, and line were not read. Install Python or jq and scan again."
+        printf '%s\n' "[{\"rule_id\":\"gitleaks-report-unparsed\",\"tool\":\"gitleaks\",\"severity\":\"HIGH\",\"file\":\".\",\"line\":0,\"message\":\"${unparsed_message}\",\"fixable\":false,\"fixed\":false}]" > "${findings_file}"
+        printf '%s\n' "  HIGH  gitleaks-report-unparsed  .:0-0" "    ${unparsed_message}" > "${details_file}"
+        hook_warn "neither Python nor jq is available; blocking because the Gitleaks report was a JSON array and was not printed"
     fi
 fi
 

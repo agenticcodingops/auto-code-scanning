@@ -41,39 +41,37 @@ Linux and macOS binaries were not executed. Install commands below are quoted fr
 
 Not valid, and not used below: an earlier history scan of this repo whose stderr was `cannot spawn astextplain` (Git for Windows `diff.astextplain.textconv` with `C:\Program Files\Git\usr\bin` absent from the scanner's PATH). A PowerShell `@($null).Count` of an empty Trivy 0.69.3 fixture report printed `secret_objects=1` while the process exited 0. Hook invocations that ran after the scratch index was empty (`PASS: No files staged`) and a bash invocation that executed `bash.exe` as its own script (exit 126).
 
-### Current hook, confirmed on Gitleaks 8.30.1
+### Hook on base `2b78f59`, confirmed on Gitleaks 8.30.1
 
-The hook command is `gitleaks protect --staged` with no `--report-path`:
+These lines are the hook before this branch. `git show 2b78f59:hooks/gitleaks.sh` and `git show 2b78f59:hooks/gitleaks.ps1` still match them. They are not the line numbers in the files after the fix, so they are quoted as text rather than as links to the branch tip.
 
-```25:25:hooks/gitleaks.sh
-gitleaks_cmd=(gitleaks protect --staged --report-format json --exit-code 1)
-```
+The hook command was `gitleaks protect --staged` with no `--report-path`. Base `hooks/gitleaks.sh` line 25:
 
-```40:40:hooks/gitleaks.sh
-output="$("${gitleaks_cmd[@]}" 2>&1)"
-```
+    gitleaks_cmd=(gitleaks protect --staged --report-format json --exit-code 1)
 
-```49:49:hooks/gitleaks.sh
+Base line 40:
+
+    output="$("${gitleaks_cmd[@]}" 2>&1)"
+
+Base line 49:
+
         total_high="$(echo "${output}" | jq 'length' 2>/dev/null || echo 1)"
-```
 
-```77:77:hooks/gitleaks.sh
+Base line 77:
+
     write_scan_json "$(build_findings_json "gitleaks" "." "${duration_ms}" "[]" 0 "${total_high}" 0 0)"
-```
 
-The PowerShell hook is the same command and the same empty findings array. On a parse failure it sets the count to 1:
+The PowerShell hook was the same command and the same empty findings array. On a parse failure it set the count to 1. Base `hooks/gitleaks.ps1` line 25:
 
-```25:25:hooks/gitleaks.ps1
-$gitleaksArgs = @('protect', '--staged', '--report-format', 'json', '--exit-code', '1')
-```
+    $gitleaksArgs = @('protect', '--staged', '--report-format', 'json', '--exit-code', '1')
 
-```62:62:hooks/gitleaks.ps1
+Base line 62:
+
         $totalHigh = 1
-```
 
-```77:77:hooks/gitleaks.ps1
+Base line 77:
+
     Write-ScanJson (Build-FindingsJson -Tool 'gitleaks' -DurationMs $durationMs -High $totalHigh)
-```
 
 `gitleaks protect --help` still documents `--staged` (exit 0). Top-level `gitleaks --help` does not list `protect` (exit 0, `mentions_protect_command=False`). The v8.30.1 README says: "v8.19.0 introduced a change that deprecated `detect` and `protect`. Those commands are still available but are hidden in the `--help` menu."
 
@@ -309,14 +307,16 @@ Line 75 is:
             return 0
 ```
 
-pre-commit blocks the commit on any non-zero hook exit. `hooks/dispatcher.sh` `exec`s the `.ps1` or `.sh` (lines 38-51), so the script's process exit is what pre-commit sees. Existing hooks, including `hooks/gitleaks.sh` lines 64-67, turn a tool exit of 2 or higher into a warning and process exit 0. A process exit of 2 would block the commit and would not fail open. The fix keeps that implementation: a bad config warns and the process exits 0. It does not count as a finding. Exit 1 remains reserved for a parsed JSON array of findings.
+pre-commit blocks the commit on any non-zero hook exit. `hooks/dispatcher.sh` `exec`s the `.ps1` or `.sh` (lines 38-51), so the script's process exit is what pre-commit sees. On base `2b78f59`, `hooks/gitleaks.sh` lines 64-67 turned a tool exit of 2 or higher into a warning and process exit 0. A process exit of 2 would block the commit and would not fail open. The fix keeps that implementation for a report that is not a JSON array: a bad config warns and the process exits 0. It does not count as a finding.
+
+A JSON array is not that case. On this branch, `hooks/gitleaks.sh` lines 170-179 block when the report is a JSON array and neither Python nor jq can read it, and they do not print the report. `[]` is still a pass. `hooks/gitleaks.ps1` lines 180-191 do the same when the report is array-shaped and cannot be parsed. PowerShell's `ConvertFrom-Json` accepts truncated JSON, so that path uses `System.Text.Json` when the type exists. Exit 1 is a parsed findings array, or that one undetailed block. A non-array report stays fail-open at `hooks/gitleaks.sh` line 188 and `hooks/gitleaks.ps1` line 193.
 
 ## Plan
 
 ### Files to change
 
 - `hooks/gitleaks.sh` and `hooks/gitleaks.ps1`. Command becomes `gitleaks git --staged --report-format json --report-path - --redact --no-banner --exit-code 1 --log-level error`, plus `--config` when `resolve_config` / `Resolve-ScanConfig` finds `.gitleaks.toml`. Stdout is parsed alone. Stderr is not merged into the report.
-- `tests/integration/test-gitleaks-hook.sh`. Own temp git repo. Three runtime-generated values that Gitleaks 8.30.1 reported in the probe above (`stripe-access-token`, `github-pat`, `slack-webhook-url`). Asserts three findings, each with rule, file, and line, and asserts those strings are absent from stdout, stderr, and `.scanning/last-scan.json`. A broken `.scanning/configs/.gitleaks.toml` must warn, exit 0, and write a pass report.
+- `tests/integration/test-gitleaks-hook.sh`. Own temp git repo. Three runtime-generated values that Gitleaks 8.30.1 reported in the probe above (`stripe-access-token`, `github-pat`, `slack-webhook-url`). Asserts three findings, each with rule, file, and line, and asserts those strings are absent from stdout, stderr, and `.scanning/last-scan.json`. A broken `.scanning/configs/.gitleaks.toml` must warn, exit 0, and write a pass report. The bash run also hides Python and jq: the same staged file must exit 1 with one `gitleaks-report-unparsed` finding and must not print the report, and the broken config must still exit 0. The PowerShell run stubs `gitleaks` with an array-shaped non-JSON report and requires the same block without printing that text.
 - `.github/workflows/ci.yml`. One job, not multiplied by the aws/azure/gcp matrix. Download `gitleaks_8.30.1_linux_x64.tar.gz`, require SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, then run the new test. Checkout stays on the existing SHA pin `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`.
 - `docs/HOOK-REFERENCE.md`. The gitleaks note currently says it complements trivy-secrets with different detection patterns (`docs/HOOK-REFERENCE.md` line 85). Replace that with the measured direction and the new command.
 - `docs/TESTING-GUIDE-CONSUMING-REPO.md` line 215, which tells an adopter that the AWS example key blocks the Gitleaks hook. That expectation is false for 8.30.1.
