@@ -294,7 +294,7 @@ the scanner jobs download that same helper.
 Opt-in fix loop. Called through `workflow_call` (`autonomous-fix.yml:42-43`). Read
 [FIX-LOOP.md](FIX-LOOP.md) and [SECURITY-MODEL.md](SECURITY-MODEL.md) before you turn it
 on. The caller workflow decides who can start it; the template's `if:` is that boundary
-(`templates/fix-loop/autonomous-fix.yml:36-63`). The workflow itself also refuses to run
+(`templates/fix-loop/autonomous-fix.yml:53-68`). The workflow itself also refuses to run
 when the review, the comment or the run was made by the shared `github-actions[bot]`
 identity, which every workflow's `GITHUB_TOKEN` acts as (`autonomous-fix.yml:101-118`).
 
@@ -328,14 +328,16 @@ patch, so the run ends with no change and does not label the pull request
 
 | Permission | Needed by | Source |
 |---|---|---|
-| `contents: read` | every job | `autonomous-fix.yml:77-78`, `199`, `446`, `506` |
-| `pull-requests: write` | Analyze (`read`) and Flag for human review (`write`) | `autonomous-fix.yml:200`, `713` |
-| `actions: read` | Analyze | `autonomous-fix.yml:201` |
-| `issues: write` | Flag for human review | `autonomous-fix.yml:712` |
+| `contents: read` | Config, Analyze, Verify and Apply-and-push | `autonomous-fix.yml:79-80`, `206`, `454`, `521` |
+| `pull-requests: write` | Analyze (`read`) and Flag for human review (`write`) | `autonomous-fix.yml:207`, `728` |
+| `actions: read` | Analyze | `autonomous-fix.yml:208` |
+| `issues: write` | Flag for human review | `autonomous-fix.yml:727` |
 
-The caller template sets only `contents: read`, at the workflow level, and no job-level
-permissions (`templates/fix-loop/autonomous-fix.yml:32-33`). Add the four permissions
-above to its `fix` job.
+The current caller template grants exactly these four permissions on its `fix` job
+(`templates/fix-loop/autonomous-fix.yml:37-41`) and no workflow-level permissions.
+Keep these grants: they are the called workflow's permission ceiling, and its jobs
+retain their narrower grants. Callers copied from v2.3.6 or earlier grant only
+`contents: read` by default; add the four permissions above to their `fix` job.
 
 ## References
 

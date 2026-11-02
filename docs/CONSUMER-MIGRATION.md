@@ -209,7 +209,7 @@ merge.
 The caller templates pin the release they ship in, and release-please moves those pins at
 each release (`templates/workflows/code-security-scan.yml:21`,
 `templates/workflows/terraform-scan.yml:21` and `26`,
-`templates/fix-loop/autonomous-fix.yml:65` and `69`). Releases up to and including v2.3.1
+`templates/fix-loop/autonomous-fix.yml:70` and `74`). Releases up to and including v2.3.1
 pinned `v2.0.0` there. Check that every pin is the release you checked out in the
 prerequisites, and pin the commit its tag points to, as in
 [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). For the
@@ -241,9 +241,11 @@ Find `<commit-sha>` as in
 the secrets the workflow declares (`autonomous-fix.yml:64-73`); never `secrets: inherit`,
 which hands the called workflow every secret of your repository and organisation.
 
-`OWNER` is the owner of the platform copy you call. The template grants only
-`contents: read` (`templates/fix-loop/autonomous-fix.yml:32-33`), but the called workflow
-needs the four permissions above; see
+`OWNER` is the owner of the platform copy you call. The current template grants the
+four permissions above on its `fix` job (`templates/fix-loop/autonomous-fix.yml:37-41`).
+Callers copied from v2.3.6 or earlier grant only `contents: read` by default; add all
+four grants under `jobs.fix.permissions` when migrating those callers. These grants
+are the called workflow's permission ceiling; see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). For the scan callers,
 move `uses:` and `scanning-repo-ref` together as in [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 In `terraform-scan.yml`, also set `cloud-provider` to your provider (`aws`, `azure` or
@@ -267,7 +269,7 @@ that entry's `repo:` at it too. If an existing `.pre-commit-config.yaml` already
   the people and bots you trust.
 
 The caller's `if:` is the privilege boundary: it decides whose review or comment can make
-the loop push with `AUTOFIX_TOKEN` (`templates/fix-loop/autonomous-fix.yml:37-63`). The
+the loop push with `AUTOFIX_TOKEN` (`templates/fix-loop/autonomous-fix.yml:53-68`). The
 template admits a manual dispatch, or a non-fork pull request with the `ai-autofix`
 label whose review or comment came from a listed bot or from an `OWNER`, `MEMBER` or
 `COLLABORATOR`. Compare it with the rule your inline workflow enforced, and edit the bot
