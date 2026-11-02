@@ -51,7 +51,11 @@ by default; see its entry for the explicit prerequisite opt-in.
 
 ## JSON Output
 
-Every hook writes a JSON report to `.scanning/last-scan.json` (overwritten by each hook; last hook wins). The output conforms to `schemas/last-scan.schema.json`.
+Applicable scans write a JSON report to `.scanning/last-scan.json` (overwritten
+by each reporting hook; last report wins). The output conforms to
+`schemas/last-scan.schema.json`. A hook with nothing to scan may return success
+without writing a report, including `checkov`, `tflint` and `dotnet-build` when
+no matching files exist.
 
 Push scanners export their reports from the isolated snapshot to this location in
 the consumer repository before snapshot cleanup, including on scan failure. Earlier
