@@ -413,11 +413,13 @@ against its committed SHA-256 values before archive parsing, and installed under
 Direct Python and optional package installs use exact versions. YAML validation
 uses the default safe loader; custom YAML tags may now need a dedicated validator.
 
-Executable template references and the default helper checkout use immutable
-commits. Release-version comments are informational; release automation must not
-replace commit pins with tags. Review and bump the executable commit and re-vendor
-together when upgrading. Scheduled dependency refreshes remain tracked in issue
-#38. The review workflow uses its own review instructions without dynamically
+Executable template references and the default helper checkout use release-managed
+tags. Adopters should replace each tag with the full commit SHA that the release
+tag points to, and set `scanning-repo-ref` / `scanning_repo_ref` to that same SHA.
+See [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to).
+Review and bump those release commit pins and re-vendor together when upgrading.
+Scheduled dependency refreshes remain tracked in issue #38. The review workflow
+uses its own review instructions without dynamically
 installing a plugin marketplace. Report comments allow links only to expected HTTPS
 documentation hosts and omit complete rows if the encoded table reaches its size
 budget. Configuration readers exclude checkout imports while retaining trusted

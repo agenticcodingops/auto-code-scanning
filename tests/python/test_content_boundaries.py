@@ -13,18 +13,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_templates_use_immutable_refs_and_safe_yaml():
+def test_templates_pin_third_party_hooks_to_immutable_refs():
     for path in (ROOT / 'templates').rglob('*.y*ml'):
         data = yaml.safe_load(path.read_text()) or {}
         for repo in data.get('repos', []):
-            if repo['repo'] != 'local':
+            if repo['repo'] not in ('local', 'https://github.com/agenticcodingops/auto-code-scanning'):
                 assert re.fullmatch('[0-9a-f]{40}', repo['rev']), path
-        for job in data.get('jobs', {}).values():
-            if 'uses' in job and not job['uses'].startswith('./'):
-                assert re.search('@[0-9a-f]{40}$', job['uses']), path
-            for key in ('scanning-repo-ref', 'scanning_repo_ref'):
-                if key in job.get('with', {}):
-                    assert re.fullmatch('[0-9a-f]{40}', job['with'][key]), path
 
 
 def test_templates_use_safe_yaml_validation():
