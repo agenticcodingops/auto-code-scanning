@@ -3,7 +3,7 @@
 # Stage: pre-push | Severity: per config
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 # Verify tool availability
@@ -12,7 +12,7 @@ require_tool "tflint" || exit 0
 start_timer
 
 # Detect scan directories (only dirs with staged .tf files)
-mapfile -t scan_dirs < <(detect_changed_dirs)
+read_nul_paths scan_dirs detect_changed_dirs
 
 if [[ ${#scan_dirs[@]} -eq 0 ]]; then
     hook_log "PASS: No Terraform files staged"
@@ -53,7 +53,9 @@ for dir in "${scan_dirs[@]}"; do
         init_cmd+=(--config "${config_file}")
     fi
     "${init_cmd[@]}" >/dev/null 2>&1
+    init_exit=$?
     set -e
+    if [[ "$init_exit" -ne 0 ]]; then handle_exit_code 2 || exit 1; fi
 
     # Run tflint
     set +e
@@ -77,17 +79,9 @@ for dir in "${scan_dirs[@]}"; do
         # Show actionable details so developers know what to fix
         print_tflint_findings "${output}"
         overall_exit=1
-    elif [[ ${exit_code} -eq 3 ]] || [[ ${exit_code} -ge 4 ]]; then
-        # tflint exit 3+ = runtime error — fail-open.
-        # '|| true' so handle_exit_code's return doesn't trip set -e (fail-open
-        # must not terminate the script). Mirrors the PowerShell twin (tflint.ps1).
-        handle_exit_code ${exit_code} || true
-    elif [[ ${exit_code} -eq 1 ]]; then
-        # tflint exit 1 = errors — treat as infrastructure error for consistency.
-        # Some tflint versions use exit 1 for config errors. handle_exit_code returns
-        # 1 for exit 1, which would terminate under set -e — '|| true' keeps it
-        # fail-open as intended. Mirrors the PowerShell twin (tflint.ps1).
-        handle_exit_code ${exit_code} || true
+    elif [[ ${exit_code} -ne 0 ]]; then
+        # Operational statuses (including 1) use the shared infrastructure contract.
+        handle_exit_code 2 || exit 1
     fi
 done
 

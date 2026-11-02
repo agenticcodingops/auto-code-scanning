@@ -5,13 +5,13 @@
 # Solution + working dir come from scan-config.yaml (languages.csharp.build.*).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 require_tool "dotnet" || exit 0
 
 # Only run when C# files are staged (push) to avoid building on unrelated pushes.
-mapfile -t all_cs < <(get_staged_files cs csproj)
+read_nul_paths all_cs get_staged_files cs csproj
 if [[ ${#all_cs[@]} -eq 0 ]]; then
     hook_log "PASS: No C# files staged"
     exit 0

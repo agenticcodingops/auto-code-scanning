@@ -50,6 +50,7 @@ Write-HookLog "Formatting... ($($files.Count) files in $workingDir)"
 
 $prettierArgs = $runnerArgs + @('--write', '--ignore-unknown')
 if ($ExtraArgs) { $prettierArgs += $ExtraArgs }
+$prettierArgs += '--'
 $prettierArgs += $files
 
 # Guard Push-Location: under $ErrorActionPreference='Stop' a missing dir throws.

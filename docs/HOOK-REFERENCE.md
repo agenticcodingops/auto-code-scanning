@@ -356,3 +356,17 @@ All hooks produce human-readable output:
 ```
 [trivy-iac-critical] WARNING: Tool error (exit code 127) - allowing commit (fail-open)
 ```
+
+## Shared hook scan integrity
+
+Changed-file paths remain NUL-delimited from Git through enumeration, filtering
+and deduplication. Scanner path operands follow `--`; fixed path-valued scanner
+options remain bound to their option. Bash and PowerShell use equivalent path
+selection, preserving spaces, Unicode, quotes and embedded newlines.
+
+Tool failures handled by the shared hook library now block by default. Set
+`SCAN_ALLOW_TOOL_ERRORS=1` only when explicitly choosing the previous local
+warning-only infrastructure behavior. This setting does not affect CI. Re-vendor
+the hook directory as a unit so callers and shared helpers upgrade together.
+Trivy retry decisions use its stderr and operational exit status; findings output
+does not control retries.

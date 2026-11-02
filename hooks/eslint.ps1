@@ -53,6 +53,7 @@ Write-HookLog "Linting... ($($files.Count) TS/JS files in $workingDir)"
 
 $eslintArgs = $runnerArgs + @('--fix')
 if ($ExtraArgs) { $eslintArgs += $ExtraArgs }
+$eslintArgs += '--'
 $eslintArgs += $files
 
 # Guard Push-Location: under $ErrorActionPreference='Stop' a missing dir throws.

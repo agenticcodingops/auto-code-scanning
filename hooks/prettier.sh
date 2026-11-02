@@ -7,10 +7,10 @@
 # Working dir comes from scan-config.yaml (languages.typescript.build.working_dir).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
-mapfile -t all_files < <(get_staged_files ts tsx js jsx json css scss md)
+read_nul_paths all_files get_staged_files ts tsx js jsx json css scss md
 if [[ ${#all_files[@]} -eq 0 ]]; then
     hook_log "PASS: No formattable files staged"
     exit 0
@@ -52,7 +52,7 @@ hook_log "Formatting... (${#files[@]} files in ${working_dir})"
 
 prettier_cmd=("${runner[@]}" --write --ignore-unknown)
 [[ $# -gt 0 ]] && prettier_cmd+=("$@")
-prettier_cmd+=("${files[@]}")
+prettier_cmd+=(-- "${files[@]}")
 
 set +e
 output="$(cd "${working_dir}" && "${prettier_cmd[@]}" 2>&1)"

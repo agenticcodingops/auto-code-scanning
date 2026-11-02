@@ -52,8 +52,11 @@ function Get-HookExitCode {
         0 { return 0 }
         1 { return 1 }
         default {
-            Write-HookWarn "Tool error (exit code $ToolExitCode) - allowing commit (fail-open)"
-            return 0
+            if ($env:SCAN_ALLOW_TOOL_ERRORS -eq '1') {
+                Write-HookWarn "Tool error (exit code $ToolExitCode); explicit local fail-open opt-in"
+                return 0
+            }
+            throw "Tool error (exit code $ToolExitCode); scan incomplete"
         }
     }
 }
@@ -173,16 +176,54 @@ function Build-FindingsJson {
 # Changed files for dir-detection: the staged index (pre-commit), or the push range
 # when the index is empty (the usual case at pre-push), so pushed commits are still
 # scanned. Best-effort — CI is the authoritative backstop.
+# Read the native stdout stream intact before splitting on NUL. PowerShell's
+# native command pipeline otherwise splits newline-containing pathnames.
+function Invoke-GitPaths {
+    param([string[]]$Arguments)
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = 'git'
+    $info.Arguments = $Arguments -join ' '
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    try {
+        $null = $process.Start()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $output = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) { throw 'Could not enumerate scan inputs' }
+        return @($output.Split([char]0) | Where-Object { $_ -ne '' })
+    } finally { $process.Dispose() }
+}
+
 function Get-ChangedFilesForDetect {
-    $files = @(git diff --cached --name-only --diff-filter=ACMR 2>$null)
-    if (-not $files -or $files.Count -eq 0) {
-        $files = @(git diff --name-only --diff-filter=ACMR '@{push}' HEAD 2>$null)
-        if ($LASTEXITCODE -ne 0 -or -not $files -or $files.Count -eq 0) {
-            $files = @(git diff --name-only --diff-filter=ACMR '@{upstream}' HEAD 2>$null)
-            if ($LASTEXITCODE -ne 0) { $files = @() }
+    $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+    if ($files.Count -eq 0) {
+        git rev-parse --verify '@{push}' 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $files = @(Invoke-GitPaths -Arguments @('diff', '--name-only', '-z', '--diff-filter=ACMR', '@{push}', 'HEAD', '--'))
+        }
+        if ($files.Count -eq 0) {
+            git rev-parse --verify '@{upstream}' 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $files = @(Invoke-GitPaths -Arguments @('diff', '--name-only', '-z', '--diff-filter=ACMR', '@{upstream}', 'HEAD', '--'))
+            }
         }
     }
-    return @($files | Where-Object { $_ })
+    return $files
+}
+
+function Get-OrdinalUniquePaths {
+    param([string[]]$Paths)
+    $unique = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($path in $Paths) { $null = $unique.Add($path) }
+    [string[]]$ordered = @($unique)
+    [Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+    return $ordered
 }
 
 function Get-ChangedDirs {
@@ -205,20 +246,19 @@ function Get-ChangedDirs {
         }
 
         $dirs = $changedFiles | ForEach-Object {
-            $parent = Split-Path $_ -Parent
+            $parent = Split-Path -LiteralPath $_
             # Split-Path returns '' for root-level files — map to '.' (repo root)
             # so root files are scanned rather than dropped.
             if ($parent -eq '') { '.' } else { $parent }
-        } | Sort-Object -Unique
+        }
+        $dirs = @(Get-OrdinalUniquePaths -Paths @($dirs))
 
         if (-not $dirs -or $dirs.Count -eq 0) {
             return @()
         }
 
         return $dirs
-    } catch {
-        return @()
-    }
+    } catch { throw }
 }
 
 # Detect directories containing ANY staged files (not just .tf)
@@ -239,20 +279,19 @@ function Get-AllChangedDirs {
         }
 
         $dirs = $changedFiles | ForEach-Object {
-            $parent = Split-Path $_ -Parent
+            $parent = Split-Path -LiteralPath $_
             # Split-Path returns '' for root-level files — map to '.' (repo root)
             # so root files are scanned rather than dropped.
             if ($parent -eq '') { '.' } else { $parent }
-        } | Sort-Object -Unique
+        }
+        $dirs = @(Get-OrdinalUniquePaths -Paths @($dirs))
 
         if (-not $dirs -or $dirs.Count -eq 0) {
             return @()
         }
 
         return $dirs
-    } catch {
-        return @()
-    }
+    } catch { throw }
 }
 
 function Get-TfFileCount {
@@ -262,8 +301,8 @@ function Get-TfFileCount {
 
     $count = 0
     foreach ($dir in $Directories) {
-        if (Test-Path $dir -PathType Container) {
-            $count += (Get-ChildItem -Path $dir -Filter '*.tf' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+        if (Test-Path -LiteralPath $dir -PathType Container) {
+            $count += (Get-ChildItem -LiteralPath $dir -Filter '*.tf' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
                 Where-Object { $_.FullName -notmatch '[\\/]\.terraform[\\/]' }).Count
         }
     }
@@ -282,16 +321,14 @@ function Get-StagedFiles {
 
     try {
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
-        $files = git diff --cached --name-only --diff-filter=ACMR 2>$null
+        $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
         if (-not $files) { return @() }
         $files = @($files)
         if ($Extensions.Count -eq 0) { return $files }
         $patterns = $Extensions | ForEach-Object { [regex]::Escape(".$_") + '$' }
         $rx = [regex]::new(($patterns -join '|'), 'IgnoreCase')
         return @($files | Where-Object { $rx.IsMatch($_) })
-    } catch {
-        return @()
-    }
+    } catch { throw }
 }
 
 # Export staged files (from the git index) into a fresh temp dir, preserving paths.
@@ -303,7 +340,7 @@ function Export-StagedFilesToTempDir {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     foreach ($file in @($Files)) {
         if (-not $file) { continue }
-        $fileDir = Split-Path $file -Parent
+        $fileDir = Split-Path -LiteralPath $file
         if ($fileDir) {
             $targetDir = Join-Path $tmpDir $fileDir
             if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
@@ -385,6 +422,7 @@ function Get-SemgrepCounts {
     $res = @{ High = 0; Medium = 0; Low = 0; Total = 0 }
     try {
         $doc = Get-Content $JsonPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($null -eq $doc.results -or $doc.errors) { throw 'Incomplete scanner report' }
         foreach ($r in @($doc.results)) {
             switch (("" + $r.extra.severity).ToUpper()) {
                 'ERROR'   { $res.High++ }
@@ -393,7 +431,7 @@ function Get-SemgrepCounts {
             }
         }
         $res.Total = $res.High + $res.Medium + $res.Low
-    } catch { }
+    } catch { throw }
     return $res
 }
 
@@ -458,28 +496,23 @@ function Invoke-TrivyWithRetry {
         [string[]]$ArgumentList
     )
 
-    # First attempt — invoke trivy directly with array splatting, no cmd /c
-    $output = & trivy @ArgumentList 2>&1
-    $exitCode = $LASTEXITCODE
-
-    # Check for DB lock
-    $outputText = $output -join "`n"
-    if ($outputText -match 'database.*locked') {
-        Write-HookWarn "Trivy database locked, retrying in 2 seconds..."
-        Start-Sleep -Seconds 2
-
-        # Retry once
-        $output = & trivy @ArgumentList 2>&1
-        $exitCode = $LASTEXITCODE
-        $outputText = $output -join "`n"
-
-        if ($outputText -match 'database.*locked') {
-            Write-HookWarn "Trivy database still locked after retry"
-            return @{ Output = $outputText; ExitCode = 2 }
+    $diagnostics = New-TemporaryFile
+    try {
+        for ($attempt = 1; $attempt -le 2; $attempt++) {
+            $output = & trivy @ArgumentList 2> $diagnostics
+            $exitCode = $LASTEXITCODE
+            $stderr = [System.IO.File]::ReadAllText($diagnostics)
+            if ($exitCode -ne 0 -and $stderr -match 'database.*locked|cache may be in use by another process') {
+                if ($attempt -eq 1) {
+                    Write-HookWarn 'Trivy database locked; retrying'
+                    Start-Sleep -Seconds 2
+                    continue
+                }
+                $exitCode = 2
+            }
+            return @{ Output = ($output -join "`n"); Stderr = $stderr; ExitCode = $exitCode }
         }
-    }
-
-    return @{ Output = $outputText; ExitCode = $exitCode }
+    } finally { Remove-Item -LiteralPath $diagnostics -ErrorAction SilentlyContinue }
 }
 
 # ---------------------------------------------------------------------------
@@ -493,7 +526,8 @@ function Test-ToolAvailable {
     )
 
     if (-not (Get-Command $ToolName -ErrorAction SilentlyContinue)) {
-        Write-HookWarn "$ToolName not found on PATH - allowing commit (fail-open)"
+        if ($env:SCAN_ALLOW_TOOL_ERRORS -ne '1') { throw "$ToolName not found; scan incomplete" }
+        Write-HookWarn "$ToolName unavailable; explicit local fail-open opt-in"
         return $false
     }
     return $true
