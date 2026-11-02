@@ -62,7 +62,7 @@ on:
         description: "Pinned ref (tag/SHA) of the scanning repo — NEVER @main."
         type: string
         required: false
-        default: "ba441c69afa2d287893667cbe81b1298fd698e16"
+        default: "c6e053f8e09c7d06a60745a51c6bb32f08cd74fc"
     secrets:
       AUTOFIX_TOKEN:
         description: "Fine-grained PAT (Contents RW + Pull-requests RW, this repo only). Used ONLY by apply-and-push."

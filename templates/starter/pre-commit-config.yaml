@@ -20,7 +20,7 @@ repos:
       - id: terraform_fmt
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: ba441c69afa2d287893667cbe81b1298fd698e16  # v2.3.6 # x-release-please-version
+    rev: c6e053f8e09c7d06a60745a51c6bb32f08cd74fc  # v2.3.6 # x-release-please-version
     hooks:
       - id: trivy-secrets
         stages: [pre-commit]
