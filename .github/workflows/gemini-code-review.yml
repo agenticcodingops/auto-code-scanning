@@ -17,9 +17,14 @@ jobs:
     if: github.event.pull_request.user.type != 'Bot' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      # The review step holds the model key and a token that can write to pull requests, so nothing it runs or
+      # reads as configuration may come from the pull request. Check out the base commit: the helper script, the
+      # styleguide and the ignore list are the reviewed versions on the base branch. The pull request's commits
+      # are fetched as git objects and only ever diffed, never checked out or run.
+      - name: Checkout the base commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -29,9 +34,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO_NAME: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          python3 .github/scripts/gemini_review.py
+          python3 -I .github/scripts/gemini_review.py
