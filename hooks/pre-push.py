@@ -22,7 +22,8 @@ PLATFORM_REPOSITORY = 'https://github.com/agenticcodingops/auto-code-scanning'
 
 
 def git(*args: str) -> bytes:
-    return subprocess.check_output(['git', *args], stderr=subprocess.PIPE)
+    # Replacement refs are local overlays, never the objects sent to the remote.
+    return subprocess.check_output(['git', '--no-replace-objects', *args], stderr=subprocess.PIPE)
 
 
 def bash() -> str:
@@ -85,7 +86,7 @@ def materialize(oid: str, destination: Path) -> list[str]:
     """Copy blobs verbatim: no checkout filters, attributes, hooks or local index."""
     names = []
     entries = git('ls-tree', '-rz', '--full-tree', oid).split(b'\0')
-    with subprocess.Popen(['git', 'cat-file', '--batch'], stdin=subprocess.PIPE,
+    with subprocess.Popen(['git', '--no-replace-objects', 'cat-file', '--batch'], stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE) as blobs:
         try:
             for entry in filter(None, entries):
@@ -210,6 +211,7 @@ def push_configuration() -> tuple[list[tuple[str, list[str]]], dict]:
     import yaml
     config = yaml.safe_load(Path('.pre-commit-config.yaml').read_text(encoding='utf-8'))
     forwarded = copy.deepcopy(config)
+    skipped = set(os.environ.get('SKIP', '').split(','))
     selected = []
     retained_repos = []
     for repo in forwarded['repos']:
@@ -217,7 +219,9 @@ def push_configuration() -> tuple[list[tuple[str, list[str]]], dict]:
         for hook in repo['hooks']:
             if platform_hook(repo, hook) and any(stage in ('pre-push', 'push')
                     for stage in hook.get('stages', MANIFEST_STAGES[hook['id']])):
-                selected.append((hook['id'], hook.get('args', [])))
+                # Remove adapted hooks from the forwarded config even when skipped.
+                if hook['id'] not in skipped:
+                    selected.append((hook['id'], hook.get('args', [])))
             else:
                 retained.append(hook)
         if retained:

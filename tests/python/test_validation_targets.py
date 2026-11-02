@@ -178,7 +178,8 @@ def test_iac_hooks_read_object_bytes(consumer, package, scanner, shell, name):
     assert '# live worktree' in (consumer / 'main.tf').read_text()
 
 
-def test_pre_commit_adapter_keeps_every_ref_and_other_hooks(consumer, package, scanner):
+@pytest.mark.parametrize('skip', ['', 'other-hook,dotnet-build,checkov'])
+def test_pre_commit_adapter_keeps_every_ref_and_other_hooks(consumer, package, scanner, skip):
     import yaml
     # The installed hook must reference repo-owned files, as in vendored setups.
     shutil.copytree(package / 'hooks', consumer / 'hooks')
@@ -197,12 +198,13 @@ def test_pre_commit_adapter_keeps_every_ref_and_other_hooks(consumer, package, s
     oid = git(consumer, 'rev-parse', 'HEAD')
     records = f'refs/heads/one {oid} refs/heads/one {ZERO}\nrefs/heads/two {oid} refs/heads/two {ZERO}\n'
     env, trace = scanner
+    env['SKIP'] = skip
     result = subprocess.run([sys.executable, str(runner), '--pre-commit-runner', 'origin', 'fixture'],
                             cwd=consumer, input=records, text=True, capture_output=True, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert trace.exists()
+    assert trace.exists() == ('dotnet-build' not in skip.split(','))
     assert (consumer / 'original-records').read_text() == records
-    assert (consumer / 'original-skip').read_text() == ''
+    assert (consumer / 'original-skip').read_text() == skip
     assert yaml.safe_load((consumer / 'original-config').read_text())['repos'] == []
 
 
@@ -320,6 +322,57 @@ def load_push_runner(package):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('kind', ['commit', 'tree', 'blob', 'tag'])
+def test_push_ignores_replacement_objects(consumer, package, scanner, shell, kind):
+    original = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'tag', '-am', 'original', 'original', original)
+    (consumer / 'App.cs').write_text('replacement bytes\n')
+    git(consumer, 'add', 'App.cs')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'replacement')
+    replacement = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'tag', '-am', 'replacement', 'replacement', replacement)
+    suffix = {'commit': '', 'tree': '^{tree}', 'blob': ':App.cs'}
+    if kind == 'tag':
+        oid = git(consumer, 'rev-parse', 'refs/tags/original')
+        replaced = oid
+        substitute = git(consumer, 'rev-parse', 'refs/tags/replacement')
+    else:
+        oid = original
+        replaced = git(consumer, 'rev-parse', original + suffix[kind])
+        substitute = git(consumer, 'rev-parse', replacement + suffix[kind])
+    git(consumer, 'replace', replaced, substitute)
+    # Prove the fixture actually redirects ordinary Git object reads.
+    assert git(consumer, 'show', oid + ':App.cs') == 'replacement bytes'
+    env, trace = scanner
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'refs/heads/target {oid} refs/heads/target {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.exists(), result.stdout + result.stderr
+    assert [json.loads(line)['App.cs'] for line in trace.read_text().splitlines()] == ['pushed bytes\n']
+
+
+@pytest.mark.parametrize('location', ['https://github.com/agenticcodingops/auto-code-scanning', 'local'])
+@pytest.mark.parametrize('skip,expected', [('', ['checkov', 'tflint']),
+                                         ('checkov', ['tflint']),
+                                         ('other,checkov,tflint', []),
+                                         ('checkov-extra', ['checkov', 'tflint'])])
+def test_adapted_hook_selection_honors_skip(consumer, package, monkeypatch, location, skip, expected):
+    import yaml
+    adapted = [{'id': name, 'entry': f'bash hooks/dispatcher.sh {name}'} for name in ('checkov', 'tflint')]
+    other = {'id': 'other', 'entry': 'custom-scanner'}
+    commit_only = {'id': 'dotnet-build', 'entry': 'bash hooks/dispatcher.sh dotnet-build', 'stages': ['pre-commit']}
+    config = {'repos': [{'repo': location, 'hooks': [*adapted, other, commit_only]}]}
+    (consumer / '.pre-commit-config.yaml').write_text(yaml.safe_dump(config))
+    monkeypatch.chdir(consumer)
+    monkeypatch.setenv('SKIP', skip)
+    selected, forwarded = load_push_runner(package).push_configuration()
+    assert selected == [(name, []) for name in expected]
+    # Skipped adapted hooks cannot run again in the saved runner.
+    assert forwarded['repos'] == [{'repo': location, 'hooks': [other, commit_only]}]
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
