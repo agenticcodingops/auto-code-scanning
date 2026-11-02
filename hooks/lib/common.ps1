@@ -121,19 +121,26 @@ function Assert-ExternalPath {
     }
 }
 
+function Assert-TrustedTflintConfig {
+    param([string]$Path)
+    Assert-ExternalPath $Path
+    if (-not $Path.EndsWith('.hcl', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Trusted linter configuration must be an HCL file ending in .hcl'
+    }
+    if ((Get-Content -LiteralPath $Path -Raw) -cmatch 'plugin_dir') {
+        throw 'Remove plugin_dir from the trusted config; use SCAN_TFLINT_PLUGIN_DIR'
+    }
+}
+
 function Get-TrustedAppTool {
     param([string]$Tool)
     $bin = [Environment]::GetEnvironmentVariable("SCAN_$($Tool.ToUpper())_BIN")
     $config = [Environment]::GetEnvironmentVariable("SCAN_$($Tool.ToUpper())_CONFIG")
-    $root = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('/', '\') + [IO.Path]::DirectorySeparatorChar
     foreach ($path in @($bin, $config)) {
         if (-not $path -or -not [IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Set SCAN_$($Tool.ToUpper())_BIN and SCAN_$($Tool.ToUpper())_CONFIG to external trusted files"
         }
-        Assert-SafeWritePath $path
-        if ([IO.Path]::GetFullPath($path).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Tool and config must be outside the scanned checkout'
-        }
+        Assert-ExternalPath $path
     }
     return @($bin, $config)
 }

@@ -264,7 +264,8 @@ def copy_configs(cloud_provider, repo_path):
     log_step(f"Copying {cloud_provider.upper()} Configs")
 
     scanning_config_dir = repo_path / ".scanning" / "configs"
-    assert_safe_tree(repo_path)
+    assert_safe_path(repo_path)
+    assert_safe_path(scanning_config_dir)
     scanning_config_dir.mkdir(parents=True, exist_ok=True)
 
     # Look for configs in multiple locations (first match wins)

@@ -63,10 +63,18 @@ if [[ "${SCAN_TRUST_REPO_CODE:-0}" != 1 ]]; then
 fi
 for file in "${files[@]}"; do assert_safe_write_path "${working_dir%/}/$file"; done
 [[ $# -gt 0 ]] && prettier_cmd+=("$@")
-prettier_cmd+=(-- "${files[@]}")
+execution_dir="$working_dir"
+if [[ "${SCAN_TRUST_REPO_CODE:-0}" != 1 ]]; then
+    execution_dir="$(dirname -- "$trusted_config")"
+    absolute_working_dir="$(cd "$working_dir" && pwd -P)"
+    prettier_cmd+=(--)
+    for file in "${files[@]}"; do prettier_cmd+=("$absolute_working_dir/$file"); done
+else
+    prettier_cmd+=(-- "${files[@]}")
+fi
 
 set +e
-output="$(cd "${working_dir}" && "${prettier_cmd[@]}" 2>&1)"
+output="$(cd "${execution_dir}" && "${prettier_cmd[@]}" 2>&1)"
 exit_code=$?
 set -e
 

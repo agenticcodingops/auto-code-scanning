@@ -32,7 +32,7 @@ foreach ($dir in $scanDirs) {
     if (-not $configFile -or -not (Test-Path -LiteralPath $configFile -PathType Leaf)) {
         throw 'SCAN_TFLINT_CONFIG must name a trusted external config'
     }
-    Assert-ExternalPath $configFile
+    Assert-TrustedTflintConfig $configFile
     $env:TFLINT_PLUGIN_DIR = $env:SCAN_TFLINT_PLUGIN_DIR
     if (-not $env:TFLINT_PLUGIN_DIR) { throw 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache' }
     Assert-ExternalPath $env:TFLINT_PLUGIN_DIR

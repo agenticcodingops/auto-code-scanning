@@ -121,7 +121,7 @@ write_exec_wrapper() {
 
 prepare_parser_free_path() {
     local tool target
-    for tool in gitleaks git mktemp wc date mkdir rm cat dirname; do
+    for tool in gitleaks git mktemp wc date mkdir rm mv cat dirname; do
         target="$(command -v "${tool}" 2>/dev/null || true)"
         if [[ -z "${target}" ]]; then
             echo "FAIL: ${tool} is required to build a parser-free PATH" >&2

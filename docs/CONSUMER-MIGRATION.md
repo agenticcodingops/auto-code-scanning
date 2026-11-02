@@ -382,7 +382,9 @@ ESLint and Prettier default to externally provisioned tooling. Set
 `SCAN_PRETTIER_BIN` / `SCAN_PRETTIER_CONFIG` to absolute, trusted files outside the
 scanned checkout. Use ESLint 9 or newer: its config lookup is disabled and the
 explicit external config determines parsers and plugins. Prettier also receives
-only the explicit external config. Install the tools and their plugins outside
+only the explicit external config and runs from its directory with absolute input
+paths. Plugin-name resolution and the default ignore file are therefore relative
+to that trusted directory. Install the tools and their plugins outside
 the scanned repository; review the configuration as executable code. Missing
 trusted inputs block the hook. Extra hook arguments are rejected in this mode.
 For developer-owned repositories only, `SCAN_TRUST_REPO_CODE=1` explicitly restores
@@ -390,16 +392,20 @@ repository-local binaries, package resolution and executable configuration. Do n
 set this option when reviewing an untrusted checkout.
 
 TFLint requires `SCAN_TFLINT_CONFIG` to name an absolute, reviewed configuration
-outside the checkout and `SCAN_TFLINT_PLUGIN_DIR` to name an external plugin cache.
-Review plugin sources, exact versions and any `plugin_dir` override in that config.
+outside the checkout (with a `.hcl` extension), and `SCAN_TFLINT_PLUGIN_DIR` to
+name an external plugin cache. Remove all `plugin_dir` settings from the config
+so they cannot override that cache. Review plugin sources and exact versions.
 Both initialization and scanning use that exact config; a missing config or failed
 initialization blocks the hook, and extra hook arguments cannot override it.
 The pre-commit templates use the platform's TFLint hook instead of a separate
 wrapper. Copy the selected cloud config to the trusted location as an operator
 provisioning step. Keep that location and its cache outside contributor control.
 
-Setup and hook path checks require Python 3.11 or newer. Setup also requires Git to be provisioned through your managed package
-source. It no longer bootstraps a package manager from downloaded script text.
+Setup requires Python 3.11 or newer and Git from your managed package source.
+Windows Bash hook path checks also require Python; native POSIX link checks
+remain available without a JSON parser. Setup validates its destination paths
+and trees, so unrelated source/dependency symlinks can remain in the checkout.
+It no longer bootstraps a package manager from downloaded script text.
 Scanner binaries are selected from `scripts/scanner-downloads.json`, verified
 against its committed SHA-256 values before archive parsing, and installed under
 `~/.local-scanning-tools/bin`. Add that directory to PATH for later sessions.

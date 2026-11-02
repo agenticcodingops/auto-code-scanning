@@ -54,7 +54,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../hooks/lib/common.ps1"
-Assert-SafeTree (Get-Location).Path
+Assert-SafeWritePath (Get-Location).Path
 
 $ProgressPreference = "SilentlyContinue"
 
@@ -306,6 +306,7 @@ Write-Step "Copying $($CloudProvider.ToUpper()) Configs to .scanning/configs/"
 $scanningConfigDir = Join-Path $Script:RepoPath ".scanning" "configs"
 
 if (-not (Test-Path $scanningConfigDir)) {
+    Assert-SafeWritePath $scanningConfigDir
     New-Item -ItemType Directory -Path $scanningConfigDir -Force | Out-Null
     Write-Info "Created .scanning/configs/ directory"
 }
@@ -338,6 +339,7 @@ if ($cacheConfigDir) {
     if (Test-Path $providerDir) {
         $configFiles = Get-ChildItem -Path $providerDir -File
         foreach ($file in $configFiles) {
+            Assert-SafeTree $scanningConfigDir
             Copy-Item -Path $file.FullName -Destination $scanningConfigDir -Force
             Write-Verbose "Copied $($file.Name) to .scanning/configs/"
         }
@@ -351,6 +353,7 @@ if ($cacheConfigDir) {
         foreach ($file in $commonFiles) {
             $destPath = Join-Path $scanningConfigDir $file.Name
             if (-not (Test-Path $destPath)) {
+                Assert-SafeWritePath $destPath
                 Copy-Item -Path $file.FullName -Destination $destPath -Force
                 Write-Verbose "Copied common config: $($file.Name)"
             }
@@ -365,6 +368,7 @@ if ($cacheConfigDir) {
 $suppressionDest = Join-Path $Script:RepoPath ".scan-suppressions.yaml"
 $suppressionSrc = Join-Path $scanningConfigDir ".scan-suppressions.yaml"
 if (-not (Test-Path $suppressionDest) -and (Test-Path $suppressionSrc)) {
+    Assert-SafeWritePath $suppressionDest
     Copy-Item -Path $suppressionSrc -Destination $suppressionDest -Force
     Write-Success "Copied suppression template to .scan-suppressions.yaml"
 }
@@ -400,6 +404,7 @@ if (Test-Path $preCommitConfigDest) {
     }
 
     if ($templateSource) {
+        Assert-SafeWritePath $preCommitConfigDest
         Copy-Item -Path $templateSource -Destination $preCommitConfigDest -Force
         Write-Success "Copied $Tier tier template to .pre-commit-config.yaml"
     } else {

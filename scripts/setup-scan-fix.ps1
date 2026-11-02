@@ -26,10 +26,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../hooks/lib/common.ps1"
-Assert-SafeTree (Get-Location).Path
+Assert-SafeWritePath (Get-Location).Path
 
 $PlatformRoot = (Resolve-Path "$PSScriptRoot\..").Path
-Assert-SafeTree $RepoPath
+Assert-SafeWritePath $RepoPath
 $RepoPath = (Resolve-Path $RepoPath).Path
 
 function Info  { param($m) Write-Host "[INFO] $m" -ForegroundColor White }
@@ -81,7 +81,9 @@ if ($py) {
 # ---------------------------------------------------------------------------
 Step "Vendoring shared hooks + scripts"
 if ($RepoPath -ne $PlatformRoot) {
+    Assert-SafeTree (Join-Path $RepoPath "hooks")
     Copy-Item -Path (Join-Path $PlatformRoot "hooks") -Destination $RepoPath -Recurse -Force
+    Assert-SafeTree (Join-Path $RepoPath "schemas")
     Copy-Item -Path (Join-Path $PlatformRoot "schemas") -Destination $RepoPath -Recurse -Force
     foreach ($s in @("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py", "validate-scan-config.py", "render-scan-config.py",
                      "scan.py", "safe_io.py", "scan_policy.py", "scan_reports.py", "validate-suppressions.py", "create-baseline.ps1", "finalize_baseline.py")) {

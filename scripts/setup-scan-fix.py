@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from safe_io import copy_file, copy_tree, assert_safe_tree
+from safe_io import copy_file, copy_tree, assert_safe_path
 
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 
@@ -49,7 +49,7 @@ def main(argv) -> int:
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args(argv[1:])
 
-    repo = assert_safe_tree(args.repo_path)
+    repo = assert_safe_path(args.repo_path)
     langs = args.languages
     if args.cloud_provider and "terraform" not in langs:
         langs = ",".join([p for p in [langs, "terraform"] if p])

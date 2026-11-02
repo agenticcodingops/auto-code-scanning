@@ -71,7 +71,17 @@ handle_exit_code() {
 # Check every component without resolving away symlinks or Windows junctions.
 assert_safe_write_path() {
     local py
-    py="$(find_python)" || { hook_error "Python required for safe writes"; exit 1; }
+    if ! py="$(find_python)"; then
+        # POSIX has symlinks only. Windows junction checks require an interpreter.
+        case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
+        local component="$1"
+        [[ "$component" == /* ]] || component="$PWD/$component"
+        while [[ -n "$component" ]]; do
+            [[ ! -L "$component" ]] || { hook_error 'Refusing a symlink in output path'; exit 1; }
+            component="${component%/*}"
+        done
+        return 0
+    fi
     "$py" -I - "$1" <<'PYSAFE' || exit 1
 import os, pathlib, stat, sys
 p = pathlib.Path(os.path.abspath(sys.argv[1]))
@@ -99,8 +109,18 @@ write_scan_json() {
 
 assert_external_path() {
     local py
-    py="$(find_python)" || exit 1
     local external_path="$1"
+    if ! py="$(find_python)"; then
+        case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
+        [[ "$external_path" == /* && ! -L "$external_path" ]] || { hook_error 'Trusted path must be absolute and unlinked'; exit 1; }
+        local root parent canonical
+        root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+        root="$(cd "$root" && pwd -P)"
+        parent="$(cd "$(dirname -- "$external_path")" && pwd -P)" || exit 1
+        canonical="$parent/${external_path##*/}"
+        case "$canonical/" in "$root/"*) hook_error 'Trusted path must be outside the scanned checkout'; exit 1 ;; esac
+        return 0
+    fi
     if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
     "$py" -I - "$external_path" <<'PYEXTERNAL'  || exit 1
 import pathlib, subprocess, sys

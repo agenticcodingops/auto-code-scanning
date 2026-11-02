@@ -57,7 +57,7 @@ repos:
   # security concern. Only enable if your team uses conventional commits.
   # -----------------------------------------------------------------------
   # - repo: https://github.com/commitizen-tools/commitizen
-  #   rev: v3.29.1
+  #   rev: a3498aba5e94c9f7c4acb529b5e7eb6df65fd053  # v3.29.1
   #   hooks:
   #     - id: commitizen
   #       stages: [commit-msg]

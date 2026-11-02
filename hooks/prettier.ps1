@@ -64,7 +64,11 @@ if ($env:SCAN_TRUST_REPO_CODE -ne '1') {
 foreach ($file in $files) { Assert-SafeWritePath (Join-Path $workingDirPath $file) }
 if ($ExtraArgs) { $prettierArgs += $ExtraArgs }
 $prettierArgs += '--'
-$prettierArgs += $files
+$executionDir = $workingDirPath
+if ($env:SCAN_TRUST_REPO_CODE -ne '1') {
+    $executionDir = [IO.Path]::GetDirectoryName($trustedConfig)
+    $prettierArgs += @($files | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $workingDirPath $_)) })
+} else { $prettierArgs += $files }
 
 # Guard Push-Location: under $ErrorActionPreference='Stop' a missing dir throws.
 # Fail-open (skip) if the working dir is gone.
@@ -73,7 +77,7 @@ if (-not (Test-Path -LiteralPath $workingDirPath -PathType Container)) {
     exit 0
 }
 
-Push-Location -LiteralPath $workingDirPath
+Push-Location -LiteralPath $executionDir
 try {
     $output = & $runner @prettierArgs 2>&1
     $exitCode = $LASTEXITCODE

@@ -39,6 +39,9 @@ for dir in "${scan_dirs[@]}"; do
     config_file="${SCAN_TFLINT_CONFIG:-}"
     [[ -f "$config_file" ]] || { hook_error 'SCAN_TFLINT_CONFIG must name a trusted external config'; exit 1; }
     assert_external_path "$config_file"
+    [[ "$config_file" == *.hcl ]] || { hook_error 'Trusted config must end in .hcl'; exit 1; }
+    config_text="$(< "$config_file")"
+    [[ "$config_text" != *plugin_dir* ]] || { hook_error 'Remove plugin_dir; use SCAN_TFLINT_PLUGIN_DIR'; exit 1; }
     export TFLINT_PLUGIN_DIR="${SCAN_TFLINT_PLUGIN_DIR:-}"
     [[ -n "$TFLINT_PLUGIN_DIR" ]] || { hook_error 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache'; exit 1; }
     assert_external_path "$TFLINT_PLUGIN_DIR"
