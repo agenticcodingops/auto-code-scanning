@@ -41,7 +41,7 @@ on:
         description: "Git ref for the scanning repo checkout (tag, branch, or SHA)"
         type: string
         required: false
-        default: "v2.3.4"  # x-release-please-version
+        default: "v2.3.5"  # x-release-please-version
       fail-on-findings:
         description: "Whether findings cause workflow failure"
         type: boolean
