@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.5...v2.3.6) (2026-11-02)
+
+
+### Bug Fixes
+
+* **fix-loop:** give the build verification job no Actions cache access ([#54](https://github.com/agenticcodingops/auto-code-scanning/issues/54)) ([e774e17](https://github.com/agenticcodingops/auto-code-scanning/commit/e774e179fc943bbaaca6e467317eadd34843e947))
+
 ## [2.3.5](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.4...v2.3.5) (2026-11-02)
 
 
