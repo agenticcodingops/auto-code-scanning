@@ -344,7 +344,7 @@ export_staged_to_tmp() {
 find_python() {
     local c
     for c in python python3 py; do
-        if command -v "${c}" >/dev/null 2>&1 && "${c}" -c "" >/dev/null 2>&1; then
+        if command -v "${c}" >/dev/null 2>&1 && "${c}" -I -c "" >/dev/null 2>&1; then
             echo "${c}"
             return 0
         fi
@@ -363,7 +363,7 @@ read_scan_config() {
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
     py="$(find_python)" || { echo "${default}"; return 0; }
-    "${py}" -I - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
+    "${py}" -E -P - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
 import sys
 key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
 try:

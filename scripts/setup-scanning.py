@@ -217,6 +217,7 @@ def install_snyk():
 
 def install_tools(os_type, dry_run=False):
     """Install all required tools for the detected OS."""
+    global tools_installed
     if dry_run:
         log_info("Dry run - would install: trivy, checkov, tflint, gitleaks, pre-commit")
         return

@@ -892,9 +892,11 @@ jobs:
             const link = value => {
               try {
                 const url = new URL(String(value));
-                if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return 'N/A';
+                const hosts = new Set(['avd.aquasec.com', 'docs.checkov.io', 'www.checkov.io', 'security.snyk.io', 'github.com']);
+                if (String(value).length > 2048 || url.protocol !== 'https:' || !hosts.has(url.hostname) || url.port || url.username || url.password) return 'N/A';
+                if (url.hostname === 'github.com' && !url.pathname.startsWith('/terraform-linters/tflint/')) return 'N/A';
                 const target = url.href.replace(/[()<>"'`\\\s]/g, c => encodeURIComponent(c).replace(/[()']/g, x => '%' + x.charCodeAt(0).toString(16)));
-                return `[Link](${target})`;
+                return target.length <= 4096 ? `[Link](${target})` : 'N/A';
               } catch { return 'N/A'; }
             };
             const fs = require('fs');
@@ -933,7 +935,12 @@ jobs:
               findingsTable += '|------|------|----------|------|-------------|\n';
               for (const f of activeFindings) {
                 const remediation = link(f.remediation_url);
-                findingsTable += `| ${cell(f.file)} | ${cell(f.rule_id)} | ${cell(f.severity)} | ${cell(f.tool)} | ${remediation} |\n`;
+                const row = `| ${cell(f.file)} | ${cell(f.rule_id)} | ${cell(f.severity)} | ${cell(f.tool)} | ${remediation} |\n`;
+                if (findingsTable.length + row.length > 48000) {
+                  findingsTable += '| Additional findings omitted | | | | |\n';
+                  break;
+                }
+                findingsTable += row;
               }
             }
 

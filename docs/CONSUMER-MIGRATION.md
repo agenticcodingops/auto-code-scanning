@@ -375,7 +375,8 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
 Re-vendor hooks and scripts together. Output paths now reject symbolic links and
 Windows reparse points, including links in parent directories. Replace linked
 report/configuration destinations with real directories before running setup or
-scans. This also applies to explicit output paths and workflow output files.
+scans. This also applies to explicit output paths and workflow output files. PowerShell
+resolves destinations from the session location, including after `Set-Location`.
 
 ESLint and Prettier default to externally provisioned tooling. Set
 `SCAN_ESLINT_BIN` / `SCAN_ESLINT_CONFIG` and
@@ -417,7 +418,10 @@ commits. Release-version comments are informational; release automation must not
 replace commit pins with tags. Review and bump the executable commit and re-vendor
 together when upgrading. Scheduled dependency refreshes remain tracked in issue
 #38. The review workflow uses its own review instructions without dynamically
-installing a plugin marketplace.
+installing a plugin marketplace. Report comments allow links only to expected HTTPS
+documentation hosts and omit complete rows if the encoded table reaches its size
+budget. Configuration readers exclude checkout imports while retaining trusted
+user-level packages installed by no-admin setup.
 
 ## References
 

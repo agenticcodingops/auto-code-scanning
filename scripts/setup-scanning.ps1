@@ -113,7 +113,11 @@ function Test-AdminRights {
 }
 
 function Refresh-EnvironmentPath {
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $scannerBin = Join-Path $env:USERPROFILE '.local-scanning-tools/bin'
+    $paths = @($scannerBin) + @($env:Path -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';')
+    $env:Path = ($paths | Where-Object { $_ } | Select-Object -Unique) -join ';'
 }
 
 function Test-CommandExists {

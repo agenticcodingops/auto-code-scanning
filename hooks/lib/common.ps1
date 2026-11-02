@@ -65,9 +65,14 @@ function Get-HookExitCode {
 # JSON output
 # ---------------------------------------------------------------------------
 
+function Resolve-HookPath {
+    param([string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
 function Assert-SafeWritePath {
     param([string]$Path)
-    $current = [IO.Path]::GetFullPath($Path)
+    $current = Resolve-HookPath $Path
     while ($current) {
         $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
         if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -100,11 +105,16 @@ function Ensure-ScanningDir {
 function Write-ScanJson {
     param([Parameter(Mandatory)][string]$JsonContent)
     Ensure-ScanningDir
-    $temporary = Join-Path '.scanning' ('.scan-write-' + [guid]::NewGuid())
+    $temporary = Resolve-HookPath (Join-Path '.scanning' ('.scan-write-' + [guid]::NewGuid()))
+    $destination = Resolve-HookPath '.scanning/last-scan.json'
     try {
         [IO.File]::WriteAllText($temporary, $JsonContent)
         Assert-SafeWritePath '.scanning/last-scan.json'
-        [IO.File]::Move($temporary, [IO.Path]::GetFullPath('.scanning/last-scan.json'), $true)
+        if ([IO.File]::Exists($destination)) {
+            [IO.File]::Replace($temporary, $destination, [NullString]::Value)
+        } else {
+            [IO.File]::Move($temporary, $destination)
+        }
     } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
 }
 
@@ -428,7 +438,7 @@ function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -c "" 2>$null
+                & $cand -I -c "" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }
@@ -467,7 +477,7 @@ except Exception:
     $tmp = New-TemporaryFile
     try {
         Set-Content -Path $tmp -Value $script -Encoding UTF8
-        $out = & $py $tmp $Key $Default $cfg 2>$null
+        $out = & $py -E -P $tmp $Key $Default $cfg 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $out) { return $Default }
         return ($out | Select-Object -First 1).ToString().Trim()
     } catch {
@@ -593,7 +603,7 @@ function Test-ToolAvailable {
         return $false
     }
     $command = Get-Command $ToolName -ErrorAction Stop
-    if ($command.CommandType -eq 'Application') { Assert-ExternalPath $command.Source }
+    if ($command.CommandType -in @('Application', 'ExternalScript')) { Assert-ExternalPath $command.Source }
     return $true
 }
 

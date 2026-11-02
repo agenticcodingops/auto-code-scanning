@@ -292,3 +292,111 @@ def test_linux_arm64_installer_is_supported(tmp_path,monkeypatch,tool):
     monkeypatch.setattr(installer.urllib.request,'urlopen',lambda *a,**kw:Download())
     monkeypatch.setattr(installer,'verified_binary',lambda *a:b'binary')
     assert installer.install(tool,tmp_path).read_bytes()==b'binary'
+
+
+def comment_body(tmp_path, findings):
+    workflow=yaml.safe_load((ROOT/'.github/workflows/reusable-scan.yml').read_text())
+    script=next(s['with']['script'] for s in workflow['jobs']['pr-comment']['steps'] if s.get('name')=='Post PR comment')
+    directory=tmp_path/'aggregated'; directory.mkdir(exist_ok=True)
+    (directory/'aggregated.json').write_text(json.dumps({'total_findings':len(findings),'findings':findings}))
+    prefix="const context={issue:{number:1},repo:{owner:'test',repo:'test'}}; const github={rest:{issues:{createComment:async x=>console.log(JSON.stringify(x))}}};"
+    result=subprocess.run([shutil.which('node'),'-e',prefix+'(async()=>{'+script+'})()'],cwd=tmp_path,capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    return json.loads(result.stdout)['body']
+
+
+@pytest.mark.parametrize('url,allowed', [
+    ('https://avd.aquasec.com/misconfig/test',True),
+    ('http://avd.aquasec.com/misconfig/test',False),
+    ('https://untrusted.example/documentation',False),
+    ('https://github.com/unrelated/project',False),
+])
+def test_comment_links_use_documentation_hosts(tmp_path,url,allowed):
+    if not shutil.which('node'): pytest.skip('node unavailable')
+    body=comment_body(tmp_path,[{'file':'example.tf','remediation_url':url}])
+    assert ('[Link]' in body)==allowed
+
+
+def test_comment_stays_within_size_limit_after_encoding(tmp_path):
+    if not shutil.which('node'): pytest.skip('node unavailable')
+    record={key:'_'*1000 for key in ('file','rule_id','severity','tool')}
+    body=comment_body(tmp_path,[record]*20)
+    assert len(body)<65536
+
+
+def test_linux_setup_with_existing_secret_scanner(monkeypatch):
+    import setup_scanning
+    monkeypatch.setattr(setup_scanning,'command_exists',lambda name:name=='gitleaks')
+    for name in ('install_trivy_linux','install_pinned_binary','install_pip_tool','install_snyk'):
+        monkeypatch.setattr(setup_scanning,name,lambda *a,**kw:True)
+    monkeypatch.setattr(setup_scanning,'tools_installed',0)
+    setup_scanning.install_tools('linux')
+    assert setup_scanning.tools_installed==1
+
+
+def test_powershell_guard_uses_session_location(tmp_path):
+    pwsh=shutil.which('pwsh')
+    if not pwsh: pytest.skip('PowerShell unavailable')
+    outside=tmp_path/'outside'; outside.mkdir()
+    (outside/'report').write_text('original')
+    repo=tmp_path/'repo'; repo.mkdir()
+    link_or_skip(outside,repo/'linked',True)
+    common=(ROOT/'hooks/lib/common.ps1').as_posix()
+    result=subprocess.run([pwsh,'-NoProfile','-Command',f"$ErrorActionPreference='Stop'; . '{common}'; Set-Location -LiteralPath '{repo.as_posix()}'; Assert-SafeWritePath 'linked/report'"],cwd=tmp_path,capture_output=True)
+    assert result.returncode!=0
+
+
+@pytest.mark.parametrize('shell',['pwsh','powershell'])
+def test_powershell_report_write_after_set_location(tmp_path,shell):
+    command=shutil.which(shell)
+    if not command: pytest.skip(shell+' unavailable')
+    repo=tmp_path/'repo'; repo.mkdir()
+    common=(ROOT/'hooks/lib/common.ps1').as_posix()
+    result=subprocess.run([command,'-NoProfile','-Command',f"$ErrorActionPreference='Stop'; . '{common}'; Set-Location -LiteralPath '{repo.as_posix()}'; Write-ScanJson '{{\"pass\":true}}'; Write-ScanJson '{{\"pass\":false}}'"],cwd=tmp_path,capture_output=True,text=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert json.loads((repo/'.scanning/last-scan.json').read_text())=={'pass':False}
+    assert not (tmp_path/'.scanning').exists()
+
+
+def test_powershell_repository_script_is_not_a_trusted_tool(tmp_path):
+    pwsh=shutil.which('pwsh')
+    if not pwsh: pytest.skip('PowerShell unavailable')
+    subprocess.run(['git','init','-q'],cwd=tmp_path,check=True)
+    tools=tmp_path/'tools'; tools.mkdir()
+    script=tools/'scanner.ps1'; script.write_text('exit 0\n'); script.chmod(0o755)
+    common=(ROOT/'hooks/lib/common.ps1').as_posix()
+    env=dict(os.environ,PATH=str(tools)+os.pathsep+os.environ['PATH'])
+    result=subprocess.run([pwsh,'-NoProfile','-Command',f"$ErrorActionPreference='Stop'; . '{common}'; Test-ToolAvailable 'scanner.ps1'"],cwd=tmp_path,env=env,capture_output=True)
+    assert result.returncode!=0
+
+
+def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
+    if os.name!='nt': pytest.skip('Windows user-level setup regression')
+    bash=shutil.which('bash')
+    if not bash: pytest.skip('bash unavailable')
+    base_python=getattr(sys,'_base_executable',sys.executable)
+    env=dict(os.environ,APPDATA=str(tmp_path/'user-data'))
+    user_site=subprocess.check_output([base_python,'-E','-P','-c','import site; print(site.getusersitepackages())'],env=env,text=True).strip()
+    package=Path(user_site)/'yaml'; package.mkdir(parents=True)
+    (package/'__init__.py').write_text("def safe_load(stream): return {'setting':'trusted-user-setting'}\n")
+    repo=tmp_path/'repo'; repo.mkdir()
+    (repo/'yaml.py').write_text("raise AssertionError('repository module must not be imported')\n")
+    config=repo/'scan-config.yaml'; config.write_text('setting: from-config-file\n')
+    tools=tmp_path/'tools'; tools.mkdir()
+    wrapper=tools/'python'; wrapper.write_text(f'#!/usr/bin/env bash\nexec "{Path(base_python).as_posix()}" "$@"\n',newline='\n'); wrapper.chmod(0o755)
+    common=tmp_path/'common.sh'; common.write_text((ROOT/'hooks/lib/common.sh').read_text(encoding='utf-8'),newline='\n')
+    env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
+    result=subprocess.run([bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing'],cwd=repo,env=env,capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert result.stdout.strip()=='trusted-user-setting'
+
+
+def test_setup_path_refresh_preserves_verified_tools(tmp_path):
+    pwsh=shutil.which('pwsh')
+    if not pwsh: pytest.skip('PowerShell unavailable')
+    script=(ROOT/'scripts/setup-scanning.ps1').as_posix()
+    code=f"$ast=[Management.Automation.Language.Parser]::ParseFile('{script}',[ref]$null,[ref]$null); $f=$ast.Find({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Refresh-EnvironmentPath'}},$true); . ([scriptblock]::Create($f.Extent.Text)); $env:PATH='trusted-process-entry'; Refresh-EnvironmentPath; $env:PATH"
+    result=subprocess.run([pwsh,'-NoProfile','-Command',code],env=dict(os.environ,USERPROFILE=str(tmp_path)),capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert '.local-scanning-tools' in result.stdout.split(';')[0]
+    assert 'trusted-process-entry' in result.stdout
