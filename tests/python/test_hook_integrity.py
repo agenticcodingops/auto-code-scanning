@@ -72,6 +72,18 @@ def test_powershell_reads_nul_paths_without_native_line_splitting(tmp_path):
     assert data['dirs'] == ['.']
 
 
+def test_distinct_git_directory_names_survive_ordinal_deduplication(tmp_path):
+    pwsh = shutil.which('pwsh')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    subprocess.run(['git','init','-q'], cwd=tmp_path, check=True)
+    common = (ROOT / 'hooks/lib/common.ps1').as_posix()
+    command = f". '{common}'; function Get-ChangedFilesForDetect {{ @('Module/main.tf','module/main.tf',('caf'+[char]0xE9+'/main.tf'),('cafe'+[char]0x301+'/main.tf')) }}; @(Get-ChangedDirs) | ConvertTo-Json -Compress"
+    result = subprocess.run([pwsh,'-NoProfile','-Command',command],cwd=tmp_path,capture_output=True,text=True,encoding='utf-8')
+    assert result.returncode == 0, result.stderr
+    assert len(json.loads(result.stdout)) == 4
+
+
 def test_powershell_retry_preserves_findings_exit_status(tmp_path):
     pwsh = shutil.which('pwsh')
     if not pwsh:

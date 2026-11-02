@@ -213,14 +213,14 @@ detect_changed_dirs() {
     _changed_files_for_detect | while IFS= read -r -d '' path; do
         [[ "$path" == *.tf ]] || continue
         if [[ "$path" == */* ]]; then printf '%s\0' "${path%/*}"; else printf '.\0'; fi
-    done | sort -zu
+    done | LC_ALL=C sort -zu
 }
 
 # Directories remain NUL-delimited through every caller.
 detect_all_changed_dirs() {
     _changed_files_for_detect | while IFS= read -r -d '' path; do
         if [[ "$path" == */* ]]; then printf '%s\0' "${path%/*}"; else printf '.\0'; fi
-    done | sort -zu
+    done | LC_ALL=C sort -zu
 }
 
 # Count .tf files in given directories

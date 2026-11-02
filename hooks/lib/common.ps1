@@ -217,6 +217,15 @@ function Get-ChangedFilesForDetect {
     return $files
 }
 
+function Get-OrdinalUniquePaths {
+    param([string[]]$Paths)
+    $unique = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($path in $Paths) { $null = $unique.Add($path) }
+    [string[]]$ordered = @($unique)
+    [Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+    return $ordered
+}
+
 function Get-ChangedDirs {
     try {
         $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
@@ -241,7 +250,8 @@ function Get-ChangedDirs {
             # Split-Path returns '' for root-level files — map to '.' (repo root)
             # so root files are scanned rather than dropped.
             if ($parent -eq '') { '.' } else { $parent }
-        } | Sort-Object -Unique
+        }
+        $dirs = @(Get-OrdinalUniquePaths -Paths @($dirs))
 
         if (-not $dirs -or $dirs.Count -eq 0) {
             return @()
@@ -273,7 +283,8 @@ function Get-AllChangedDirs {
             # Split-Path returns '' for root-level files — map to '.' (repo root)
             # so root files are scanned rather than dropped.
             if ($parent -eq '') { '.' } else { $parent }
-        } | Sort-Object -Unique
+        }
+        $dirs = @(Get-OrdinalUniquePaths -Paths @($dirs))
 
         if (-not $dirs -or $dirs.Count -eq 0) {
             return @()
