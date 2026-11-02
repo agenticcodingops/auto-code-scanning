@@ -406,6 +406,78 @@ def test_real_multi_ref_push_reaches_native_adapter(consumer, package, scanner, 
     assert len((consumer / 'original-records').read_text().splitlines()) == 2
 
 
+@pytest.mark.parametrize('live_disabled', [False, True])
+@pytest.mark.parametrize('finding_tool', [None, 'checkov', 'tflint', 'dotnet-build'])
+def test_lefthook_dispatcher_scans_real_push_objects(
+        consumer, package, scanner, tmp_path, live_disabled, finding_tool):
+    import yaml
+
+    # Keep this literal command in sync with the shipped consumer entry point.
+    command = 'bash hooks/dispatcher.sh pre-push --hooks checkov,tflint,dotnet-build'
+    template = yaml.safe_load((ROOT / 'templates/lefthook/lefthook.yml').read_text())
+    push_command = template['pre-push']['commands']['scan-push-objects']
+    assert push_command['run'] == command
+    assert push_command['use_stdin'] is True
+
+    (consumer / 'scan-config.yaml').write_text('local_hooks_enabled: true\n')
+    (consumer / 'main.tf').write_text(f'# finding: {finding_tool}\n')
+    (consumer / 'App.cs').write_text(f'// finding: {finding_tool}\n')
+    policies = consumer / '.scanning/configs'
+    policies.mkdir(parents=True)
+    (policies / '.checkov.yaml').write_text('quiet: true\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'push target')
+    pushed = git(consumer, 'rev-parse', 'HEAD')
+
+    # Push a non-HEAD ref while the live tree and index contain clean bytes.
+    (consumer / 'main.tf').write_text('# clean live tree\n')
+    (consumer / 'App.cs').write_text('// clean live tree\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'clean checkout')
+    if live_disabled:
+        (consumer / 'scan-config.yaml').write_text('local_hooks_enabled: false\n')
+
+    shutil.copytree(package / 'hooks', consumer / 'hooks')
+    entry = consumer / '.git/hooks/pre-push'
+    entry.write_text(f'#!/usr/bin/env bash\nexec {command}\n', newline='\n')
+    entry.chmod(0o755)
+    remote = tmp_path / 'remote.git'
+    git(consumer, 'init', '--bare', '-q', str(remote))
+
+    # Only tool executables are doubles. Findings depend on the source bytes
+    # actually received, so scanning HEAD/the worktree would incorrectly pass.
+    env, trace = scanner
+    (tmp_path / 'bin/mock.py').write_text('''import json, os, pathlib, sys
+tool = 'checkov' if '-d' in sys.argv else 'dotnet-build' if 'build' in sys.argv else 'tflint'
+if '--init' in sys.argv:
+    sys.exit(0)
+sources = {p.name: p.read_text() for p in pathlib.Path.cwd().iterdir()
+           if p.suffix in ('.cs', '.tf')}
+with open(os.environ['TRACE'], 'a') as output:
+    output.write(json.dumps({'tool': tool, 'sources': sources}) + '\\n')
+finding = any('finding: ' + tool in content for content in sources.values())
+print(json.dumps({'results': {'failed_checks': [{'severity': 'HIGH'}] if finding else []},
+                  'issues': [{'rule': {'severity': 'error'}}] if finding else []}))
+sys.exit((2 if tool == 'tflint' else 1) if finding else 0)
+''')
+    result = subprocess.run(['git', 'push', str(remote), f'{pushed}:refs/heads/target'],
+                            cwd=consumer, env=env, text=True, capture_output=True, timeout=120)
+    output = result.stdout + result.stderr
+    assert result.returncode == (1 if finding_tool else 0), output
+    assert trace.exists(), output
+    scans = [json.loads(line) for line in trace.read_text().splitlines()]
+    assert [scan['tool'] for scan in scans] == ['checkov', 'tflint', 'dotnet-build'], output
+    assert all(scan['sources'] == {'App.cs': f'// finding: {finding_tool}\n',
+                                   'main.tf': f'# finding: {finding_tool}\n'} for scan in scans)
+    assert 'local scanning disabled' not in output
+    refs = git(consumer, '--git-dir', str(remote), 'for-each-ref', '--format=%(objectname)')
+    assert refs == ('' if finding_tool else pushed), output
+    assert (consumer / 'App.cs').read_text() == '// clean live tree\n'
+    assert git(consumer, 'diff', '--cached', '--name-only') == ''
+    assert (consumer / 'scan-config.yaml').read_text() == (
+        'local_hooks_enabled: false\n' if live_disabled else 'local_hooks_enabled: true\n')
+
+
 def load_push_runner(package):
     import importlib.util
     spec = importlib.util.spec_from_file_location('push_runner', package / 'hooks/pre-push.py')
