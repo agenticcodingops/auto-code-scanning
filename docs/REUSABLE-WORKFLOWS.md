@@ -246,9 +246,8 @@ for the approval floor, expiry checks and migration options.
 
 ## `code-security-scan.yml`
 
-The app-code workflow also accepts `scanning-repository` (the published platform
-repository by default) and `scanning-repo-ref` (its own release tag by default).
-Set the latter to the workflow's reviewed commit when testing an unreleased change.
+App-code policy helpers are packaged by the pinned workflow itself and distributed
+as a run-local artifact. They require no additional helper repository or version input.
 
 Application-code scan. Called through `workflow_call` (`code-security-scan.yml:23-24`).
 For the scan-config side, see [APP-CODE-SCANNING.md](APP-CODE-SCANNING.md).

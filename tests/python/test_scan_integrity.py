@@ -320,6 +320,13 @@ def test_language_policy_checkout_uses_base():
     assert "github.event.pull_request.base.sha" in checkout.get("with", {}).get("ref", "")
 
 
+def test_app_policy_helper_is_packaged_from_the_shared_contract():
+    wf = yaml.safe_load((ROOT / '.github/workflows/code-security-scan.yml').read_text())
+    step = next(s for s in wf['jobs']['detect']['steps'] if s.get('name') == 'Package workflow policy helper')
+    embedded = step['run'].split("<<'POLICY_HELPER'\n", 1)[1].rsplit('POLICY_HELPER', 1)[0]
+    assert embedded == (ROOT / 'scripts/prepare_scan_policy.py').read_text()
+
+
 
 
 
