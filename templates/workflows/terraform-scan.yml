@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   terraform-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@3e1c9f7ffa4aca8f5f887b13329e193b0fafd924  # v2.3.6 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@8da8672cba1fcfd19bb616d8f97812fbc5eb5dd2  # v2.3.6 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"        # aws | azure | gcp
