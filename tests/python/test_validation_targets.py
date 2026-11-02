@@ -152,6 +152,34 @@ def test_config_validates_consumer_index_not_package_or_worktree(consumer, packa
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('enabled', [False, True])
+def test_staged_config_accepts_root_local_hooks_enabled(consumer, package, shell, enabled):
+    valid = (ROOT / 'templates/scan-config/starter.yaml').read_text()
+    config = consumer / 'scan-config.yaml'
+    config.write_text(valid + f'\nlocal_hooks_enabled: {str(enabled).lower()}\n')
+    git(consumer, 'add', 'scan-config.yaml')
+    # Validation must still read the staged switch when the worktree is invalid.
+    config.write_text(valid + '\nlocal_hooks_enabled: "false"\n')
+    result = subprocess.run(hook(package, shell, 'validate-scan-config'), cwd=consumer,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('enabled', ['"false"', '0', 'null', '[]', '{}'])
+def test_staged_config_rejects_nonboolean_root_local_hooks_enabled(consumer, package, shell, enabled):
+    valid = (ROOT / 'templates/scan-config/starter.yaml').read_text()
+    config = consumer / 'scan-config.yaml'
+    config.write_text(valid + f'\nlocal_hooks_enabled: {enabled}\n')
+    git(consumer, 'add', 'scan-config.yaml')
+    config.write_text(valid + '\nlocal_hooks_enabled: true\n')
+    result = subprocess.run(hook(package, shell, 'validate-scan-config'), cwd=consumer,
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'local_hooks_enabled' in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('staged_valid', [False, True])
 def test_staged_config_ignores_blob_replacement(consumer, package, shell, staged_valid):
     valid = (ROOT / 'templates/scan-config/starter.yaml').read_text()

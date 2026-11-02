@@ -8,6 +8,10 @@
   "comment-additionalProperties": "false at the root catches typos like 'fx_loop' that would silently leave the fix-loop disabled. All known top-level keys are declared below.",
   "additionalProperties": false,
   "properties": {
+    "local_hooks_enabled": {
+      "type": "boolean",
+      "description": "Root-level local scanner switch. For pre-push scanning, used only when global.local_hooks_enabled is absent; change the global setting when both are present. Staged configuration validation still runs (CI + fix-loop unaffected)."
+    },
     "schema_version": {
       "type": "string",
       "description": "Config schema version (e.g. '1.0')."
