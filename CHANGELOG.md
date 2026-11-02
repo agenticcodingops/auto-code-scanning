@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.4...v2.3.5) (2026-11-02)
+
+
+### Bug Fixes
+
+* **fix-loop:** push only the checked tree and keep credentials away from pull-request code ([#50](https://github.com/agenticcodingops/auto-code-scanning/issues/50)) ([3b7e483](https://github.com/agenticcodingops/auto-code-scanning/commit/3b7e48388db900ecfbf1db0014921acc1bf6c822))
+
 ## [2.3.4](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.3...v2.3.4) (2026-11-01)
 
 
