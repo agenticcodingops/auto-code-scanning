@@ -395,7 +395,7 @@ def test_setup_path_refresh_preserves_verified_tools(tmp_path):
     pwsh=shutil.which('pwsh')
     if not pwsh: pytest.skip('PowerShell unavailable')
     script=(ROOT/'scripts/setup-scanning.ps1').as_posix()
-    code=f"$ast=[Management.Automation.Language.Parser]::ParseFile('{script}',[ref]$null,[ref]$null); $f=$ast.Find({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Refresh-EnvironmentPath'}},$true); . ([scriptblock]::Create($f.Extent.Text)); $env:PATH='trusted-process-entry'; Refresh-EnvironmentPath; $env:PATH"
+    code=f"$ast=[Management.Automation.Language.Parser]::ParseFile('{script}',[ref]$null,[ref]$null); $f=$ast.Find({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Refresh-EnvironmentPath'}},$true); . ([scriptblock]::Create($f.Extent.Text)); $env:Path='trusted-process-entry'; Refresh-EnvironmentPath; $env:Path"
     result=subprocess.run([pwsh,'-NoProfile','-Command',code],env=dict(os.environ,USERPROFILE=str(tmp_path)),capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     assert '.local-scanning-tools' in result.stdout.split(';')[0]
