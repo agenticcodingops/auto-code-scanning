@@ -53,8 +53,12 @@ handle_exit_code() {
             return 1
             ;;
         *)
-            hook_warn "Tool error (exit code ${exit_code}) - allowing commit (fail-open)"
-            return 0
+            if [[ "${SCAN_ALLOW_TOOL_ERRORS:-0}" == 1 ]]; then
+                hook_warn "Tool error (exit code ${exit_code}); explicit local fail-open opt-in"
+                return 0
+            fi
+            hook_error "Tool error (exit code ${exit_code}); scan incomplete"
+            return 1
             ;;
     esac
 }
@@ -164,21 +168,35 @@ ENDJSON
 # (pre-commit); when it is empty (the usual case at pre-push) fall back to the push
 # range so pushed commits are still scanned. NUL output keeps paths with whitespace
 # or newlines intact. Best-effort — CI is the authoritative backstop.
-_changed_files_for_detect() {
-    # Read NUL-delimited paths into an ARRAY — a scalar `files="$(... -z)"` would have
-    # bash strip the NUL delimiters (command substitution drops NUL bytes), merging
-    # paths and defeating the downstream `grep -z` / `xargs -0`. Then re-emit
-    # NUL-delimited so callers keep whitespace/newline-safe paths.
-    local -a files=()
-    mapfile -d '' -t files < <(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null)
-    if (( ${#files[@]} == 0 )); then
-        mapfile -d '' -t files < <(git diff --name-only -z --diff-filter=ACMR '@{push}' HEAD 2>/dev/null)
-        (( ${#files[@]} == 0 )) && mapfile -d '' -t files < <(git diff --name-only -z --diff-filter=ACMR '@{upstream}' HEAD 2>/dev/null)
+# Capture producer status before reading NUL paths; process substitution alone
+# loses that status and can mistake a failed enumeration for an empty change set.
+read_nul_paths() {
+    local destination="$1" listing
+    shift
+    listing="$(mktemp)" || exit 1
+    if ! "$@" > "$listing"; then
+        rm -f -- "$listing"
+        hook_error "Could not enumerate scan inputs"
+        exit 1
     fi
-    local f
-    for f in "${files[@]}"; do
-        printf '%s\0' "${f}"
-    done
+    mapfile -d '' -t "$destination" < "$listing"
+    rm -f -- "$listing"
+}
+
+_changed_files_for_detect() {
+    local listing reference
+    listing="$(mktemp)" || return 1
+    git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    if [[ ! -s "$listing" ]]; then
+        for reference in '@{push}' '@{upstream}'; do
+            if git rev-parse --verify "$reference" >/dev/null 2>&1; then
+                git diff --name-only -z --diff-filter=ACMR "$reference" HEAD -- > "$listing" || { rm -f -- "$listing"; return 1; }
+                break
+            fi
+        done
+    fi
+    cat -- "$listing"
+    rm -f -- "$listing"
 }
 
 # Detect directories containing Terraform files that have changed
@@ -192,40 +210,17 @@ detect_changed_dirs() {
         return 0
     fi
 
-    local dirs
-    # Changed .tf dirs — staged at pre-commit, or the push range at pre-push.
-    # NUL-safe: filter .tf paths, dirname them, dedupe — without breaking on
-    # whitespace/newlines in paths (which would silently drop scan dirs).
-    dirs="$(_changed_files_for_detect \
-        | grep -z '\.tf$' \
-        | xargs -0 -r -I{} dirname {} 2>/dev/null \
-        | sort -u)"
-
-    if [[ -n "${dirs}" ]]; then
-        echo "${dirs}"
-    fi
-    # When no .tf files are staged, return empty — hooks will exit 0
+    _changed_files_for_detect | while IFS= read -r -d '' path; do
+        [[ "$path" == *.tf ]] || continue
+        if [[ "$path" == */* ]]; then printf '%s\0' "${path%/*}"; else printf '.\0'; fi
+    done | sort -zu
 }
 
-# Detect directories containing ANY staged files (not just .tf)
-# Used by secret detection hooks which scan all file types
-# Returns EMPTY when no files are staged at all
-# Usage: mapfile -t scan_dirs < <(detect_all_changed_dirs)
+# Directories remain NUL-delimited through every caller.
 detect_all_changed_dirs() {
-    if ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        return 0
-    fi
-
-    local dirs
-    # NUL-safe: dirname each changed path, dedupe — without breaking on
-    # whitespace/newlines in paths (which would silently drop scan dirs).
-    dirs="$(_changed_files_for_detect \
-        | xargs -0 -r -I{} dirname {} 2>/dev/null \
-        | sort -u)"
-
-    if [[ -n "${dirs}" ]]; then
-        echo "${dirs}"
-    fi
+    _changed_files_for_detect | while IFS= read -r -d '' path; do
+        if [[ "$path" == */* ]]; then printf '%s\0' "${path%/*}"; else printf '.\0'; fi
+    done | sort -zu
 }
 
 # Count .tf files in given directories
@@ -251,19 +246,16 @@ count_tf_files() {
 # Usage: mapfile -t files < <(get_staged_files cs csproj)
 #        mapfile -t files < <(get_staged_files)   # all staged files
 get_staged_files() {
-    local files
-    files="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)" || return 0
-    [[ -z "${files}" ]] && return 0
-    if [[ $# -eq 0 ]]; then
-        echo "${files}"
-        return 0
-    fi
-    local pattern=""
-    local ext
-    for ext in "$@"; do
-        pattern+="${pattern:+|}\\.${ext}\$"
-    done
-    echo "${files}" | grep -iE "${pattern}" || true
+    local path ext listing
+    listing="$(mktemp)" || return 1
+    git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    while IFS= read -r -d '' path; do
+        if [[ $# -eq 0 ]]; then printf '%s\0' "$path"; continue; fi
+        for ext in "$@"; do
+            if [[ "${path,,}" == *."${ext,,}" ]]; then printf '%s\0' "$path"; break; fi
+        done
+    done < "$listing"
+    rm -f -- "$listing"
 }
 
 # Export the given staged files (from the git index, not the working tree) into a
@@ -276,9 +268,9 @@ export_staged_to_tmp() {
     local file file_dir
     for file in "$@"; do
         [[ -z "${file}" ]] && continue
-        file_dir="$(dirname "${file}")"
+        file_dir="."; [[ "$file" == */* ]] && file_dir="${file%/*}"
         [[ "${file_dir}" != "." ]] && mkdir -p "${tmpdir}/${file_dir}"
-        git show ":${file}" > "${tmpdir}/${file}" 2>/dev/null || true
+        git show ":${file}" -- > "${tmpdir}/${file}" 2>/dev/null || true
     done
     echo "${tmpdir}"
 }
@@ -330,8 +322,10 @@ import sys, json
 try:
     with open(sys.argv[1], encoding="utf-8") as f:
         d = json.load(f)
+    if not isinstance(d, dict) or not isinstance(d.get("results"), list) or d.get("errors"):
+        raise ValueError("Incomplete scanner report")
     h = m = l = 0
-    for r in d.get("results", []):
+    for r in d["results"]:
         sev = str(r.get("extra", {}).get("severity") or "").upper()
         if sev == "ERROR": h += 1
         elif sev == "WARNING": m += 1
@@ -358,7 +352,7 @@ except Exception:
 # Prints "<high> <medium> <low> <total>" (ERROR->HIGH, WARNING->MEDIUM, INFO->LOW).
 count_semgrep_severities() {
     local json="${1:?json file required}"
-    [[ -f "${json}" ]] || { echo "0 0 0 0"; return 0; }
+    [[ -f "${json}" ]] || return 2
     local py result
     py="$(find_python 2>/dev/null)" || py=""
     if [[ -n "${py}" ]]; then
@@ -368,8 +362,7 @@ count_semgrep_severities() {
             return 0
         fi
     fi
-    # Fallback only if python is genuinely unavailable: detect finding presence.
-    if grep -q '"check_id"' "${json}" 2>/dev/null; then echo "1 0 0 1"; else echo "0 0 0 0"; fi
+    return 2
 }
 
 # Print a concise list of Semgrep findings from a --json output file.
@@ -428,29 +421,18 @@ resolve_config() {
 # Pass arguments as separate words (NOT as a single string with eval).
 # Returns: Trivy exit code (0, 1, or 2 for fail-open on persistent lock)
 run_trivy_with_retry() {
-    local output
-    local exit_code
-
-    # First attempt — execute arguments directly without eval
-    output="$("$@" 2>&1)" && exit_code=0 || exit_code=$?
-
-    # Check for DB lock error
-    if echo "${output}" | grep -qi "database.*locked" 2>/dev/null; then
-        hook_warn "Trivy database locked, retrying in 2 seconds..."
-        sleep 2
-
-        # Retry once
-        output="$("$@" 2>&1)" && exit_code=0 || exit_code=$?
-
-        if echo "${output}" | grep -qi "database.*locked" 2>/dev/null; then
-            hook_warn "Trivy database still locked after retry"
-            echo "${output}"
-            return 2
+    local output exit_code diagnostics attempt
+    diagnostics="$(mktemp)" || return 2
+    for attempt in 1 2; do
+        output="$("$@" 2>"$diagnostics")" && exit_code=0 || exit_code=$?
+        if [[ "$exit_code" -gt 1 ]] && grep -qi 'database.*locked' -- "$diagnostics"; then
+            [[ "$attempt" == 1 ]] && { hook_warn "Trivy database locked; retrying"; sleep 2; continue; }
         fi
-    fi
-
-    echo "${output}"
-    return "${exit_code}"
+        cat -- "$diagnostics" >&2
+        rm -f -- "$diagnostics"
+        printf '%s\n' "$output"
+        return "$exit_code"
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -471,7 +453,11 @@ generate_id() {
 require_tool() {
     local tool="${1:?Tool name required}"
     if ! command -v "${tool}" >/dev/null 2>&1; then
-        hook_warn "${tool} not found on PATH - allowing commit (fail-open)"
+        if [[ "${SCAN_ALLOW_TOOL_ERRORS:-0}" != 1 ]]; then
+            hook_error "${tool} not found; scan incomplete"
+            exit 1
+        fi
+        hook_warn "${tool} unavailable; explicit local fail-open opt-in"
         return 2
     fi
     return 0

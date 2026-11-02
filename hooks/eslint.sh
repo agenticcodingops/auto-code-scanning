@@ -5,10 +5,10 @@
 # Working dir comes from scan-config.yaml (languages.typescript.build.working_dir).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
-mapfile -t all_ts < <(get_staged_files ts tsx js jsx)
+read_nul_paths all_ts get_staged_files ts tsx js jsx
 if [[ ${#all_ts[@]} -eq 0 ]]; then
     hook_log "PASS: No TS/JS files staged"
     exit 0
@@ -53,7 +53,7 @@ hook_log "Linting... (${#files[@]} TS/JS files in ${working_dir})"
 
 eslint_cmd=("${runner[@]}" --fix)
 [[ $# -gt 0 ]] && eslint_cmd+=("$@")
-eslint_cmd+=("${files[@]}")
+eslint_cmd+=(-- "${files[@]}")
 
 set +e
 output="$(cd "${working_dir}" && "${eslint_cmd[@]}" 2>&1)"

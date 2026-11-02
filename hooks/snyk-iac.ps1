@@ -43,7 +43,7 @@ foreach ($dir in $scanDirs) {
     if (-not (Test-Path $dir -PathType Container)) { continue }
 
     # Build Snyk arguments
-    $snykArgs = @('iac', 'test', $dir, '--json')
+    $snykArgs = @('iac', 'test', '--json')
 
     # Check for .snyk policy file
     if (Test-Path '.snyk') {
@@ -54,6 +54,8 @@ foreach ($dir in $scanDirs) {
     if ($ExtraArgs) {
         $snykArgs += $ExtraArgs
     }
+
+    $snykArgs += @('--', $dir)
 
     # Run Snyk
     $output = & snyk @snykArgs 2>&1

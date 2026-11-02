@@ -3,7 +3,7 @@
 # Stage: pre-push | Severity: all | Optional: fail-open if not installed/authenticated
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 # Print actionable details for Snyk IaC findings so developers know what to fix.
@@ -56,7 +56,7 @@ fi
 start_timer
 
 # Detect scan directories (only dirs with staged .tf files)
-mapfile -t scan_dirs < <(detect_changed_dirs)
+read_nul_paths scan_dirs detect_changed_dirs
 
 if [[ ${#scan_dirs[@]} -eq 0 ]]; then
     hook_log "PASS: No Terraform files staged"
@@ -78,7 +78,7 @@ for dir in "${scan_dirs[@]}"; do
     fi
 
     # Build Snyk command as array
-    snyk_cmd=(snyk iac test "${dir}" --json)
+    snyk_cmd=(snyk iac test --json)
 
     # Check for .snyk policy file in repo root
     if [[ -f ".snyk" ]]; then
@@ -89,6 +89,8 @@ for dir in "${scan_dirs[@]}"; do
     if [[ $# -gt 0 ]]; then
         snyk_cmd+=("$@")
     fi
+
+    snyk_cmd+=(-- "${dir}")
 
     # Run Snyk
     set +e
