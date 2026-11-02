@@ -50,6 +50,19 @@ def main(argv) -> int:
     args = ap.parse_args(argv[1:])
 
     repo = assert_safe_path(args.repo_path)
+    failed_steps = []
+
+    def install_step(command, label):
+        try:
+            result = subprocess.run(command, cwd=repo, check=False)
+            if result.returncode != 0:
+                raise RuntimeError(f"exit code {result.returncode}")
+        except (OSError, RuntimeError) as exc:
+            failed_steps.append(label)
+            warn(f"FAILED: {label}: {exc}. Resolve the error above and re-run setup.")
+        else:
+            ok(label)
+
     langs = args.languages
     if args.cloud_provider and "terraform" not in langs:
         langs = ",".join([p for p in [langs, "terraform"] if p])
@@ -98,9 +111,9 @@ def main(argv) -> int:
         if pc_src.exists() and not pc_dst.exists():
             copy(pc_src, pc_dst)
         if have("pre-commit"):
-            subprocess.run(["pre-commit", "install"], cwd=repo, check=False)
-            subprocess.run([sys.executable, str(repo / 'hooks/pre-push.py'), '--install-pre-commit'], cwd=repo, check=True)
-            ok("pre-commit hooks installed")
+            install_step(["pre-commit", "install"], "pre-commit hook installation")
+            install_step([sys.executable, str(repo / 'hooks/pre-push.py'), '--install-pre-commit'],
+                         "push transaction adapter installation")
         else:
             warn("pre-commit not on PATH. 'pip install pre-commit', then 'pre-commit install'")
 
@@ -166,11 +179,13 @@ def main(argv) -> int:
     else:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 
-    print("\n=== SETUP COMPLETE ===")
+    if failed_steps:
+        warn(f"Setup finished with failed steps: {', '.join(failed_steps)}")
+    print("\n=== SETUP COMPLETED WITH ERRORS ===" if failed_steps else "\n=== SETUP COMPLETE ===")
     print("Next: review scan-config.yaml; review caller workflow commit pins; test a commit.")
     if args.enable_fix_loop:
         print("Add the 'ai-autofix' label to a PR to opt it into the fix-loop.")
-    return 0
+    return 1 if failed_steps else 0
 
 
 if __name__ == "__main__":

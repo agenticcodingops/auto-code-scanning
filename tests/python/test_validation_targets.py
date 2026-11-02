@@ -803,9 +803,11 @@ def test_setup_without_python_does_not_install_hooks(consumer, tmp_path):
     bin_dir = tmp_path / 'only-runner'
     bin_dir.mkdir()
     trace = tmp_path / 'installed'
-    (bin_dir / 'pre-commit.ps1').write_text("'installed' | Set-Content -LiteralPath $env:INSTALL_TRACE\n")
+    (bin_dir / 'pre-commit.ps1').write_text(
+        "if ($args[0] -eq 'install') { 'installed' | Set-Content -LiteralPath $env:INSTALL_TRACE }\n")
     unix_runner = bin_dir / 'pre-commit'
-    unix_runner.write_text('#!/bin/sh\nprintf installed > "$INSTALL_TRACE"\n', newline='\n')
+    unix_runner.write_text('#!/bin/sh\nif [ "${1:-}" = install ]; then '
+                           'printf installed > "$INSTALL_TRACE"; fi\n', newline='\n')
     unix_runner.chmod(0o755)
     result = subprocess.run([pwsh, '-NoProfile', '-File', str(ROOT / 'scripts/setup-scan-fix.ps1'),
                              '-RepoPath', str(consumer), '-HooksRunner', 'pre-commit'],
@@ -813,6 +815,9 @@ def test_setup_without_python_does_not_install_hooks(consumer, tmp_path):
                             text=True, capture_output=True)
     assert result.returncode != 0, result.stdout + result.stderr
     assert not trace.exists()
+    assert 'FAILED: pre-commit hook installation' in result.stdout
+    assert 'FAILED: push transaction adapter installation' in result.stdout
+    assert (consumer / '.github/workflows/code-security-scan.yml').is_file()
 
 
 def test_git_helper_ignores_inherited_repository_selection(consumer, tmp_path, monkeypatch):
