@@ -42,13 +42,13 @@ hook_verbose() {
 }
 
 # ---------------------------------------------------------------------------
-# Exit code handling (fail-open)
+# Exit code handling (block incomplete scans unless explicitly opted out)
 # ---------------------------------------------------------------------------
 
 # Classify a tool exit code:
 #   exit 0 = no findings (pass)
 #   exit 1 = security findings found (block)
-#   exit 2+ = infrastructure error (fail-open, warn + allow)
+#   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
 #
 # Usage: handle_exit_code $tool_exit_code
 # Returns: 0 (pass/fail-open) or 1 (findings found)
@@ -370,9 +370,8 @@ find_python() {
     return 1
 }
 
-# Read a dotted key from scan-config.yaml (e.g. languages.csharp.build.solution).
-# Falls back to the default if the config, python, PyYAML, or key is missing — so
-# hooks degrade gracefully (e.g. empty solution => auto-detect) rather than break.
+# Read a dotted string key. Missing config/keys retain defaults; malformed
+# configuration blocks with a named error instead of silently using defaults.
 # Usage: solution="$(read_scan_config languages.csharp.build.solution '')"
 read_scan_config() {
     local key="${1:?key required}"
@@ -380,21 +379,8 @@ read_scan_config() {
     local cfg="${SCAN_CONFIG_FILE:-scan-config.yaml}"
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
-    py="$(find_python)" || { echo "${default}"; return 0; }
-    "${py}" -E -P - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
-import sys
-key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    import yaml
-    with open(cfg, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    cur = data
-    for part in key.split("."):
-        cur = cur[part]
-    print(cur if cur is not None and cur != "" else default)
-except Exception:
-    print(default)
-PYEOF
+    py="$(find_python)" || { hook_error 'Python is required to read scan-config.yaml'; return 1; }
+    "${py}" -E -P "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
 }
 
 # Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).

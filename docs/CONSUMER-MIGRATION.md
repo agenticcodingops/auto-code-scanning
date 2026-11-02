@@ -14,6 +14,10 @@ untouched. Reports are exported to the consumer's `.scanning/last-scan.json` bef
 cleanup, and earlier reports are cleared when the next attempt produces no report.
 Unavailable/non-tree objects, symlinks, submodules and filesystem path collisions
 block the push because a complete isolated scan cannot be guaranteed.
+Transaction-bound validation is fail-closed: setup errors, malformed transactions
+or configuration, unsafe tree entries and missing required policies return `1`.
+Configuration shape errors name the invalid key on one line; they never fall
+back to defaults. This includes errors in the adapter's runner configuration.
 
 **Track scanner policy before upgrading.** Push scans require the policy scanner's
 `.checkov.yaml` in the pushed tree under

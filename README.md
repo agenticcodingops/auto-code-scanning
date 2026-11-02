@@ -30,7 +30,7 @@ flowchart LR
     commit --> push["git push"]
     push --> pr["Pull Request"]
 
-    commit ==> PC["①  pre-commit hooks<br/>fast · fail-open"]
+    commit ==> PC["①  pre-commit hooks<br/>staged validation"]
     push   ==> PP["②  pre-push hooks<br/>deeper checks"]
     aiedit ==> IS["③  in-session Claude<br/>PostToolUse / Stop"]
     pr     ==> CI["④  CI reusable scans<br/>SARIF · PR comment · gate"]
@@ -46,7 +46,7 @@ flowchart LR
 
 | # | Enforcement point | When | Tool runner | Posture |
 |---|---|---|---|---|
-| ① | **pre-commit hooks** | every `git commit` | Lefthook → `hooks/dispatcher.sh` | fast, fail-open on infra errors |
+| ① | **pre-commit hooks** | every `git commit` | Lefthook → `hooks/dispatcher.sh` | staged validation; incomplete scans block by default |
 | ② | **pre-push hooks** | every `git push` | Lefthook → `hooks/dispatcher.sh` | deeper (build, tflint, checkov) |
 | ③ | **in-session Claude hooks** | each file an AI agent edits | `templates/claude/` PostToolUse/Stop | self-correct before "done" |
 | ④ | **CI reusable workflows** | every PR / push | `workflow_call` (pinned `@SHA`) | authoritative, SARIF + gate |
@@ -101,6 +101,9 @@ OS-detects and execs the right per-tool implementation (`.ps1` on Windows, `.sh`
 Pre-commit hooks discover **staged** files. Pre-push hooks consume Git's complete
 ref transaction and scan private copies of the exact pushed trees. Upgrade the
 runner wiring with the hooks; see [validation target migration](docs/CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration).
+Transaction-bound push validation is fail-closed: setup errors, malformed
+transactions/configuration, unsafe tree entries and missing policies return `1`
+and block the push. See the [exit-code contract](docs/HOOK-REFERENCE.md#exit-code-contract).
 
 ```mermaid
 flowchart TD

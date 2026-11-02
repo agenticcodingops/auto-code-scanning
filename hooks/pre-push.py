@@ -15,7 +15,13 @@ import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-HOOKS = tuple((HERE / 'lib/push-hook-ids.txt').read_text().split())
+sys.path.insert(0, str(HERE / 'lib'))
+try:
+    from scan_config import load_scan_config, load_yaml, require
+    HOOKS = tuple((HERE / 'lib/push-hook-ids.txt').read_text().split())
+except (OSError, ValueError, ImportError) as exc:
+    print('[pre-push] ERROR: ' + ' '.join(str(exc).splitlines()) + '; scan incomplete', file=sys.stderr)
+    raise SystemExit(1)
 # Every supported push hook explicitly declares this stage in the manifest.
 # Config-wide default_stages only applies when a manifest has no stages.
 MANIFEST_STAGES = {hook: ['pre-push'] for hook in HOOKS}
@@ -196,8 +202,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
             names = materialize(oid, snapshot)
             config = {}
             if (snapshot / 'scan-config.yaml').is_file():
-                import yaml
-                config = yaml.safe_load((snapshot / 'scan-config.yaml').read_text(encoding='utf-8')) or {}
+                config = load_scan_config(snapshot / 'scan-config.yaml')
                 enabled = config.get('global', {}).get('local_hooks_enabled', config.get('local_hooks_enabled', True))
                 if enabled is False:
                     print(f'[pre-push] local scanning explicitly disabled in object {oid}', flush=True)
@@ -270,8 +275,24 @@ def platform_hook(repo: dict, hook: dict) -> bool:
 
 
 def push_configuration() -> tuple[list[tuple[str, list[str]]], dict]:
-    import yaml
-    config = yaml.safe_load(Path('.pre-commit-config.yaml').read_text(encoding='utf-8'))
+    config = load_yaml('.pre-commit-config.yaml')
+    # Validate once before filtering or adapting any entry, including entries
+    # forwarded to the original runner and fields used in membership checks.
+    repos = require(config.get('repos'), list, 'repos')
+    for index, repo in enumerate(repos):
+        key = f'repos[{index}]'
+        require(repo, dict, key)
+        require(repo.get('repo'), str, key + '.repo')
+        for number, hook in enumerate(require(repo.get('hooks'), list, key + '.hooks')):
+            hook_key = f'{key}.hooks[{number}]'
+            require(hook, dict, hook_key)
+            require(hook.get('id'), str, hook_key + '.id')
+            if 'entry' in hook:
+                require(hook['entry'], str, hook_key + '.entry')
+            for field in ('args', 'stages'):
+                if field in hook:
+                    for item in require(hook[field], list, hook_key + '.' + field):
+                        require(item, str, hook_key + '.' + field + '[]')
     forwarded = copy.deepcopy(config)
     skipped = set(os.environ.get('SKIP', '').split(','))
     selected = []
@@ -379,5 +400,5 @@ if __name__ == '__main__':
     try:
         raise SystemExit(main())
     except (OSError, ValueError, subprocess.SubprocessError, ImportError) as exc:
-        print(f'[pre-push] ERROR: {exc}; scan incomplete', file=sys.stderr)
+        print('[pre-push] ERROR: ' + ' '.join(str(exc).splitlines()) + '; scan incomplete', file=sys.stderr)
         raise SystemExit(1)

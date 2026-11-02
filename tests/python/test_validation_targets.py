@@ -486,6 +486,147 @@ def load_push_runner(package):
     return module
 
 
+BAD_SCAN_CONFIGS = [
+    ('true\n', 'scan-config.yaml.<root>'),
+    ('[]\n', 'scan-config.yaml.<root>'),
+    ('null\n', 'scan-config.yaml.<root>'),
+    ('global: true\n', 'global'),
+    ('global: []\n', 'global'),
+    ('global: null\n', 'global'),
+    ('global: {local_hooks_enabled: []}\n', 'global.local_hooks_enabled'),
+    ('local_hooks_enabled: "false"\n', 'local_hooks_enabled'),
+    ('languages: []\n', 'languages'),
+    ('languages: false\n', 'languages'),
+    ('languages: null\n', 'languages'),
+    ('languages: {csharp: []}\n', 'languages.csharp'),
+    ('languages: {csharp: {build: true}}\n', 'languages.csharp.build'),
+    ('languages: {csharp: {build: null}}\n', 'languages.csharp.build'),
+    ('languages: {csharp: {build: {solution: []}}}\n', 'languages.csharp.build.solution'),
+    ('languages: {csharp: {build: {working_dir: 42}}}\n', 'languages.csharp.build.working_dir'),
+    ('languages: {typescript: {build: {working_dir: {}}}}\n', 'languages.typescript.build.working_dir'),
+    ('global: {local_hooks_enabled: false}\nlanguages: []\n', 'languages'),
+]
+
+
+@pytest.mark.parametrize('content,key', BAD_SCAN_CONFIGS)
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_wrong_shaped_pushed_config_blocks_cleanly(consumer, package, scanner, shell, content, key):
+    (consumer / 'scan-config.yaml').write_text(content)
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'malformed config')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    # Live configuration must not replace the invalid pushed configuration.
+    (consumer / 'scan-config.yaml').write_text('{}\n')
+    env, trace = scanner
+    env['SCAN_ALLOW_TOOL_ERRORS'] = '1'
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stderr.splitlines() == [f'[pre-push] ERROR: {key} must be ' +
+        ('a string' if key.endswith(('solution', 'working_dir')) else
+         'a boolean' if key.endswith('local_hooks_enabled') else 'a mapping') + '; scan incomplete']
+    assert not trace.exists()
+
+
+@pytest.mark.parametrize('content,key', BAD_SCAN_CONFIGS)
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_shared_config_readers_reject_wrong_shapes(tmp_path, shell, content, key):
+    (tmp_path / 'scan-config.yaml').write_text(content)
+    common = (ROOT / 'hooks/lib' / f'common.{shell}').as_posix()
+    executable = hook(ROOT, shell, 'dotnet-build')[0]
+    script = (f'set -e; source "{common}"; value="$(read_scan_config languages.csharp.build.solution NONE)"; echo continued'
+              if shell == 'sh' else
+              f'. "{common}"; $value = Read-ScanConfigValue -Key languages.csharp.build.solution -Default NONE; Write-Output continued')
+    command = [executable, '-c', script] if shell == 'sh' else [executable, '-NoProfile', '-Command', script]
+    result = subprocess.run(command, cwd=tmp_path, env=clean_env(), capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert key in result.stderr
+    assert len(result.stderr.splitlines()) == 1
+    assert 'continued' not in result.stdout
+    assert 'Traceback' not in result.stderr
+
+
+@pytest.mark.parametrize('content,key', [
+    ('[]', '<root>'), ('{}', 'repos'), ('repos: {}', 'repos'),
+    ('repos: [null]', 'repos[0]'), ('repos: [{repo: []}]', 'repos[0].repo'),
+    ('repos: [{repo: local, hooks: {}}]', 'repos[0].hooks'),
+    ('repos: [{repo: local, hooks: [false]}]', 'repos[0].hooks[0]'),
+    ('repos: [{repo: local, hooks: [{id: []}]}]', '.id'),
+    ('repos: [{repo: local, hooks: [{id: checkov, entry: []}]}]', '.entry'),
+    ('repos: [{repo: local, hooks: [{id: checkov, args: null}]}]', '.args'),
+    ('repos: [{repo: local, hooks: [{id: checkov, args: [false]}]}]', '.args[]'),
+    ('repos: [{repo: local, hooks: [{id: checkov, stages: pre-push}]}]', '.stages'),
+    ('repos: [{repo: local, hooks: [{id: checkov, stages: [{}]}]}]', '.stages[]'),
+])
+def test_adapter_rejects_wrong_shaped_runner_configuration(consumer, package, content, key):
+    (consumer / '.pre-commit-config.yaml').write_text(content)
+    result = subprocess.run([sys.executable, str(package / 'hooks/pre-push.py'), '--pre-commit-runner'],
+                            cwd=consumer, env=clean_env(), input='', capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert key in result.stderr
+    assert len(result.stderr.splitlines()) == 1
+    assert 'Traceback' not in result.stderr
+
+
+@pytest.mark.parametrize('filename,content', [('scan-config.yaml', 'global: [\n'),
+                                            ('.pre-commit-config.yaml', 'repos: [\n')])
+def test_push_configuration_parse_errors_are_one_line(consumer, package, filename, content):
+    (consumer / filename).write_text(content)
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'invalid YAML')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    options = ['--pre-commit-runner'] if filename.startswith('.') else ['--hooks', 'dotnet-build']
+    result = subprocess.run([sys.executable, str(package / 'hooks/pre-push.py'), *options],
+                            cwd=consumer, env=clean_env(), capture_output=True, text=True,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n')
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert filename + ': invalid YAML' in result.stderr
+    assert len(result.stderr.splitlines()) == 1
+
+
+@pytest.mark.parametrize('schema', [[], {'type': 'unknown'}])
+def test_staged_validator_rejects_malformed_schema_without_traceback(consumer, package, schema):
+    (consumer / 'scan-config.yaml').write_text('{}\n')
+    git(consumer, 'add', '.')
+    (package / 'schemas/scan-config.schema.json').write_text(json.dumps(schema))
+    result = subprocess.run([sys.executable, str(package / 'scripts/validate-scan-config.py'), '--staged'],
+                            cwd=consumer, env=clean_env(), capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'invalid validation schema' in result.stdout
+    assert 'Traceback' not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('filename', ['scan_config.py', 'push-hook-ids.txt'])
+def test_missing_runner_support_file_blocks_without_traceback(consumer, package, filename):
+    (package / 'hooks/lib' / filename).unlink()
+    result = subprocess.run([sys.executable, str(package / 'hooks/pre-push.py'), '--stdin-from-git'],
+                            cwd=consumer, env=clean_env(), input='', text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert len(result.stderr.splitlines()) == 1
+    assert 'scan incomplete' in result.stderr
+
+
+@pytest.mark.parametrize('content,expected', [('{}', ''),
+    ('languages: {csharp: {build: {solution: App.sln}}}', 'App.sln'),
+    ('languages: []', None)])
+def test_windows_powershell_config_reader_handles_empty_native_arguments(tmp_path, content, expected):
+    executable = shutil.which('powershell') if os.name == 'nt' else None
+    if not executable:
+        pytest.skip('Windows PowerShell unavailable')
+    (tmp_path / 'scan-config.yaml').write_text(content)
+    common = (ROOT / 'hooks/lib/common.ps1').as_posix()
+    result = subprocess.run([executable, '-NoProfile', '-Command',
+        f'. "{common}"; $value = Read-ScanConfigValue -Key languages.csharp.build.solution; Write-Output "value=$value"'],
+        cwd=tmp_path, env=clean_env(), capture_output=True, text=True)
+    assert result.returncode == (1 if expected is None else 0), result.stdout + result.stderr
+    if expected is None:
+        assert len(result.stderr.splitlines()) == 1
+        assert 'languages must be a mapping' in result.stderr
+    else:
+        assert result.stdout.strip() == 'value=' + expected
+
+
 @pytest.mark.parametrize('last_writes_report', [False, True])
 def test_push_exports_each_report_and_clears_between_scanners_and_objects(
         consumer, package, monkeypatch, last_writes_report):

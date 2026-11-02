@@ -45,13 +45,13 @@ function Write-HookVerbose {
 }
 
 # ---------------------------------------------------------------------------
-# Exit code handling (fail-open)
+# Exit code handling (block incomplete scans unless explicitly opted out)
 # ---------------------------------------------------------------------------
 
 # Classify a tool exit code:
 #   exit 0 = no findings (pass)
 #   exit 1 = security findings found (block)
-#   exit 2+ = infrastructure error (fail-open, warn + allow)
+#   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
 function Get-HookExitCode {
     param(
         [Parameter(Mandatory)]
@@ -453,7 +453,7 @@ function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -I -c "" 2>$null
+                & $cand -I -c "pass" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }
@@ -461,7 +461,7 @@ function Find-WorkingPython {
     return $null
 }
 
-# Read a dotted key from scan-config.yaml; returns $Default if missing/unparseable.
+# Read a dotted string key; defaults apply only to missing config/keys.
 # Usage: $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
 function Read-ScanConfigValue {
     param(
@@ -473,33 +473,13 @@ function Read-ScanConfigValue {
     if (-not (Test-Path $cfg)) { return $Default }
 
     $py = Find-WorkingPython
-    if (-not $py) { return $Default }
-
-    $script = @'
-import sys
-key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    import yaml
-    with open(cfg, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    cur = data
-    for part in key.split("."):
-        cur = cur[part]
-    print(cur if cur is not None and cur != "" else default)
-except Exception:
-    print(default)
-'@
-    $tmp = New-TemporaryFile
-    try {
-        Set-Content -Path $tmp -Value $script -Encoding UTF8
-        $out = & $py -E -P $tmp $Key $Default $cfg 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $out) { return $Default }
-        return ($out | Select-Object -First 1).ToString().Trim()
-    } catch {
-        return $Default
-    } finally {
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+    if (-not $py) {
+        [Console]::Error.WriteLine('[scan-config] ERROR: Python is required to read scan-config.yaml')
+        exit 1
     }
+    & $py -E -P "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
+        ForEach-Object { $_.ToString().Trim() }
+    if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
 # Count Semgrep findings by severity from a --json output file (native parse).

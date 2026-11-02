@@ -27,22 +27,27 @@ All hooks use a dual-wrapper architecture:
    - Windows (PowerShell available): `hooks/<hook-id>.ps1`
 4. Shared functions are loaded from `hooks/lib/common.sh` (Bash) or `hooks/lib/common.ps1` (PowerShell)
 
-Every hook scans **only the staged files** (discovered from the git index, not
-the doublestar globs — globs only decide *whether* a command runs), writes a JSON
-report to `.scanning/last-scan.json`, and is **fail-open**: a missing tool or an
-infrastructure error never blocks the commit/push.
+Commit scanners select staged files from the index. Transaction-bound push
+scanners select files from each isolated pushed tree. Hooks publish available
+JSON reports to `.scanning/last-scan.json`; an incomplete scan can block without
+producing a report.
 
 ## Exit Code Contract
 
-All hooks follow the fail-open error handling model:
+Transaction-bound push validation is **fail-closed**:
 
 | Exit Code | Meaning | Behavior |
 |-----------|---------|----------|
 | `0` | No findings (pass) | Allow commit/push |
-| `1` | Security findings detected | Block commit/push |
-| `2+` | Infrastructure error (tool crash, DB lock, network issue) | Allow commit/push (fail-open) |
+| `1` | Findings, snapshot setup errors, malformed transactions/configuration, unsafe tree entries or missing policies | Block push |
+| `2+` from a scanner | Infrastructure or parse error | Push runner converts a nonzero scanner result to `1` and blocks |
 
-**Exit code 1** is reserved exclusively for actual security findings exceeding the configured severity threshold. Tool errors, network failures, and parse errors use exit code 2+ to avoid blocking developers on infrastructure issues.
+Shared wrappers also block incomplete scans by default. `SCAN_ALLOW_TOOL_ERRORS=1`
+opts into local warning-only handling where supported by an individual wrapper;
+it never bypasses transaction setup, configuration shape, tree safety or required
+policy checks. Optional scanner-specific skips are documented below. Staged
+configuration validation blocks invalid configuration and missing prerequisites
+by default; see its entry for the explicit prerequisite opt-in.
 
 ## JSON Output
 
@@ -164,9 +169,9 @@ The dispatcher sets these environment variables for hook scripts:
 | **Severity** | All (CRITICAL, HIGH, MEDIUM, LOW) |
 | **Prerequisites** | Snyk CLI (`npm install -g snyk`), authenticated (`snyk auth` or `SNYK_TOKEN`) |
 | **Policy file** | `.snyk` in repo root (Snyk convention) |
-| **Optional** | Yes — fail-open if not installed or not authenticated |
+| **Optional** | Enable only when provisioned; unavailable tool blocks by default; missing authentication warns and skips |
 
-This hook is **optional**. It is included as a commented-out entry in standard and strict tier templates. Projects without a Snyk license can safely ignore it. When Snyk CLI is not installed or not authenticated, the hook exits 0 with a warning message and does not block the push.
+This hook is **optional**. It is included as a commented-out entry in standard and strict tier templates. Projects without a Snyk license can leave it disabled. Once selected, a missing CLI blocks by default; missing authentication exits 0 with a warning.
 
 **Authentication check order**:
 1. Check `SNYK_TOKEN` environment variable (zero subprocess overhead)
@@ -177,8 +182,8 @@ This hook is **optional**. It is included as a commented-out entry in standard a
 
 These hooks extend the platform from Terraform-only IaC scanning to application
 code. They follow the **same** dispatcher pattern as the Trivy/Checkov hooks:
-`require_tool` fail-open, staged-files-only, `.scanning/last-scan.json` output,
-and the exit-code contract (`0`=pass, `1`=findings, `2+`=fail-open). Each ships
+shared tool availability checks, staged-file selection for commit scanners,
+`.scanning/last-scan.json` output, and the exit-code contract above. Each ships
 as both `.sh` and `.ps1` and is registered in `.pre-commit-hooks.yaml` and the
 default Lefthook manifest.
 
@@ -196,7 +201,8 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Ruleset**: `p/csharp` (registry pack). Override via `SEMGREP_RULESET_CSHARP`
 - **Flags**: `--config <ruleset>`, `--error`, `--metrics off`, `--quiet`
 - **Windows**: runs natively (no WSL) with `PYTHONUTF8=1` and `SEMGREP_SEND_METRICS=off`
-- **Exit codes**: Semgrep `0` -> pass, `1` -> findings (exit 1), `2+` -> fail-open
+- **Exit codes**: `0` -> pass; findings or incomplete reports -> exit 1.
+  Tool errors block by default; the shared local opt-in applies.
 
 #### dotnet-format
 
@@ -219,8 +225,9 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Build config**: Same `languages.csharp.build.{solution,working_dir}` resolution
   (and auto-detect) as `dotnet-format`
 - **Flags**: `/p:AnalysisMode=AllEnabledByDefault`, `--nologo`
-- **Behavior**: Only runs when `.cs`/`.csproj` files are staged. Surfaces the first
-  ~40 analyzer/build error/warning lines. Build or analyzer errors -> exit 1
+- **Behavior**: Runs when the pushed tree contains `.cs`/`.csproj` files. Surfaces
+  the first ~40 analyzer/build error/warning lines. Build or analyzer errors and
+  a missing solution block by default (exit 1).
 
 ### TypeScript / JavaScript
 
@@ -265,7 +272,7 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Stage**: pre-commit
 - **Tool**: `sqlfluff lint`
 - **Dialect**: `ansi` (default)
-- **Behavior**: Lint issues -> exit 1; tool error -> fail-open
+- **Behavior**: Lint issues -> exit 1; tool errors block by default (shared local opt-in applies).
 
 ### Config Validation
 
@@ -275,11 +282,12 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Stage**: pre-commit
 - **Tool**: Python (`scripts/validate-scan-config.py`)
 - **Trigger**: Runs **only when `scan-config.yaml` is staged** (checks the git index)
-- **Behavior**: Schema violation -> exit 1; Python not found -> warn and exit 0
-  (fail-open). A missing schema, PyYAML or `jsonschema` also warns and exits 0 unless
-  `STRICT=1` is set (`scripts/validate-scan-config.py:40-60`), and the hook does not set
-  it. Setup copies `schemas/`, so the copied validator finds the schema under the
-  consumer's `schemas/` (`scripts/validate-scan-config.py:40-44`); if it is removed,
+- **Behavior**: Invalid staged YAML/schema shape -> exit 1. Python, PyYAML,
+  `jsonschema` and the schema are required; the hook sets strict validation and
+  missing prerequisites block by default. `SCAN_ALLOW_TOOL_ERRORS=1` explicitly
+  allows missing prerequisites locally; invalid YAML still blocks. Setup copies
+  `schemas/`, so the copied validator finds the schema under the
+  consumer's `schemas/`; if it is removed,
   restore it by re-running setup. The schema rejects an
   invalid `fix_loop.claude_code_action_ref` (it must be a 40-char SHA pin of
   `anthropics/claude-code-action`) when it does run
@@ -365,9 +373,9 @@ All hooks produce human-readable output:
 [trivy-iac-critical] FAIL: 2 findings (2 critical, 0 high, 0 medium, 0 low)
 ```
 
-**Infrastructure error (fail-open)**:
+**Infrastructure error (blocks by default)**:
 ```
-[trivy-iac-critical] WARNING: Tool error (exit code 127) - allowing commit (fail-open)
+[trivy-iac-critical] ERROR: Tool error (exit code 127); scan incomplete
 ```
 
 ## Shared hook scan integrity

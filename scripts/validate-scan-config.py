@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """validate-scan-config.py — validate scan-config.yaml against schemas/scan-config.schema.json.
 
-Used by both the local hook (hooks/validate-scan-config.{sh,ps1}) and CI. Designed to
-fail-open (exit 0 with a warning) when optional deps are missing locally, but to fail-closed
-(exit 1) in CI where STRICT=1 is set, so a malformed consumer config never ships silently.
+Used by both the local hook (hooks/validate-scan-config.{sh,ps1}) and CI. Staged
+hook validation and STRICT=1 block missing prerequisites. Direct non-strict use
+or the explicit local prerequisite opt-in can skip unavailable dependencies.
 
 Exit codes:
   0 = valid (or deps missing locally and not strict)
@@ -90,7 +90,7 @@ def main(argv: list[str]) -> int:
     try:
         cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
-        print(f"[validate-scan-config] ERROR: cannot parse {cfg_path}: {exc}")
+        print(f"[validate-scan-config] ERROR: cannot parse {cfg_path}: " + ' '.join(str(exc).splitlines()))
         return 1
 
     try:
@@ -99,13 +99,19 @@ def main(argv: list[str]) -> int:
         print(f"[validate-scan-config] ERROR: cannot read/parse schema {schema_path}: {exc}")
         return 1
 
-    validator = jsonschema.Draft202012Validator(schema)
-    errors = sorted(validator.iter_errors(cfg), key=lambda e: list(e.path))
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        validator = jsonschema.Draft202012Validator(schema)
+        errors = sorted(validator.iter_errors(cfg), key=lambda e: tuple(str(part) for part in e.path))
+    except jsonschema.SchemaError as exc:
+        key = '/'.join(str(part) for part in exc.path) or '<root>'
+        print(f'[validate-scan-config] ERROR: schema {key}: invalid validation schema')
+        return 1
     if errors:
-        print(f"[validate-scan-config] INVALID: {cfg_path}")
         for err in errors:
             loc = "/".join(str(p) for p in err.path) or "<root>"
-            print(f"  - {loc}: {err.message}")
+            message = ' '.join(err.message.splitlines())
+            print(f"[validate-scan-config] INVALID: {loc}: {message}")
         return 1
 
     print(f"[validate-scan-config] VALID: {cfg_path} conforms to scan-config.schema.json")
