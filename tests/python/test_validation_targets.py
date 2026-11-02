@@ -560,6 +560,7 @@ def test_shared_config_readers_reject_wrong_shapes(tmp_path, shell, content, key
     ('repos: [{repo: local, hooks: [{id: checkov, stages: [{}]}]}]', '.stages[]'),
 ])
 def test_adapter_rejects_wrong_shaped_runner_configuration(consumer, package, content, key):
+    (consumer / '.git/hooks/pre-push.pre-commit').write_text('ARGS=()\n# end templated\n')
     (consumer / '.pre-commit-config.yaml').write_text(content)
     result = subprocess.run([sys.executable, str(package / 'hooks/pre-push.py'), '--pre-commit-runner'],
                             cwd=consumer, env=clean_env(), input='', capture_output=True, text=True)
@@ -572,6 +573,7 @@ def test_adapter_rejects_wrong_shaped_runner_configuration(consumer, package, co
 @pytest.mark.parametrize('filename,content', [('scan-config.yaml', 'global: [\n'),
                                             ('.pre-commit-config.yaml', 'repos: [\n')])
 def test_push_configuration_parse_errors_are_one_line(consumer, package, filename, content):
+    (consumer / '.git/hooks/pre-push.pre-commit').write_text('ARGS=()\n# end templated\n')
     (consumer / filename).write_text(content)
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'invalid YAML')

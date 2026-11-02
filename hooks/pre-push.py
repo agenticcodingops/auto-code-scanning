@@ -277,8 +277,28 @@ def platform_hook(repo: dict, hook: dict) -> bool:
     return False
 
 
-def push_configuration() -> tuple[list[tuple[str, list[str]]], dict]:
-    config = load_yaml('.pre-commit-config.yaml')
+def runner_configuration(source: str) -> str:
+    """Read the generated runner's literal arguments without executing shell code."""
+    template, marker, _ = source.partition('# end templated')
+    assignment = re.search(r'^ARGS=\((.*)\)\s*$', template, re.MULTILINE | re.DOTALL)
+    if not marker or assignment is None:
+        raise ValueError('Original runner template is unrecognized')
+    arguments = shlex.split(assignment[1])
+    config = '.pre-commit-config.yaml'
+    for index, argument in enumerate(arguments):
+        if argument.startswith('--config='):
+            config = argument.split('=', 1)[1]
+        elif argument in ('--config', '-c'):
+            if index + 1 == len(arguments):
+                raise ValueError('Original runner configuration path is missing')
+            config = arguments[index + 1]
+    if not config:
+        raise ValueError('Original runner configuration path is missing')
+    return config
+
+
+def push_configuration(config_path: str = '.pre-commit-config.yaml') -> tuple[list[tuple[str, list[str]]], dict]:
+    config = load_yaml(config_path)
     # Validate once before filtering or adapting any entry, including entries
     # forwarded to the original runner and fields used in membership checks.
     repos = require(config.get('repos'), list, 'repos')
@@ -378,14 +398,12 @@ def main() -> int:
     records = sys.stdin.read()
     if args.pre_commit_runner:
         import yaml
-        hooks, forwarded = push_configuration()
+        original = os.fsdecode(git('rev-parse', '--git-path', 'hooks/pre-push.pre-commit')).strip()
+        source = Path(original).read_text(encoding='utf-8')
+        hooks, forwarded = push_configuration(runner_configuration(source))
         status = scan(records, hooks, args.shell, from_git=True)
         if status:
             return status
-        original = os.fsdecode(git('rev-parse', '--git-path', 'hooks/pre-push.pre-commit')).strip()
-        source = Path(original).read_text(encoding='utf-8')
-        if '# end templated' not in source:
-            raise ValueError('Original runner template is unrecognized')
         source = source.replace('# end templated', '# end templated\nARGS+=(--config "$SCAN_PUSH_FILTERED_CONFIG")', 1)
         with tempfile.TemporaryDirectory(prefix='scan-push-config-') as directory:
             path = Path(directory).resolve(strict=True) / 'pre-commit-config.yaml'
