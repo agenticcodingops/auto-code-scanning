@@ -10,7 +10,7 @@
   "properties": {
     "local_hooks_enabled": {
       "type": "boolean",
-      "description": "Root-level local scanner switch. When false, pause local scanning; staged configuration validation still runs (CI + fix-loop unaffected)."
+      "description": "Root-level local scanner switch. For pre-push scanning, used only when global.local_hooks_enabled is absent; change the global setting when both are present. Staged configuration validation still runs (CI + fix-loop unaffected)."
     },
     "schema_version": {
       "type": "string",
