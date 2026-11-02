@@ -137,10 +137,16 @@ function Assert-ExternalPath {
         & git rev-parse --show-toplevel 2>$null
     }
     if (-not $root) { $root = (Get-Location).Path }
-    $root = [IO.Path]::GetFullPath($root).TrimEnd('/', '\')
+    $roots = @($root)
+    if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -and $env:SCAN_CONSUMER_ROOT) {
+        $roots += $env:SCAN_CONSUMER_ROOT
+    }
     $full = [IO.Path]::GetFullPath($Path)
-    if ($full -eq $root -or $full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Trusted path must be outside the scanned checkout'
+    foreach ($boundary in $roots) {
+        $boundary = [IO.Path]::GetFullPath($boundary).TrimEnd('/', '\')
+        if ($full -eq $boundary -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Trusted path must be outside the scanned and consumer checkouts'
+        }
     }
 }
 
@@ -460,12 +466,13 @@ function Export-StagedFilesToTempDir {
     return $tmpDir
 }
 
-# Find a Python that ACTUALLY runs (skips the broken Windows Store python3 shim).
+# Require Python 3.11+ using the config reader's safe-path flags; skip broken
+# launcher shims and older interpreters without disabling trusted user packages.
 function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -I -c "pass" 2>$null
+                & $cand -E -P -c "pass" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }

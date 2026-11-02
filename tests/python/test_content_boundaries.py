@@ -366,7 +366,8 @@ def test_powershell_repository_script_is_not_a_trusted_tool(tmp_path):
     assert result.returncode!=0
 
 
-def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path, shell):
     if os.name!='nt': pytest.skip('Windows user-level setup regression')
     bash=shutil.which('bash')
     if not bash: pytest.skip('bash unavailable')
@@ -383,7 +384,15 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
     common=tmp_path/'common.sh'; common.write_text((ROOT/'hooks/lib/common.sh').read_text(encoding='utf-8'),newline='\n')
     shutil.copyfile(ROOT/'hooks/lib/scan_config.py', tmp_path/'scan_config.py')
     env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
-    result=subprocess.run([bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing'],cwd=repo,env=env,capture_output=True,text=True)
+    if shell == 'sh':
+        command = [bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing']
+    else:
+        pwsh=shutil.which('pwsh')
+        if not pwsh: pytest.skip('PowerShell unavailable')
+        ps_common=(ROOT/'hooks/lib/common.ps1').as_posix()
+        command = [pwsh, '-NoProfile', '-Command',
+                   f". '{ps_common}'; function python {{ & '{Path(base_python).as_posix()}' @args }}; Read-ScanConfigValue -Key setting -Default missing"]
+    result=subprocess.run(command,cwd=repo,env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     assert result.stdout.strip()=='trusted-user-setting'
 

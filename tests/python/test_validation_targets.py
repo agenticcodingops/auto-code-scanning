@@ -98,6 +98,107 @@ def scanner(tmp_path):
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_push_rejects_scanner_on_consumer_path(consumer, package, scanner, shell):
+    env, trace = scanner
+    external_bin = Path(env['PATH'].split(os.pathsep)[0])
+    checkout_bin = consumer / 'bin'
+    shutil.copytree(external_bin, checkout_bin)
+    git(consumer, 'add', 'bin')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'checkout scanner')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    # An inherited value must not override the root selected by the runner.
+    env.update(PATH=str(checkout_bin) + os.pathsep + env['PATH'],
+               SCAN_CONSUMER_ROOT=str(external_bin))
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'outside' in result.stderr, result.stdout + result.stderr
+    assert not trace.exists(), 'checkout-owned scanner executed'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_config_reader_excludes_checkout_import_paths(package, tmp_path, shell):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    (tmp_path / 'scan-config.yaml').write_text('languages:\n  csharp:\n    build:\n      solution: App.sln\n')
+    # Neither the scanned directory nor the helper directory may shadow PyYAML.
+    poison = "raise RuntimeError('checkout module imported')\n"
+    (tmp_path / 'yaml.py').write_text(poison)
+    (package / 'hooks/lib/yaml.py').write_text(poison)
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    python = Path(sys.executable).as_posix()
+    if shell == 'sh':
+        command = (f'set -euo pipefail; source "{common}"; '
+                   f'python() {{ "{python}" "$@"; }}; '
+                   'read_scan_config languages.csharp.build.solution missing')
+        args = [executable, '-c', command]
+    else:
+        command = (f". '{common}'; function python {{ & '{python}' @args }}; "
+                   "Read-ScanConfigValue -Key languages.csharp.build.solution -Default missing")
+        args = [executable, '-NoProfile', '-Command', command]
+    env = dict(clean_env(), PYTHONPATH=str(tmp_path))
+    result = subprocess.run(args, cwd=tmp_path, env=env, text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == 'App.sln'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_python_probe_rejects_interpreters_without_safe_path_flag(package, tmp_path, shell):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    python = Path(sys.executable).as_posix()
+    # Model Python 3.8-3.10: -I works, but -P is an unsupported option.
+    if shell == 'sh':
+        command = (f'source "{common}"; '
+                   'old_python() { for arg in "$@"; do [[ "$arg" != -P ]] || return 2; done; '
+                   f'"{python}" "$@"; }}; '
+                   'python() { old_python "$@"; }; python3() { old_python "$@"; }; py() { old_python "$@"; }; '
+                   'find_python')
+        args = [executable, '-c', command]
+    else:
+        command = (f". '{common}'; function python {{ "
+                   "if ($args -contains '-P') { $global:LASTEXITCODE=2; return }; "
+                   f"& '{python}' @args }}; "
+                   "Set-Item function:python3 (Get-Item function:python).ScriptBlock; "
+                   "Set-Item function:py (Get-Item function:python).ScriptBlock; "
+                   "$candidate=Find-WorkingPython; if ($candidate) { Write-Output $candidate; exit 0 }; exit 1")
+        args = [executable, '-NoProfile', '-Command', command]
+    result = subprocess.run(args, cwd=tmp_path, env=clean_env(), text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not result.stdout.strip(), 'unsupported interpreter was selected'
+
+
+@pytest.mark.parametrize('shell,no_python', [('sh', False), ('sh', True), ('ps1', False)])
+@pytest.mark.parametrize('location', ['consumer', 'snapshot', 'consumer-tools'])
+def test_snapshot_trusted_paths_exclude_both_roots(package, tmp_path, shell, no_python, location):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    for directory in ('consumer', 'snapshot', 'consumer-tools'):
+        (tmp_path / directory).mkdir()
+    target = tmp_path / location / 'trusted-config'
+    target.write_text('fixture')
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    if shell == 'sh':
+        fallback = 'find_python() { return 1; }; OSTYPE=linux-gnu; ' if no_python else ''
+        command = (f'set -euo pipefail; source "{common}"; {fallback}'
+                   f'candidate="{target.as_posix()}"; '
+                   'if command -v cygpath >/dev/null 2>&1; then candidate=$(cygpath -u "$candidate"); fi; '
+                   'assert_external_path "$candidate"')
+        args = [executable, '-c', command]
+    else:
+        args = [executable, '-NoProfile', '-Command',
+                f". '{common}'; Assert-ExternalPath '{target.as_posix()}'"]
+    env = dict(clean_env(), SCAN_PUSH_SNAPSHOT='1', SCAN_CONSUMER_ROOT=str(tmp_path / 'consumer'))
+    result = subprocess.run(args, cwd=tmp_path / 'snapshot', env=env, text=True, capture_output=True)
+    assert result.returncode == (0 if location == 'consumer-tools' else 1), result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('ref', ['refs/heads/new', 'refs/heads/alternate', 'refs/tags/release'])
 def test_push_scans_non_head_object_despite_unrelated_index(consumer, package, scanner, shell, ref):
     oid = git(consumer, 'rev-parse', 'HEAD')

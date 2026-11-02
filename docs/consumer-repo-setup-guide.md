@@ -52,7 +52,7 @@ missing required policies return `1` and block the push. Install what's relevant
 | **git** | everything | bundled / `winget install Git.Git` | system pkg manager |
 | **GitHub CLI (`gh`)**, authenticated | labels + secret verification + CI | `winget install GitHub.cli` then `gh auth login` | `brew install gh` / apt |
 | **PowerShell 7 (`pwsh`)** | running the `.ps1` setup + hooks | `winget install Microsoft.PowerShell` | `brew install powershell` (optional; use the `.py`/`.sh` paths instead) |
-| **Python 3.8+** with **`pyyaml`** + **`jsonschema`** | render/validate config; gate script | `winget install Python.Python.3` then `pip install pyyaml jsonschema` | `pip install pyyaml jsonschema` |
+| **Python 3.11+** with **`pyyaml`** + **`jsonschema`** | render/validate config; gate script | `winget install Python.Python.3` then `pip install pyyaml jsonschema` | `pip install pyyaml jsonschema` |
 | **Lefthook** (default runner) | local hooks | `winget install evilmartians.lefthook` or `choco install lefthook` | `brew install lefthook` / `go install github.com/evilmartians/lefthook@latest` |
 | **Semgrep** | C#/TS SAST hooks | `pip install semgrep` | `pip install semgrep` / `brew install semgrep` |
 | **Trivy** | secret + IaC scanning | `winget install AquaSecurity.Trivy` / `choco install trivy` | `brew install trivy` |
