@@ -24,7 +24,7 @@ one-command orchestrator `setup-scan-fix`.
 ## Prerequisites
 
 - A Git repository
-- Python 3.8+ (used to render `scan-config.yaml` and by some hooks)
+- Python 3.11+ (used to render `scan-config.yaml` and by some hooks)
 - [Lefthook](https://github.com/evilmartians/lefthook) on your PATH (default runner) — `choco install lefthook`, `go install github.com/evilmartians/lefthook@latest`, or `brew install lefthook`. (Or use `--hooks pre-commit` instead.)
 - For the fix-loop only: the [GitHub CLI](https://cli.github.com/) (`gh`), authenticated
 - Internet access (first-time setup only)

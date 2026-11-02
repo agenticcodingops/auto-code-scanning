@@ -172,7 +172,7 @@ progress, and unblocking issues. Do NOT implement tasks yourself.
   `scripts/setup-scanning-no-admin.ps1`, `hooks/validate-suppressions.py`,
   `schemas/**`
 - Spawn prompt context: "You are the Python engineer for a Terraform security
-  scanning solution. You build cross-platform Python scripts (3.8+) and JSON
+  scanning solution. You build cross-platform Python scripts (3.11+) and JSON
   schemas. Read `specs/001-security-scanning-spec/contracts/cli-interface.md`
   for script contracts, `specs/001-security-scanning-spec/data-model.md` for
   entity schemas, and `specs/001-security-scanning-spec/contracts/suppression-format.md`

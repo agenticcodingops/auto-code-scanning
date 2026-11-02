@@ -14,7 +14,7 @@ one-command orchestrator `setup-scan-fix`.
 
 | Requirement | Minimum Version | Used by |
 |------------|----------------|---------|
-| Python | 3.8+ | `scan-config.yaml` rendering, several hooks |
+| Python | 3.11+ | `scan-config.yaml` rendering, several hooks |
 | Git | 2.0+ | hooks |
 | Lefthook | 1.6+ | default local runner |
 | pre-commit | 3.0+ | alternative local runner (`--hooks pre-commit`) |

@@ -13,7 +13,7 @@ This guide walks through testing the `auto-code-scanning` solution on a real con
 
 | Requirement | Check Command | Minimum Version |
 |------------|---------------|-----------------|
-| Python | `python --version` | 3.8+ |
+| Python | `python --version` | 3.11+ |
 | Git | `git --version` | 2.0+ |
 | pre-commit | `pre-commit --version` | 3.0+ |
 | Trivy | `trivy --version` | 0.48.0+ |
@@ -599,5 +599,5 @@ Key things to check:
 - Tool versions meet minimums (`trivy --version`, `checkov --version`)
 - `.scanning/configs/` directory has the cloud-specific config files
 - No stale Trivy DB locks (`trivy clean --all` to reset)
-- Python 3.8+ is available (`python --version`)
+- Python 3.11+ is available (`python --version`)
 - On Windows, restart shell after installing tools via pip (PATH refresh)

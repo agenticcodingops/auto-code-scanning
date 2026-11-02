@@ -395,12 +395,12 @@ export_staged_to_tmp() {
     echo "${tmpdir}"
 }
 
-# Find a Python interpreter that ACTUALLY runs (skips the broken Windows Store
-# `python3` shim, which is on PATH but errors out). Prints the command name.
+# Require Python 3.11+ with the same safe-path flags used by config reads.
+# Skip broken launcher shims and older interpreters. Prints the command name.
 find_python() {
     local c
     for c in python python3 py; do
-        if command -v "${c}" >/dev/null 2>&1 && "${c}" -I -c "" >/dev/null 2>&1; then
+        if command -v "${c}" >/dev/null 2>&1 && "${c}" -E -P -c "" >/dev/null 2>&1; then
             echo "${c}"
             return 0
         fi
@@ -418,7 +418,7 @@ read_scan_config() {
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
     py="$(find_python)" || { hook_error 'Python is required to read scan-config.yaml'; return 1; }
-    "${py}" -I "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
+    "${py}" -E -P "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
 }
 
 # Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).

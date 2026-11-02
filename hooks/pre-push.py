@@ -346,7 +346,7 @@ def install() -> int:
         if legacy.is_file() and marker in legacy.read_text(encoding='utf-8'):
             legacy.unlink()
     # Prepare and back up before atomically replacing the active hook.
-    # open(newline=...) works on every supported Python, including 3.8 and 3.9.
+    # Use open(newline=...) consistently for byte-stable adapter publication.
     prepared = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n',

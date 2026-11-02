@@ -118,7 +118,7 @@ def test_push_rejects_scanner_on_consumer_path(consumer, package, scanner, shell
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
-def test_config_reader_uses_python_38_isolation(package, tmp_path, shell):
+def test_config_reader_excludes_checkout_import_paths(package, tmp_path, shell):
     executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
     if not executable:
         pytest.skip('shell unavailable')
@@ -131,22 +131,45 @@ def test_config_reader_uses_python_38_isolation(package, tmp_path, shell):
     python = Path(sys.executable).as_posix()
     if shell == 'sh':
         command = (f'set -euo pipefail; source "{common}"; '
-                   'python() { for arg in "$@"; do '
-                   'if [[ "$arg" == -P ]]; then echo "unsupported Python 3.8 flag" >&2; return 2; fi; '
-                   f'done; "{python}" "$@"; }}; '
+                   f'python() {{ "{python}" "$@"; }}; '
                    'read_scan_config languages.csharp.build.solution missing')
         args = [executable, '-c', command]
     else:
-        command = (f". '{common}'; function python {{ "
-                   "if ($args -contains '-P') { [Console]::Error.WriteLine('unsupported Python 3.8 flag'); "
-                   "$global:LASTEXITCODE=2; return }; "
-                   f"& '{python}' @args }}; "
+        command = (f". '{common}'; function python {{ & '{python}' @args }}; "
                    "Read-ScanConfigValue -Key languages.csharp.build.solution -Default missing")
         args = [executable, '-NoProfile', '-Command', command]
     env = dict(clean_env(), PYTHONPATH=str(tmp_path))
     result = subprocess.run(args, cwd=tmp_path, env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == 'App.sln'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_python_probe_rejects_interpreters_without_safe_path_flag(package, tmp_path, shell):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    python = Path(sys.executable).as_posix()
+    # Model Python 3.8-3.10: -I works, but -P is an unsupported option.
+    if shell == 'sh':
+        command = (f'source "{common}"; '
+                   'old_python() { for arg in "$@"; do [[ "$arg" != -P ]] || return 2; done; '
+                   f'"{python}" "$@"; }}; '
+                   'python() { old_python "$@"; }; python3() { old_python "$@"; }; py() { old_python "$@"; }; '
+                   'find_python')
+        args = [executable, '-c', command]
+    else:
+        command = (f". '{common}'; function python {{ "
+                   "if ($args -contains '-P') { $global:LASTEXITCODE=2; return }; "
+                   f"& '{python}' @args }}; "
+                   "Set-Item function:python3 (Get-Item function:python).ScriptBlock; "
+                   "Set-Item function:py (Get-Item function:python).ScriptBlock; "
+                   "$candidate=Find-WorkingPython; if ($candidate) { Write-Output $candidate; exit 0 }; exit 1")
+        args = [executable, '-NoProfile', '-Command', command]
+    result = subprocess.run(args, cwd=tmp_path, env=clean_env(), text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not result.stdout.strip(), 'unsupported interpreter was selected'
 
 
 @pytest.mark.parametrize('shell,no_python', [('sh', False), ('sh', True), ('ps1', False)])

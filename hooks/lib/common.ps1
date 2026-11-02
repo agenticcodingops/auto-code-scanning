@@ -466,12 +466,13 @@ function Export-StagedFilesToTempDir {
     return $tmpDir
 }
 
-# Find a Python that ACTUALLY runs (skips the broken Windows Store python3 shim).
+# Require Python 3.11+ using the config reader's safe-path flags; skip broken
+# launcher shims and older interpreters without disabling trusted user packages.
 function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -I -c "pass" 2>$null
+                & $cand -E -P -c "pass" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }
@@ -495,7 +496,7 @@ function Read-ScanConfigValue {
         [Console]::Error.WriteLine('[scan-config] ERROR: Python is required to read scan-config.yaml')
         exit 1
     }
-    & $py -I "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
+    & $py -E -P "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
         ForEach-Object { $_.ToString().Trim() }
     if ($LASTEXITCODE -ne 0) { exit 1 }
 }

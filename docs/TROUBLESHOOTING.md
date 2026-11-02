@@ -103,11 +103,11 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 ## Issue 6: Python Version Mismatch
 
-**Symptom**: `ModuleNotFoundError`, `SyntaxError`, or "Python 3.8+ required" errors.
+**Symptom**: `ModuleNotFoundError`, `SyntaxError`, or "Python 3.11+ required" errors.
 
 **Causes and Fixes**:
 
-- **Python 2 default**: Ensure `python` or `python3` resolves to Python 3.8+.
+- **Python 2 default**: Ensure `python` or `python3` resolves to Python 3.11+.
 - **Missing PyYAML**: Install with `pip install pyyaml`.
 - **Virtual environment**: If using venv, ensure it's activated before running hooks.
 
