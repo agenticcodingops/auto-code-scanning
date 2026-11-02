@@ -27,13 +27,18 @@ on:
         required: true
         type: string
 
-# Keep the caller's own token read-only; the reusable workflow manages write via
-# the AUTOFIX_TOKEN secret you pass below.
-permissions:
-  contents: read
+# Grant permissions only to the job that calls the reusable workflow.
+permissions: {}
 
 jobs:
   fix:
+    # This is the ceiling for the reusable workflow's job-specific permissions.
+    # Branch pushes still use AUTOFIX_TOKEN, not the workflow token.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      issues: write
     # PRIVILEGE BOUNDARY — only run when ALL hold:
     #   * manual dispatch by a person or a specific GitHub App, OR
     #   * non-fork PR head in THIS repo, AND

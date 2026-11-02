@@ -54,6 +54,22 @@ def caller():
     return yaml.safe_load(CALLER.read_text(encoding="utf-8"))
 
 
+def test_caller_grants_exactly_the_reusable_jobs_permissions(wf, caller):
+    """The caller is the permission ceiling, including inherited job defaults."""
+    levels = {"none": 0, "read": 1, "write": 2}
+    granted = caller["jobs"]["fix"]["permissions"]
+    required = {}
+    for job_id, job in wf["jobs"].items():
+        permissions = job.get("permissions", wf.get("permissions", {}))
+        for scope, access in permissions.items():
+            assert levels[granted.get(scope, "none")] >= levels[access], (
+                f"caller fix job does not cover {job_id}: {scope}: {access}"
+            )
+            if levels[access] > levels[required.get(scope, "none")]:
+                required[scope] = access
+    assert granted == required, "caller fix job must grant no extra permissions"
+
+
 def _step(job, name_contains):
     for s in job["steps"]:
         if name_contains.lower() in s.get("name", "").lower():

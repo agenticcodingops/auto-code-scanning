@@ -136,10 +136,13 @@ Key enforcement (all mechanical, independent of the prompt):
    The platform **verifies** these via `gh secret list` — it never stores them.
 3. Set `fix_loop.enabled: true` and tune `allowlist_paths` / `build_verify_cmd` for your repo.
 4. Pin the caller's `uses:` and its `scanning_repo_ref` input to the current release. If
-   you call your own copy of the platform, set `scanning_repo` to it as well. Grant its
-   `fix` job the permissions listed in
-   [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). The template pins
-   `@v2.0.0` and grants only `contents: read`.
+   you call your own copy of the platform, set `scanning_repo` to it as well. The template
+   grants `contents: read`, `actions: read`, `pull-requests: write` and `issues: write`
+   on its `fix` job, covering the reusable workflow's job-specific requests. Keep these
+   grants when copying the caller: they are the called workflow's permission ceiling.
+   Callers copied from v2.3.6 or earlier grant only `contents: read` by default;
+   add all four grants under `jobs.fix.permissions` when using those releases.
+   See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml).
 5. Add the **`ai-autofix`** label to a PR. After a trusted review (CodeRabbit/SonarCloud or an
    OWNER/MEMBER/COLLABORATOR), the loop runs. A review or dispatch made with a workflow's
    `GITHUB_TOKEN` (the `github-actions[bot]` login) never starts it: give a review workflow its
