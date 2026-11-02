@@ -46,12 +46,12 @@ the pull request. **CI** is GitHub Actions.
 | Inline today | After the migration | Source |
 |---|---|---|
 | A full fix-loop workflow in the repository | A thin caller that `uses:` `autonomous-fix.yml` at a pinned release | `templates/fix-loop/autonomous-fix.yml` |
-| Fix-loop allowlist written into the workflow | `fix_loop.allowlist_paths` | `autonomous-fix.yml:30-33`, `372-390` |
+| Fix-loop allowlist written into the workflow | `fix_loop.allowlist_paths` | `autonomous-fix.yml:30-33`, `403-421` |
 | Sensitive-path denylist written into the workflow | `fix_loop.gated_paths` (case-insensitive substrings) | `scripts/check-fix-allowlist.py:4-7` |
 | Solution path, working directory and build command in hooks or the workflow | `languages.<lang>.build.solution`, `languages.<lang>.build.working_dir` and `fix_loop.build_verify_cmd` | `templates/scan-config/standard.yaml:40`, `50`, `90` |
 | A bespoke SARIF-uploading scan workflow | A caller of `code-security-scan.yml` and, for Terraform, of `reusable-scan.yml` | `templates/workflows/` |
 | `lefthook.yml` calling each tool directly | `lefthook.yml` calling `hooks/dispatcher.sh` | `templates/lefthook/lefthook.yml:6-7` |
-| An action pin maintained by hand in the fix loop | The pin inside the platform's `autonomous-fix.yml`, mirrored in `fix_loop.claude_code_action_ref` | `autonomous-fix.yml:35-37`, `307`; [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) |
+| An action pin maintained by hand in the fix loop | The pin inside the platform's `autonomous-fix.yml`, mirrored in `fix_loop.claude_code_action_ref` | `autonomous-fix.yml:35-37`, `333`; [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) |
 
 ## Steps
 
@@ -143,7 +143,7 @@ If the schema is later removed, without `STRICT=1` the validator prints a warnin
 
 The fix loop reads this file from the pull request's base commit, or from the default
 branch on a manual dispatch. It never reads it from the pull request head
-(`autonomous-fix.yml:120-174`). Your changes take effect for the fix loop only after they
+(`autonomous-fix.yml:120-179`). Your changes take effect for the fix loop only after they
 merge.
 
 ### 4. Pin the callers and grant their permissions
@@ -232,7 +232,7 @@ names no particular workflow, and the reusable workflow refuses it
 - Delete hard-coded paths and build commands from your own hooks and scripts; they are in
   `scan-config.yaml` now.
 - Delete any local copy of the allowlist gate. The platform runs
-  `scripts/check-fix-allowlist.py` from its own checkout (`autonomous-fix.yml:383`, `563`).
+  `scripts/check-fix-allowlist.py` from its own checkout (`autonomous-fix.yml:414`, `599`).
 
 ### 7. Create the secrets
 
@@ -248,7 +248,7 @@ gh secret set AUTOFIX_TOKEN       # fine-grained token: Contents and Pull reques
 gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN
 ```
 
-`AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:637-654`).
+`AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:675-692`).
 
 ### 8. Swap the required status checks
 
@@ -288,11 +288,11 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
   `<prefix>semgrep-typescript` and `<prefix>trivy-secrets` (`code-security-scan.yml:186`,
   `242`).
 - On a test pull request labelled `ai-autofix`, a trusted review starts the fix loop. Its
-  Analyze job runs with a read-only token (`autonomous-fix.yml:193-196`, `311`), and only
-  the push step uses `AUTOFIX_TOKEN` (`autonomous-fix.yml:637-654`).
+  Analyze job runs with a read-only token (`autonomous-fix.yml:198-201`, `337`), and only
+  the push step uses `AUTOFIX_TOKEN` (`autonomous-fix.yml:675-692`).
 - A proposed fix that touches `.github/`, or a path containing a gated word such as
   `auth`, is not pushed. The pull request gets `needs-human-review` and a comment that
-  names the reason (`autonomous-fix.yml:372-390`, `659-722`).
+  names the reason (`autonomous-fix.yml:403-421`, `697-760`).
 
 ## Rollback
 

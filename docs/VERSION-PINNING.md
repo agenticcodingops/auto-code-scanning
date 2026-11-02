@@ -340,8 +340,8 @@ The agentic fix loop calls Anthropic's `claude-code-action`. That action is
   v1.0.148, locks `@anthropic-ai/claude-agent-sdk` 0.3.177 in its `bun.lock`, and that
   SDK release matches Claude Code 2.1.177, well past the fix.
 
-The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 242;
-the header comment at line 27 names the version). It is mirrored as
+The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 333;
+the header comment at lines 35-37 names the version). It is mirrored as
 `fix_loop.claude_code_action_ref` in `scan-config.yaml` and in
 `templates/scan-config/starter.yaml`, `standard.yaml` and `strict.yaml`, which
 `setup-scan-fix` copies into a new adopter's `scan-config.yaml`. Nothing checks that

@@ -370,7 +370,8 @@ jobs:
 
 ### Fix-loop caller (only if `--enable-fix-loop`)
 
-This file owns the **privilege boundary** and `uses:` the reusable two-job workflow, pinned
+This file owns the **privilege boundary** and `uses:` the reusable workflow, whose
+`analyze`, `verify` and `apply-and-push` jobs propose, build and push the fix, pinned
 to a commit, with the three secrets it declares passed by name. Leave its gating `if:`
 intact:
 

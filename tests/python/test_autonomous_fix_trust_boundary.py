@@ -404,16 +404,39 @@ def test_agent_cannot_run_build_test_or_package_commands(wf):
         assert f"Bash({runner}:*)" in disallowed, f"{runner} must be explicitly denied"
 
 
-def test_agent_start_up_config_comes_from_base(wf):
+def test_agent_loads_no_repository_config(wf):
+    """Project settings, hooks and MCP servers in the checkout (base copy or PR copy)
+    can run the PR's files, so the agent session must load none of them."""
     job = wf["jobs"]["analyze"]
     names = [s.get("name", "") for s in job["steps"]]
-    restore = _require_step(job, "agent config files")
+    remove = _require_step(job, "agent config files")
     agent = _require_step(job, "Run Claude Code")
-    assert names.index(restore["name"]) < names.index(agent["name"])
-    assert "BASE_SHA" in restore["env"]
+    assert names.index(remove["name"]) < names.index(agent["name"])
+    assert "git checkout" not in remove["run"], "remove the files; do not restore another copy"
     for path in (".claude", ".mcp.json", "CLAUDE.md"):
-        assert path in restore["run"]
+        assert path in remove["run"]
         assert path in _require_step(job, "Capture fix")["run"], f"{path} must stay out of the patch"
+    args = agent["with"]["claude_args"]
+    assert "--setting-sources user" in args, "load user-level settings only, never the project's"
+    assert "--strict-mcp-config" in args, "start only the action's own MCP servers"
+    assert '"disableAllHooks": true' in agent["with"]["settings"]
+
+
+def test_credential_jobs_restore_nothing_from_the_actions_cache(wf, raw):
+    """The verify job runs the PR's code and can write Actions cache entries, so no job
+    that holds a credential may restore an executable or data from that cache."""
+    assert "actions/cache" not in raw
+    trivy = _require_step(wf["jobs"]["apply-and-push"], "Authoritative secret scan")
+    assert str(trivy["with"].get("cache")).lower() == "false"
+    analyze = wf["jobs"]["analyze"]
+    bun = _require_step(analyze, "checksum-verified Bun")
+    assert re.fullmatch(r"[0-9a-f]{64}", bun["env"]["BUN_SHA256"])
+    assert "sha256sum -c" in bun["run"]
+    agent = _require_step(analyze, "Run Claude Code")
+    assert agent["with"].get("path_to_bun_executable") == "${{ steps.bun.outputs.path }}", \
+        "the agent action must use the verified Bun, not one restored from the cache"
+    names = [s.get("name", "") for s in analyze["steps"]]
+    assert names.index(bun["name"]) < names.index(agent["name"])
 
 
 def test_python_never_imports_from_the_checkout(wf):
@@ -425,7 +448,22 @@ def test_python_never_imports_from_the_checkout(wf):
                 calls.append((job_name, s.get("name"), m.group(0)))
     assert calls, "expected python calls in the workflow"
     for job_name, name, call in calls:
-        assert re.match(r"python3? -I\b", call), f"{job_name} / {name}: {call!r} must run isolated (-I)"
+        assert re.match(r'python3?"? -I\b', call), f"{job_name} / {name}: {call!r} must run isolated (-I)"
+
+
+def test_pyyaml_lives_in_a_venv_outside_the_checkout(wf):
+    """-I disables the user site, so pip needs a writable environment; and every
+    interpreter that imports yaml must be the one it was installed into."""
+    venv_python = '"${RUNNER_TEMP}/autofix-py/bin/python" -I'
+    for job_name in ("config", "analyze", "apply-and-push"):
+        job = wf["jobs"][job_name]
+        install = _require_step(job, "Ensure PyYAML")["run"]
+        assert 'python3 -I -m venv "${RUNNER_TEMP}/autofix-py"' in install
+        assert f"{venv_python} -m pip install" in install
+        for s in job["steps"]:
+            run = s.get("run", "")
+            if "check-fix-allowlist.py" in run or "import yaml" in run:
+                assert venv_python in run, f"{job_name} / {s.get('name')} must use the venv Python"
 
 
 # ---------------------------------------------------------------------------

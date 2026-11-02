@@ -128,14 +128,19 @@ jobs:
           persist-credentials: false
 
       - name: Ensure PyYAML (a missing dep must not silently disable the loop)
-        run: python3 -I -m pip install --quiet --disable-pip-version-check pyyaml
+        run: |
+          set -euo pipefail
+          # A virtual environment outside the checkout: writable whatever the system
+          # Python allows, and -I keeps the working directory off sys.path.
+          python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
 
       - name: Parse fix_loop (from trusted base config)
         id: cfg
         env:
           CONFIG_PATH: ${{ inputs.config_path }}
         run: |
-          python3 -I - <<'PY'
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I - <<'PY'
           import json, os
           path = os.environ.get("CONFIG_PATH", "scan-config.yaml")
           fl = {}
@@ -259,7 +264,12 @@ jobs:
 
       - name: Ensure PyYAML (gate must fail closed, not silently)
         # -I: never import a module from the PR checkout in the working directory.
-        run: python3 -I -m pip install --quiet --disable-pip-version-check pyyaml
+        run: |
+          set -euo pipefail
+          # A virtual environment outside the checkout: writable whatever the system
+          # Python allows, and -I keeps the working directory off sys.path.
+          python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
 
       - name: Iteration-cap pre-check (.fix-attempts)
         id: precheck
@@ -279,23 +289,39 @@ jobs:
           fi
           echo "attempts=${attempts}" >> "$GITHUB_OUTPUT"
 
-      - name: Use the base commit's agent config files
-        # The agent CLI reads these from the working directory when it starts and can
-        # run commands or set its environment from them. Take the versions a maintainer
-        # merged, never the PR head's; a path missing on base stays deleted. The capture
-        # step keeps these paths out of the patch.
+      - name: Remove the agent config files from the checkout
+        # The agent CLI reads these from the working directory when it starts, and even
+        # a base-branch copy can run hooks or MCP servers that execute files of the PR
+        # head (a hook that calls scripts/…, an `npx` server that reads the PR's .npmrc).
+        # Remove them; the agent step also loads user-level settings only, with hooks
+        # off and only the action's own MCP servers. The capture step keeps these paths
+        # out of the patch.
         if: steps.precheck.outputs.capped != 'true'
-        env:
-          BASE_SHA: ${{ steps.ctx.outputs.base_sha }}
         run: |
           set -euo pipefail
           for p in .claude .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
             rm -rf -- "${p}"
-            if git cat-file -e "${BASE_SHA}:${p}" 2>/dev/null; then
-              git checkout "${BASE_SHA}" -- "${p}"
-              git reset -q -- "${p}" 2>/dev/null || true
-            fi
           done
+
+      - name: Install a checksum-verified Bun for the agent (no Actions cache)
+        id: bun
+        # The agent action would otherwise restore its Bun binary from the Actions cache,
+        # which a job running the PR's code can write to. Download the release the action
+        # pins and check it against a recorded SHA-256 instead.
+        if: steps.precheck.outputs.capped != 'true'
+        env:
+          BUN_VERSION: "1.3.14"
+          BUN_SHA256: "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f"   # bun-linux-x64.zip
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/bun-${BUN_VERSION}"
+          rm -rf "${dir}"
+          mkdir -p "${dir}"
+          curl -fsSL --retry 3 -o "${dir}/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  ${dir}/bun.zip" | sha256sum -c -
+          unzip -q "${dir}/bun.zip" -d "${dir}"
+          "${dir}/bun-linux-x64/bun" --version
+          echo "path=${dir}/bun-linux-x64/bun" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code (FIX-ONLY)
         if: steps.precheck.outputs.capped != 'true'
@@ -309,6 +335,9 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}   # READ-ONLY; no AUTOFIX_TOKEN here
+          path_to_bun_executable: ${{ steps.bun.outputs.path }}
+          # Written to the runner's user-level settings: no hook runs in this session.
+          settings: '{"disableAllHooks": true}'
           additional_permissions: |
             actions: read
           prompt: |
@@ -340,6 +369,8 @@ jobs:
               - Keep the diff small and self-contained.
           claude_args: |
             --max-turns ${{ needs.config.outputs.max_turns }}
+            --setting-sources user
+            --strict-mcp-config
             --allowedTools "Read,Edit,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ steps.ctx.outputs.pr }}/comments:*),Bash(gh api repos/${{ github.repository }}/issues/${{ steps.ctx.outputs.pr }}/comments:*)"
             --disallowedTools "WebSearch,WebFetch,Bash(git push:*),Bash(git commit:*),Bash(git reset:*),Bash(rm:*),Bash(curl:*),Bash(wget:*),Bash(gh pr merge:*),Bash(gh workflow:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(yarn:*),Bash(pnpm:*),Bash(bun:*),Bash(dotnet:*),Bash(semgrep:*),Bash(make:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(bash:*),Bash(sh:*)"
         continue-on-error: true   # any push attempt would 403 anyway (no write creds)
@@ -380,7 +411,7 @@ jobs:
           reason=""
           changed="$(git diff --cached --name-only)"
           if [ -n "${changed}" ]; then
-            if ! out="$(printf '%s\n' "${changed}" | python3 -I .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}")"; then
+            if ! out="$(printf '%s\n' "${changed}" | "${RUNNER_TEMP}/autofix-py/bin/python" -I .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}")"; then
               gated=true
               reason="${out#GATED: }"
             fi
@@ -525,7 +556,12 @@ jobs:
           check "${CONFIG_FILE}" "${CONFIG_SHA256}"
 
       - name: Ensure PyYAML (gate must fail closed, not silently)
-        run: python3 -I -m pip install --quiet --disable-pip-version-check pyyaml
+        run: |
+          set -euo pipefail
+          # A virtual environment outside the checkout: writable whatever the system
+          # Python allows, and -I keeps the working directory off sys.path.
+          python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
 
       - name: Build the vetted tree (PR head + patch, private index)
         id: tree
@@ -560,7 +596,7 @@ jobs:
           if git -C pr-head diff-tree -r --no-renames "${HEAD_SHA}" "${PATCH_TREE}" | awk '$2 == "160000" { found = 1 } END { exit !found }'; then
             echo "::error::the patch adds or changes a submodule entry"; exit 1
           fi
-          printf '%s\n' "${changed}" | python3 -I .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}"
+          printf '%s\n' "${changed}" | "${RUNNER_TEMP}/autofix-py/bin/python" -I .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}"
 
       - name: Export the vetted files for the secret scan
         # Read every changed file from the vetted tree, not the working tree, so the
@@ -587,10 +623,12 @@ jobs:
         # write-capable job. Pin the Trivy binary version so setup-trivy does not default
         # to v0.65.0, which fails to install on the runner. It runs in the working
         # directory, which holds no PR file, so no trivy.yaml or .trivyignore of the PR's
-        # can change what it reports.
+        # can change what it reports. cache: "false" — the Actions cache (binary and DB)
+        # can be written by a job that runs the PR's code, so this job restores nothing.
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
           version: "v0.71.0"
+          cache: "false"
           scan-type: fs
           scan-ref: ${{ env.SCAN_TMP }}
           scanners: secret

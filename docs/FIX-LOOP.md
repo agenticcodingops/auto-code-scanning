@@ -30,7 +30,7 @@ fix_loop:
   gated_paths: ["auth","payment","crypto","security","identity","secret","credential",
                 ".github/",".claude/","hooks","lefthook.yml","scan-and-fix.ps1","scripts/",".env","LICENSE"]
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
-  build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in apply job
+  build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in the verify job (no secrets)
   required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]
 ```
 
@@ -103,8 +103,10 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 Key enforcement (all mechanical, independent of the prompt):
 - `analyze` runs `claude-code-action` **FIX-ONLY** with a **scoped tool allowlist** (no umbrella
   `Bash`, no build, test, package or interpreter commands, no `WebSearch`/`WebFetch`, no
-  `git push/commit`). The model credentials reach that step only, and its CLI config files
-  (`.claude/`, `.mcp.json`, `CLAUDE.md`, …) come from the base commit. It emits a patch only.
+  `git push/commit`). The model credentials reach that step only. The agent's config files
+  (`.claude/`, `.mcp.json`, `CLAUDE.md`, …) are removed from the checkout, and the session
+  loads user-level settings only, with hooks off and only the action's own MCP servers. Its
+  Bun runtime is a checksum-verified download, never an Actions-cache entry. It emits a patch only.
   The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of
@@ -113,6 +115,7 @@ Key enforcement (all mechanical, independent of the prompt):
 - `verify` checks out the **exact analyzed SHA**, applies the patch and runs `build_verify_cmd`.
 - `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
   commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
+  It restores nothing from the Actions cache, which the `verify` job can write to.
 - The reusable workflow refuses to run for the shared `github-actions[bot]` identity, whatever
   the caller's `if:` says.
 
