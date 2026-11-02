@@ -8,10 +8,11 @@ for runner setup, manual invocations, prerequisites and explicit legacy opt-ins.
 
 Local hooks require **Python 3.11 or newer**, with PyYAML and jsonschema available
 to that interpreter. Both shells probe candidates with `-E -P` before selecting
-one, so Python 3.8–3.10 and broken launchers are skipped. Configuration readers use
-the same flags to exclude the working/helper directory and Python environment
-overrides from imports while retaining trusted user-site dependencies used by the
-no-admin setup. Upgrade older interpreters before re-vendoring these hooks.
+one, so Python 3.8–3.10 and broken launchers are skipped. The shared configuration
+reader (`scan_config.py`, called from `read_scan_config` and `Read-ScanConfigValue`) runs
+with the same flags, which keep the working and helper directories and Python environment
+overrides out of its imports while keeping the trusted user-site dependencies that the
+no-admin setup installs. Other helper scripts, including `pre-push.py`, run without them. Upgrade older interpreters before re-vendoring these hooks.
 
 Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
 this covers both the original Terraform/IaC hooks and the new app-code hooks
