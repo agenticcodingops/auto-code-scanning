@@ -255,9 +255,10 @@ Each excerpt leaves out the triggers and permissions; see
 call needs.
 
 The fix loop is the one call that pushes to your repository, so pin the commit and pass
-only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:56-65`). The
-shipped `templates/fix-loop/autonomous-fix.yml` says `secrets: inherit`; replace it. Never
-use `secrets: inherit` there: it hands the called workflow every secret of your repository
+only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:64-73`), as the
+shipped `templates/fix-loop/autonomous-fix.yml` now does. Its copies from releases up to
+and including v2.3.4 say `secrets: inherit`; replace that. Never use `secrets: inherit`
+there: it hands the called workflow every secret of your repository
 and organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 
 The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) pin the release

@@ -16,7 +16,7 @@ under `.github/workflows/`; other paths are relative to the repository root.
 |---|---|---|---|
 | `reusable-scan.yml` | Scans Terraform with Trivy (misconfigurations and secrets), Checkov, TFLint and, optionally, Snyk IaC. Gates on CRITICAL and HIGH findings, uploads SARIF and comments on the pull request. | `templates/workflows/terraform-scan.yml` | `reusable-scan.yml:5-6`, `184-539` |
 | `code-security-scan.yml` | Scans C# and TypeScript with Semgrep, and the whole checkout with a Trivy secret scan. Uploads SARIF. | `templates/workflows/code-security-scan.yml` | `code-security-scan.yml:5-7`, `126-250` |
-| `autonomous-fix.yml` | Proposes a minimal fix to an opted-in pull request in one job. Another job re-checks it with the path gate, a Trivy secret scan of the changed files and the optional build command, then pushes it. It runs no IaC or code scan of its own. | `templates/fix-loop/autonomous-fix.yml` | `autonomous-fix.yml:9-21`, `381-423` |
+| `autonomous-fix.yml` | Proposes a minimal fix to an opted-in pull request in one job. A second job runs the optional build command on the patched code and holds no secret. A third runs no project code: it re-checks the patch with the path gate and a Trivy secret scan of the changed files, then commits and pushes exactly what it checked. It runs no IaC or code scan of its own. | `templates/fix-loop/autonomous-fix.yml` | `autonomous-fix.yml:9-28`, `405-654` |
 
 For a worked Terraform example, see [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).
 
@@ -67,7 +67,7 @@ Sources: setup job `reusable-scan.yml:123-179`; scan jobs `184-539`; Aggregate
 - The `uses:` ref selects the workflow file only. `reusable-scan.yml` checks out its
   configs from the `scanning-repo-ref` input (`reusable-scan.yml:135-143`), and
   `autonomous-fix.yml` checks out its scripts from `scanning_repo_ref`
-  (`autonomous-fix.yml:204-210`, `356-362`). Set that input to the same tag or commit as
+  (`autonomous-fix.yml:246-252`, `489-495`). Set that input to the same tag or commit as
   `uses:`.
 - To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md).
 
@@ -97,7 +97,7 @@ So:
   deadlock (`release-verify.yml:18-24`).
 
 `autonomous-fix.yml` uses the group `autonomous-fix-<pr_number>` and never cancels a run
-in progress (`autonomous-fix.yml:72-74`).
+in progress (`autonomous-fix.yml:80-82`).
 
 ## `reusable-scan.yml`
 
@@ -328,45 +328,47 @@ artifact.
 
 ## `autonomous-fix.yml`
 
-Opt-in fix loop. Called through `workflow_call` (`autonomous-fix.yml:34-35`). Read
+Opt-in fix loop. Called through `workflow_call` (`autonomous-fix.yml:42-43`). Read
 [FIX-LOOP.md](FIX-LOOP.md) and [SECURITY-MODEL.md](SECURITY-MODEL.md) before you turn it
 on. The caller workflow decides who can start it; the template's `if:` is that boundary
-(`templates/fix-loop/autonomous-fix.yml:36-53`).
+(`templates/fix-loop/autonomous-fix.yml:36-63`). The workflow itself also refuses to run
+when the review, the comment or the run was made by the shared `github-actions[bot]`
+identity, which every workflow's `GITHUB_TOKEN` acts as (`autonomous-fix.yml:101-118`).
 
 ### Inputs
 
 | Input | Type | Required | Default | What it does | Source |
 |---|---|---|---|---|---|
-| `pr_number` | string | yes | none | Pull request to fix. Must be digits only. A pull request from a fork is refused. | `autonomous-fix.yml:37-40`, `182-190` |
-| `config_path` | string | no | `scan-config.yaml` | Path of the config in your repository. It is read from the pull request's base commit, or from the default branch on `workflow_dispatch`, never from the pull request head. The jobs after the config job run only when its `fix_loop.enabled` is `true`. | `autonomous-fix.yml:41-45`, `92-142`, `160` |
-| `scanning_repo` | string | no | `agenticcodingops/auto-code-scanning` | Repository to check out the shared scripts from; the path gate runs `scripts/check-fix-allowlist.py` from it. Set it when you call your own copy. | `autonomous-fix.yml:46-50`, `204-210`, `313`, `356-362`, `385` |
-| `scanning_repo_ref` | string | no | `v2.0.0` | Ref of `scanning_repo` to check out. Set it to the same tag or commit as `uses:`. | `autonomous-fix.yml:51-55`, `208`, `360` |
+| `pr_number` | string | yes | none | Pull request to fix. Must be digits only. A pull request from a fork is refused. | `autonomous-fix.yml:45-48`, `208-237` |
+| `config_path` | string | no | `scan-config.yaml` | Path of the config in your repository. It is read from the pull request's base commit, or from the default branch on `workflow_dispatch`, never from the pull request head. The jobs after the config job run only when its `fix_loop.enabled` is `true`. | `autonomous-fix.yml:49-53`, `120-174`, `192` |
+| `scanning_repo` | string | no | `agenticcodingops/auto-code-scanning` | Repository to check out the shared scripts from; the path gate runs `scripts/check-fix-allowlist.py` from it. Set it when you call your own copy. | `autonomous-fix.yml:54-58`, `246-252`, `383`, `489-495`, `563` |
+| `scanning_repo_ref` | string | no | `v2.0.0` | Ref of `scanning_repo` to check out. Set it to the same tag or commit as `uses:`. | `autonomous-fix.yml:59-63`, `250`, `493` |
 
 ### Outputs
 
-None. The `workflow_call` block declares no outputs (`autonomous-fix.yml:34-65`).
+None. The `workflow_call` block declares no outputs (`autonomous-fix.yml:42-73`).
 
 ### Secrets
 
 | Secret | Required | What it is for | Source |
 |---|---|---|---|
-| `AUTOFIX_TOKEN` | yes | Used only by the final push step. Its description asks for a fine-grained token with Contents and Pull requests read and write, on your repository only. | `autonomous-fix.yml:57-59`, `446-456` |
-| `ANTHROPIC_API_KEY` | no | Key for the coding-agent step. | `autonomous-fix.yml:60-62`, `244` |
-| `CLAUDE_CODE_OAUTH_TOKEN` | no | Alternative to `ANTHROPIC_API_KEY`. | `autonomous-fix.yml:63-65`, `245` |
+| `AUTOFIX_TOKEN` | yes | Used only by the final push step. Its description asks for a fine-grained token with Contents and Pull requests read and write, on your repository only. | `autonomous-fix.yml:65-67`, `637-654` |
+| `ANTHROPIC_API_KEY` | no | Key for the coding-agent step, the only step that receives it. | `autonomous-fix.yml:68-70`, `309` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | no | Alternative to `ANTHROPIC_API_KEY`. | `autonomous-fix.yml:71-73`, `310` |
 
 The workflow does not require either agent credential. The agent step has
-`continue-on-error: true` (`autonomous-fix.yml:280`). Without a credential it produces no
+`continue-on-error: true` (`autonomous-fix.yml:345`). Without a credential it produces no
 patch, so the run ends with no change and does not label the pull request
-(`autonomous-fix.yml:282-300`, `338-341`, `466-473`).
+(`autonomous-fix.yml:347-370`, `410-413`, `664-672`).
 
 ### Permissions to grant on the calling job
 
 | Permission | Needed by | Source |
 |---|---|---|
-| `contents: read` | every job | `autonomous-fix.yml:69-70`, `162`, `343` |
-| `pull-requests: write` | Analyze (`read`) and Flag for human review (`write`) | `autonomous-fix.yml:163`, `476` |
-| `actions: read` | Analyze | `autonomous-fix.yml:164` |
-| `issues: write` | Flag for human review | `autonomous-fix.yml:475` |
+| `contents: read` | every job | `autonomous-fix.yml:77-78`, `194`, `415`, `475` |
+| `pull-requests: write` | Analyze (`read`) and Flag for human review (`write`) | `autonomous-fix.yml:195`, `675` |
+| `actions: read` | Analyze | `autonomous-fix.yml:196` |
+| `issues: write` | Flag for human review | `autonomous-fix.yml:674` |
 
 The caller template sets only `contents: read`, at the workflow level, and no job-level
 permissions (`templates/fix-loop/autonomous-fix.yml:32-33`). Add the four permissions

@@ -46,12 +46,12 @@ the pull request. **CI** is GitHub Actions.
 | Inline today | After the migration | Source |
 |---|---|---|
 | A full fix-loop workflow in the repository | A thin caller that `uses:` `autonomous-fix.yml` at a pinned release | `templates/fix-loop/autonomous-fix.yml` |
-| Fix-loop allowlist written into the workflow | `fix_loop.allowlist_paths` | `autonomous-fix.yml:23-25`, `302-320` |
+| Fix-loop allowlist written into the workflow | `fix_loop.allowlist_paths` | `autonomous-fix.yml:30-33`, `372-390` |
 | Sensitive-path denylist written into the workflow | `fix_loop.gated_paths` (case-insensitive substrings) | `scripts/check-fix-allowlist.py:4-7` |
 | Solution path, working directory and build command in hooks or the workflow | `languages.<lang>.build.solution`, `languages.<lang>.build.working_dir` and `fix_loop.build_verify_cmd` | `templates/scan-config/standard.yaml:40`, `50`, `90` |
 | A bespoke SARIF-uploading scan workflow | A caller of `code-security-scan.yml` and, for Terraform, of `reusable-scan.yml` | `templates/workflows/` |
 | `lefthook.yml` calling each tool directly | `lefthook.yml` calling `hooks/dispatcher.sh` | `templates/lefthook/lefthook.yml:6-7` |
-| An action pin maintained by hand in the fix loop | The pin inside the platform's `autonomous-fix.yml`, mirrored in `fix_loop.claude_code_action_ref` | `autonomous-fix.yml:27-29`, `242`; [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) |
+| An action pin maintained by hand in the fix loop | The pin inside the platform's `autonomous-fix.yml`, mirrored in `fix_loop.claude_code_action_ref` | `autonomous-fix.yml:35-37`, `307`; [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) |
 
 ## Steps
 
@@ -143,7 +143,7 @@ If the schema is later removed, without `STRICT=1` the validator prints a warnin
 
 The fix loop reads this file from the pull request's base commit, or from the default
 branch on a manual dispatch. It never reads it from the pull request head
-(`autonomous-fix.yml:92-142`). Your changes take effect for the fix loop only after they
+(`autonomous-fix.yml:120-174`). Your changes take effect for the fix loop only after they
 merge.
 
 ### 4. Pin the callers and grant their permissions
@@ -154,7 +154,7 @@ merge.
 The caller templates pin the release they ship in, and release-please moves those pins at
 each release (`templates/workflows/code-security-scan.yml:21`,
 `templates/workflows/terraform-scan.yml:21` and `26`,
-`templates/fix-loop/autonomous-fix.yml:55` and `59`). Releases up to and including v2.3.1
+`templates/fix-loop/autonomous-fix.yml:65` and `69`). Releases up to and including v2.3.1
 pinned `v2.0.0` there. Check that every pin is the release you checked out in the
 prerequisites, and pin the commit its tag points to, as in
 [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). For the
@@ -183,7 +183,7 @@ jobs:
 
 Find `<commit-sha>` as in
 [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md#2-find-the-commit-of-the-target-release). Pass only
-the secrets the workflow declares (`autonomous-fix.yml:56-65`); never `secrets: inherit`,
+the secrets the workflow declares (`autonomous-fix.yml:64-73`); never `secrets: inherit`,
 which hands the called workflow every secret of your repository and organisation.
 
 `OWNER` is the owner of the platform copy you call. The template grants only
@@ -212,11 +212,14 @@ that entry's `repo:` at it too. If an existing `.pre-commit-config.yaml` already
   the people and bots you trust.
 
 The caller's `if:` is the privilege boundary: it decides whose review or comment can make
-the loop push with `AUTOFIX_TOKEN` (`templates/fix-loop/autonomous-fix.yml:37-53`). The
+the loop push with `AUTOFIX_TOKEN` (`templates/fix-loop/autonomous-fix.yml:37-63`). The
 template admits a manual dispatch, or a non-fork pull request with the `ai-autofix`
 label whose review or comment came from a listed bot or from an `OWNER`, `MEMBER` or
 `COLLABORATOR`. Compare it with the rule your inline workflow enforced, and edit the bot
-list to match yours. Read [SECURITY-MODEL.md](SECURITY-MODEL.md) before you widen it.
+list to match yours. List GitHub Apps by their `<app>[bot]` login, which belongs to one
+App. Never list `github-actions[bot]`: every workflow's `GITHUB_TOKEN` acts as it, so it
+names no particular workflow, and the reusable workflow refuses it
+(`autonomous-fix.yml:101-118`). Read [SECURITY-MODEL.md](SECURITY-MODEL.md) before you widen it.
 
 ### 6. Remove the inline copies
 
@@ -229,7 +232,7 @@ list to match yours. Read [SECURITY-MODEL.md](SECURITY-MODEL.md) before you wide
 - Delete hard-coded paths and build commands from your own hooks and scripts; they are in
   `scan-config.yaml` now.
 - Delete any local copy of the allowlist gate. The platform runs
-  `scripts/check-fix-allowlist.py` from its own checkout (`autonomous-fix.yml:313`, `385`).
+  `scripts/check-fix-allowlist.py` from its own checkout (`autonomous-fix.yml:383`, `563`).
 
 ### 7. Create the secrets
 
@@ -245,7 +248,7 @@ gh secret set AUTOFIX_TOKEN       # fine-grained token: Contents and Pull reques
 gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN
 ```
 
-`AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:446-456`).
+`AUTOFIX_TOKEN` is used only by the final push step (`autonomous-fix.yml:637-654`).
 
 ### 8. Swap the required status checks
 
@@ -285,11 +288,11 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
   `<prefix>semgrep-typescript` and `<prefix>trivy-secrets` (`code-security-scan.yml:186`,
   `242`).
 - On a test pull request labelled `ai-autofix`, a trusted review starts the fix loop. Its
-  Analyze job runs with a read-only token (`autonomous-fix.yml:161-164`, `246`), and only
-  the push step uses `AUTOFIX_TOKEN` (`autonomous-fix.yml:446-456`).
+  Analyze job runs with a read-only token (`autonomous-fix.yml:193-196`, `311`), and only
+  the push step uses `AUTOFIX_TOKEN` (`autonomous-fix.yml:637-654`).
 - A proposed fix that touches `.github/`, or a path containing a gated word such as
   `auth`, is not pushed. The pull request gets `needs-human-review` and a comment that
-  names the reason (`autonomous-fix.yml:302-320`, `461-520`).
+  names the reason (`autonomous-fix.yml:372-390`, `659-722`).
 
 ## Rollback
 
