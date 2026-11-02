@@ -85,7 +85,7 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 |---|---|---|---|
 | `config` | read-only | no (reads **base** ref) | trusted `fix_loop` config + its SHA-256 |
 | `analyze` | **read-only**; model credentials in the agent step only | **no** (the agent reads and edits; it cannot build, test or run packages) | a patch artifact + its SHA-256 |
-| `verify` | read-only, **no secrets** | **yes** (`build_verify_cmd`) | pass/fail only |
+| `verify` | read-only, **no secrets**, **no Actions cache** | **yes** (`build_verify_cmd`) | pass/fail only |
 | `apply-and-push` | **AUTOFIX_TOKEN** (push step only) | **no** | a commit pushed to the PR head |
 | `flag-human-review` | issues/PR write | no | `needs-human-review` label + comment |
 
@@ -113,9 +113,15 @@ Key enforcement (all mechanical, independent of the prompt):
   every `gated_paths` substring, else → `needs-human-review`. A patch that adds or changes a
   submodule entry is refused.
 - `verify` checks out the **exact analyzed SHA**, applies the patch and runs `build_verify_cmd`.
+  It runs with `cache-mode: none`: GitHub gives it a cache token that can neither save nor
+  restore, so the build cannot leave a cache entry for another job or workflow, even on a
+  `workflow_dispatch` run whose cache scope is the default branch. A build that tries to save
+  a cache gets a skipped save, not a failure. The workflow sets `cache-mode: none` for its
+  other jobs too, since none of them uses the cache.
 - `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
   commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
-  It restores nothing from the Actions cache, which the `verify` job can write to.
+  It restores nothing from the Actions cache, which the PR's code can write to in other runs
+  (for example the PR's own CI).
 - The reusable workflow refuses to run for the shared `github-actions[bot]` identity, whatever
   the caller's `if:` says.
 

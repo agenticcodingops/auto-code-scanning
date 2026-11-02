@@ -17,6 +17,8 @@ Properties asserted:
     commits the content-addressed tree that passed the gate and the secret scan.
   * the model credentials reach only the agent step, whose tools cannot run
     build, test or package commands, and whose start-up config comes from base.
+  * the job that runs project code has no Actions cache access (cache-mode: none),
+    so nothing it runs can save a cache entry that another job or workflow restores.
   * the fix-loop is never started by the shared github-actions[bot] identity.
 """
 import os
@@ -422,9 +424,44 @@ def test_agent_loads_no_repository_config(wf):
     assert '"disableAllHooks": true' in agent["with"]["settings"]
 
 
+def _effective_cache_mode(wf, job_name):
+    job = wf["jobs"][job_name]
+    return job.get("cache-mode", wf.get("cache-mode"))
+
+
+def test_project_code_job_cannot_write_the_actions_cache(wf):
+    """The verify job runs the PR's code. On a manual dispatch its cache scope is the
+    branch the run is on, which other workflows restore from, so the job's cache token
+    must allow no save at all. cache-mode is enforced by the cache service with scoped
+    tokens, not by the job's steps, so the build cannot get around it."""
+    jobs = _jobs_running_build_verify(wf)
+    assert jobs == ["verify"], jobs
+    verify = wf["jobs"]["verify"]
+    assert verify.get("cache-mode") == "none", \
+        "the job that runs project code must declare cache-mode: none at job level"
+    assert wf.get("cache-mode") == "none", \
+        "no job here uses the cache, so the workflow grants none by default"
+    for name in wf["jobs"]:
+        mode = _effective_cache_mode(wf, name)
+        assert mode == "none", f"{name}: cache-mode {mode!r}; no job in this workflow needs the cache"
+
+
+def test_cache_mode_is_a_job_key_not_a_step_or_env_setting(wf, raw):
+    """A step-level key or an env var would not reach the cache token; only the
+    workflow and job keys do, so the declaration must sit there."""
+    assert re.search(r"(?m)^cache-mode: none\s*(#.*)?$", raw), "workflow-level cache-mode: none"
+    assert re.search(r"(?m)^    cache-mode: none\s*(#.*)?$", raw), "job-level cache-mode: none"
+    for name, job in wf["jobs"].items():
+        for s in job.get("steps", []):
+            assert "cache-mode" not in s, f"{name} / {s.get('name')}: cache-mode belongs on the job"
+            assert "ACTIONS_CACHE_MODE" not in _dump(s.get("env", {}) or {}), \
+                f"{name} / {s.get('name')}: setting ACTIONS_CACHE_MODE in a step grants or removes nothing"
+
+
 def test_credential_jobs_restore_nothing_from_the_actions_cache(wf, raw):
-    """The verify job runs the PR's code and can write Actions cache entries, so no job
-    that holds a credential may restore an executable or data from that cache."""
+    """Pull-request code can write Actions cache entries outside this workflow (for
+    example the PR's own CI runs), so no job that holds a credential may restore an
+    executable or data from that cache."""
     assert "actions/cache" not in raw
     trivy = _require_step(wf["jobs"]["apply-and-push"], "Authoritative secret scan")
     assert str(trivy["with"].get("cache")).lower() == "false"
