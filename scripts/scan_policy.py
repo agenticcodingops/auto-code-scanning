@@ -8,6 +8,7 @@ import fnmatch
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 
@@ -17,7 +18,9 @@ FINGERPRINT = re.compile(r"^v1:[0-9a-f]{64}$")
 def scanner_path(raw, tool, source_root=".", scan_directory="."):
     """Convert scanner-specific paths to a repository-relative path."""
     root = Path(source_root).resolve()
-    value = str(raw).replace("\\", "/")
+    value = str(raw)
+    if os.name == "nt":
+        value = value.replace("\\", "/")
     if value.startswith("/github/workspace/"):
         value = value[len("/github/workspace/"):]
     context = (root / scan_directory).resolve()
@@ -36,7 +39,9 @@ def scanner_path(raw, tool, source_root=".", scan_directory="."):
 
 def source_path(finding, root):
     root = Path(root).resolve()
-    value = str(finding.get("file", finding.get("file_path", ""))).replace("\\", "/")
+    value = str(finding.get("file", finding.get("file_path", "")))
+    if os.name == "nt":
+        value = value.replace("\\", "/")
     path = Path(value)
     # Checkov's file_path uses a leading slash for paths relative to its scan root.
     if finding.get("tool") == "checkov" and value.startswith("/") and not path.is_file():
@@ -148,7 +153,13 @@ def apply_exceptions(findings, source_root, policy_root, suppressions=True, base
                 break
         key = fingerprint
         if allow_legacy and not keys[key]:
-            key = hashlib.sha256(f"{finding['rule_id']}|{finding['file']}".encode()).hexdigest()
+            for reported_path in (finding.get("reported_file"), finding["file"]):
+                if reported_path is None:
+                    continue
+                candidate = hashlib.sha256(f"{finding['rule_id']}|{reported_path}".encode()).hexdigest()
+                if keys[candidate] > 0:
+                    key = candidate
+                    break
         if keys[key] > 0:
             finding["baseline"] = True
             keys[key] -= 1

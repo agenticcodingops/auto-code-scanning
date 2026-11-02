@@ -27,7 +27,8 @@ def validate_report(data, tool):
                     raise ValueError("Trivy target missing")
                 for key, rule in (("Misconfigurations", "ID"), ("Secrets", "RuleID")):
                     for finding in object_list(result.get(key, []), key):
-                        if not (finding.get(rule) or finding.get("AVDID")) or finding.get("Severity") not in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"):
+                        identifier = finding.get(rule) or finding.get("AVDID")
+                        if not isinstance(identifier, str) or not identifier or finding.get("Severity") not in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"):
                             raise ValueError("Invalid Trivy finding")
         elif tool == "checkov":
             results = doc.get("results")
@@ -44,11 +45,14 @@ def validate_report(data, tool):
                 raise ValueError("Checkov parsing errors")
             for key in ("failed_checks", "skipped_checks"):
                 for finding in object_list(results.get(key, []), key):
-                    if not finding.get("check_id") or not finding.get("file_path"):
+                    if not all(isinstance(finding.get(field), str) and finding[field] for field in ("check_id", "file_path")):
                         raise ValueError("Invalid Checkov finding")
+                    lines = finding.get("file_line_range")
+                    if lines is not None and (not isinstance(lines, list) or any(type(line) is not int or line < 0 for line in lines)):
+                        raise ValueError("Invalid Checkov location")
         elif tool == "tflint":
             for finding in object_list(doc.get("issues"), "issues"):
-                if not isinstance(finding.get("rule"), dict) or not finding["rule"].get("name") or not isinstance(finding.get("range"), dict):
+                if not isinstance(finding.get("rule"), dict) or not isinstance(finding["rule"].get("name"), str) or not finding["rule"]["name"] or not isinstance(finding.get("range"), dict) or not isinstance(finding["range"].get("filename"), str):
                     raise ValueError("Invalid TFLint finding")
         elif tool == "snyk":
             for issue in object_list(doc.get("infrastructureAsCodeIssues"), "infrastructureAsCodeIssues"):

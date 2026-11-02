@@ -6,6 +6,8 @@ PYTHON="$(find_python)" || { hook_error "Suppression validation requires Python"
 # Resolve suppressions.file using the same strict resolver as CI.
 SUPPRESSION_FILE="$("$PYTHON" "${SCRIPT_DIR}/../scripts/scan_policy.py")"
 [[ -f "$SUPPRESSION_FILE" ]] || exit 0
-args=()
-[[ "${SCAN_ALLOW_LEGACY_EXCEPTIONS:-0}" == 1 ]] && args+=(--allow-legacy-exceptions)
-"$PYTHON" "${SCRIPT_DIR}/validate-suppressions.py" "${args[@]}" -- "$SUPPRESSION_FILE"
+if [[ "${SCAN_ALLOW_LEGACY_EXCEPTIONS:-0}" == 1 ]]; then
+    "$PYTHON" "${SCRIPT_DIR}/validate-suppressions.py" --allow-legacy-exceptions -- "$SUPPRESSION_FILE"
+else
+    "$PYTHON" "${SCRIPT_DIR}/validate-suppressions.py" -- "$SUPPRESSION_FILE"
+fi

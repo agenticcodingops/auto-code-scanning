@@ -81,6 +81,7 @@ jobs:
     outputs:
       languages: ${{ steps.detect.outputs.languages }}
       category_prefix: ${{ steps.detect.outputs.category_prefix }}
+      policy-helper-artifact: ${{ steps.helper-name.outputs.name }}
     steps:
       - name: Checkout calling repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -95,6 +96,10 @@ jobs:
 
       - name: Install policy reader
         run: python3 -I -m pip install --disable-pip-version-check PyYAML==6.0.3
+
+      - name: Name workflow policy helper
+        id: helper-name
+        run: echo "name=app-policy-helper-$(python -I -c 'import uuid; print(uuid.uuid4().hex)')" >> "$GITHUB_OUTPUT"
 
       - name: Package workflow policy helper
         run: |
@@ -150,7 +155,7 @@ jobs:
       - name: Upload workflow policy helper
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: app-policy-helper
+          name: ${{ steps.helper-name.outputs.name }}
           path: ${{ runner.temp }}/prepare_scan_policy.py
           retention-days: 1
 
@@ -216,7 +221,7 @@ jobs:
       - name: Download workflow policy helper
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
-          name: app-policy-helper
+          name: ${{ needs.detect.outputs.policy-helper-artifact }}
           path: ${{ runner.temp }}/app-policy-helper
 
       - name: Apply trusted scanner policy
@@ -308,7 +313,7 @@ jobs:
       - name: Download workflow policy helper
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
-          name: app-policy-helper
+          name: ${{ needs.detect.outputs.policy-helper-artifact }}
           path: ${{ runner.temp }}/app-policy-helper
 
       - name: Apply trusted scanner policy

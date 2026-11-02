@@ -76,6 +76,18 @@ def test_baseline_consumes_only_one_exact_occurrence(tmp_path):
     assert [f["baseline"] for f in findings] == [True, False, False]
 
 
+def test_legacy_baseline_can_match_the_original_scanner_path(tmp_path):
+    from scan_policy import apply_exceptions
+    import hashlib
+    folder = tmp_path / '.scan-baseline'
+    folder.mkdir()
+    old_hash = hashlib.sha256(b'CKV_AWS_19|/main.tf').hexdigest()
+    (folder / 'baseline.json').write_text(json.dumps(dict(schema_version='1.0', entries=[dict(hash=old_hash)])))
+    finding = dict(tool='checkov', rule_id='CKV_AWS_19', file='module/main.tf', reported_file='/main.tf', line=1, severity='HIGH')
+    apply_exceptions([finding], tmp_path, tmp_path, suppressions=False, allow_legacy=True)
+    assert finding['baseline']
+
+
 def test_scoped_baseline_uses_each_scanner_directory(tmp_path):
     from finalize_baseline import finalize
     (tmp_path / 'main.tf').write_text('# root\n')
@@ -99,6 +111,35 @@ def test_relative_scanner_paths_use_selected_module(tmp_path):
     (folder / 'main.tf').write_text('# module\n')
     assert scanner_path('main.tf', 'trivy', tmp_path, 'module') == 'module/main.tf'
     assert scanner_path('module/main.tf', 'trivy', tmp_path, 'module') == 'module/main.tf'
+
+
+@pytest.mark.parametrize('filename', ['main.tf', 'module/main.tf'])
+def test_tflint_merge_preserves_repository_paths(tmp_path, monkeypatch, filename):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/reusable-scan.yml').read_text())
+    step = next(s for s in workflow['jobs']['scan-tflint']['steps'] if s.get('id') == 'tflint')
+    program = step['run'].split('python3 -c "\n', 1)[1].split('\n"', 1)[0]
+    folder = tmp_path / 'module'
+    folder.mkdir()
+    (folder / 'main.tf').write_text('# fixture\n')
+    report = tmp_path / 'tflint-dir-test.json'
+    report.write_text(json.dumps({'issues': [dict(rule=dict(name='sample', severity='warning'),
+        range=dict(filename=filename, start=dict(line=1), end=dict(line=1)))], 'errors': []}))
+    (tmp_path / 'tflint-dir-test.json.directory').write_text(str(folder))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('GITHUB_WORKSPACE', str(tmp_path))
+    exec(program, {})  # shipped workflow code, exercised against report fixtures
+    result = json.loads((tmp_path / 'tflint-results.json').read_text())
+    assert result['issues'][0]['range']['filename'] == 'module/main.tf'
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Windows does not permit literal backslashes in filenames')
+def test_literal_backslash_is_a_distinct_posix_occurrence(tmp_path):
+    from scan_policy import occurrence_fingerprint
+    (tmp_path / 'module').mkdir()
+    (tmp_path / 'module/main.tf').write_text('# fixture\n')
+    (tmp_path / 'module\\main.tf').write_text('# fixture\n')
+    finding = dict(tool='trivy', rule_id='AVD-AWS-0001', line=1, file='module/main.tf')
+    assert occurrence_fingerprint(finding, tmp_path) != occurrence_fingerprint(dict(finding, file='module\\main.tf'), tmp_path)
 
 
 @pytest.mark.parametrize('changes', [dict(expires_date=str(date.today()-timedelta(days=1))),
@@ -127,6 +168,17 @@ def test_legacy_registry_requires_explicit_opt_in(tmp_path):
 def test_report_health_is_required(tool, document):
     from scan_reports import validate_report
     with pytest.raises((ValueError, TypeError)):
+        validate_report(document, tool)
+
+
+@pytest.mark.parametrize('tool,document', [
+    ('checkov', {'results': {'failed_checks': [{'check_id': 1, 'file_path': 'main.tf'}]}}),
+    ('checkov', {'results': {'failed_checks': [{'check_id': 'CKV_AWS_19', 'file_path': 'main.tf', 'file_line_range': '12'}]}}),
+    ('trivy', {'Results': [{'Target': 'main.tf', 'Misconfigurations': [{'ID': 1, 'Severity': 'HIGH'}]}]}),
+    ('tflint', {'issues': [{'rule': {'name': 'sample'}, 'range': {'filename': 1}}]})])
+def test_invalid_finding_identity_is_a_report_error(tool, document):
+    from scan_reports import validate_report
+    with pytest.raises(ValueError):
         validate_report(document, tool)
 
 
@@ -201,7 +253,8 @@ def test_optional_scanner_document_path_survives_normalization(tmp_path, monkeyp
     monkeypatch.setenv('SNYK_TOKEN', 'fixture')
     monkeypatch.setattr(scan.shutil, 'which', lambda name: name)
     document = dict(ok=False, targetFile='main.tf', infrastructureAsCodeIssues=[
-        dict(id='SNYK-CC-0001', publicId='SNYK-CC-ALIAS', severity='high', lineNumber=1, resolve='sample.one')])
+        dict(id='SNYK-CC-0001', publicId='SNYK-CC-ALIAS', severity='high', lineNumber=1,
+             msg='sample.one', resolve='Remediation guidance')])
     monkeypatch.setattr(scan, 'run_cmd', lambda *args, **kwargs: (1, json.dumps(document), ''))
     findings, error = scan.run_snyk(folder)
     assert not error
@@ -325,6 +378,52 @@ def test_app_policy_helper_is_packaged_from_the_shared_contract():
     step = next(s for s in wf['jobs']['detect']['steps'] if s.get('name') == 'Package workflow policy helper')
     embedded = step['run'].split("<<'POLICY_HELPER'\n", 1)[1].rsplit('POLICY_HELPER', 1)[0]
     assert embedded == (ROOT / 'scripts/prepare_scan_policy.py').read_text()
+
+
+def test_app_helper_artifacts_are_unique_per_call(tmp_path):
+    wf = yaml.safe_load((ROOT / '.github/workflows/code-security-scan.yml').read_text())
+    detect = wf['jobs']['detect']
+    step = next(s for s in detect['steps'] if s.get('id') == 'helper-name')
+    bash = shutil.which('bash')
+    if not bash:
+        pytest.skip('Bash unavailable')
+    output = tmp_path / 'output'
+    for _ in range(2):
+        result = subprocess.run([bash, '-c', step['run']], env=dict(os.environ, GITHUB_OUTPUT=str(output)), capture_output=True)
+        assert result.returncode == 0, result.stderr
+    names = output.read_text().splitlines()
+    assert len(set(names)) == 2
+    for job in ('semgrep', 'secrets'):
+        download = next(s for s in wf['jobs'][job]['steps'] if s.get('name') == 'Download workflow policy helper')
+        assert download['with']['name'] == '${{ needs.detect.outputs.policy-helper-artifact }}'
+
+
+def test_upload_delivery_tolerance_is_an_explicit_opt_in():
+    wf = yaml.safe_load((ROOT / '.github/workflows/reusable-scan.yml').read_text())
+    inputs = (wf.get('on') or wf[True])['workflow_call']['inputs']
+    assert inputs['allow-sarif-upload-errors']['default'] is False
+    uploads = [s for s in wf['jobs']['sarif-upload']['steps'] if s.get('id', '').startswith('upload-')]
+    assert len(uploads) == 4
+    assert all(s['continue-on-error'] == '${{ inputs.allow-sarif-upload-errors }}' for s in uploads)
+
+
+@pytest.mark.parametrize('complete,passed,expected', [(False,False,'Scan incomplete'), (True,False,'security findings detected'), (True,True,'Scan gate passed')])
+def test_comment_reports_the_aggregate_verdict(tmp_path, complete, passed, expected):
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node unavailable')
+    wf = yaml.safe_load((ROOT / '.github/workflows/reusable-scan.yml').read_text())
+    script = next(s['with']['script'] for s in wf['jobs']['pr-comment']['steps'] if 'github-script' in s.get('uses',''))
+    folder = tmp_path / 'aggregated'
+    folder.mkdir()
+    (folder / 'aggregated.json').write_text(json.dumps(dict(scan_complete=complete, scan_passed=passed,
+        total_findings=0, by_severity={}, findings=[])))
+    harness = "const github={rest:{issues:{createComment:async x=>console.log(x.body)}}}; const context={issue:{number:1},repo:{owner:'test',repo:'test'}}; (async()=>{" + script + "})();"
+    result = subprocess.run([node, '-e', harness], cwd=tmp_path, capture_output=True, text=True, encoding='utf-8')
+    assert result.returncode == 0, result.stderr
+    assert expected in result.stdout
+    if not complete:
+        assert 'Scan gate passed' not in result.stdout
 
 
 

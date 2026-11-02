@@ -214,6 +214,10 @@
         },
         "suppression_reason": {
           "type": "string"
+        },
+        "reported_file": {
+          "type": "string",
+          "description": "Original scanner path retained only for explicit legacy baseline matching"
         }
       },
       "additionalProperties": false

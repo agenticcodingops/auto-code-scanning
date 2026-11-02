@@ -57,6 +57,11 @@ on:
         type: boolean
         required: false
         default: true
+      allow-sarif-upload-errors:
+        description: "Explicitly tolerate optional code-scanning delivery errors; scanner health remains mandatory"
+        type: boolean
+        required: false
+        default: false
       post-pr-comment:
         description: "Post findings summary as PR comment"
         type: boolean
@@ -513,7 +518,9 @@ jobs:
 
           # Merge tflint JSON results
           python3 -c "
-          import json, glob, os
+          import json, glob, os, sys
+          sys.path.insert(0, os.path.join(os.environ['GITHUB_WORKSPACE'], '.scan-tooling'))
+          from scan_policy import scanner_path
 
           def annotate(text):
               # Workflow-command data must escape %, CR and LF.
@@ -544,8 +551,9 @@ jobs:
               for issue in data.get('issues') or []:
                   location = issue.get('range') or {}
                   filename = location.get('filename', '')
-                  if filename and not os.path.isabs(filename):
-                      location['filename'] = os.path.join(directory, filename)
+                  if filename:
+                      issue['reported_file'] = filename
+                      location['filename'] = scanner_path(filename, 'tflint', os.environ['GITHUB_WORKSPACE'], directory)
               # Keep TFLint's own errors (e.g. a config it could not load) visible.
               for err in data.get('errors') or []:
                   all_errors.append(err)
@@ -803,7 +811,8 @@ jobs:
 
       - name: Upload Trivy IaC SARIF
         id: upload-trivy-iac
-        if: always()
+        continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
+        if: always() && hashFiles('scan-artifacts/trivy-results/trivy-iac-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
         with:
           sarif_file: scan-artifacts/trivy-results/trivy-iac-results.sarif
@@ -811,7 +820,8 @@ jobs:
 
       - name: Upload Trivy Secrets SARIF
         id: upload-trivy-secrets
-        if: always()
+        continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
+        if: always() && hashFiles('scan-artifacts/trivy-results/trivy-secrets-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
         with:
           sarif_file: scan-artifacts/trivy-results/trivy-secrets-results.sarif
@@ -819,6 +829,7 @@ jobs:
 
       - name: Upload Checkov SARIF
         id: upload-checkov
+        continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
         # Never upload raw results after a filter error, even though other uploads
         # use always() to report scanner failures.
         if: always() && steps.filter-checkov.outcome == 'success'
@@ -829,6 +840,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         id: upload-snyk
+        continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
         if: always() && hashFiles('scan-artifacts/snyk-results/snyk-iac-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
         with:
@@ -888,8 +900,10 @@ jobs:
             const total = data.total_findings || 0;
             const suppressed = data.suppressions_applied || 0;
             const baselined = data.baseline_filtered || 0;
-            // Gate on BLOCKING severities (CRITICAL + HIGH) only — matches the Aggregate gate.
-            const passed = (critical + high) === 0;
+            const complete = data.scan_complete === true;
+            const passed = complete && data.scan_passed === true;
+            const statusMessage = !complete ? '**Scan incomplete.** Required scanner reports are unavailable or unhealthy.'
+              : passed ? 'Scan gate passed.' : `**${total} security findings detected.** Please review.`;
 
             // Build top findings table (max 20)
             const activeFindings = (data.findings || [])
@@ -931,7 +945,7 @@ jobs:
 
             </details>` : ''}
 
-            ${statusIcon} ${passed ? 'All security checks passed!' : `**${total} security findings detected.** Please review.`}
+            ${statusIcon} ${statusMessage}
             `.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({

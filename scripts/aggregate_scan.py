@@ -44,6 +44,7 @@ for result in trivy_results:
             "title": vuln.get("Title", ""),
             "message": vuln.get("Message", ""),
             "file": scanner_path(result.get("Target", ""), "trivy", ".", os.environ.get("TERRAFORM_DIRECTORY", ".")),
+            "reported_file": result.get("Target", ""),
             "line": vuln.get("CauseMetadata", {}).get("StartLine", 0),
             "end_line": vuln.get("CauseMetadata", {}).get("EndLine", 0),
             "resource": vuln.get("CauseMetadata", {}).get("Resource", ""),
@@ -77,6 +78,7 @@ for result in checkov_results:
             "title": check.get("check_id", ""),
             "message": check.get("check_result", {}).get("message", check.get("name", "")),
             "file": scanner_path(check.get("file_path", ""), "checkov", ".", os.environ.get("TERRAFORM_DIRECTORY", ".")),
+            "reported_file": check.get("file_path", ""),
             "line": check.get("file_line_range", [0])[0] if check.get("file_line_range") else 0,
             "end_line": (check.get("file_line_range") or [0])[-1],
             "resource": check.get("resource", ""),
@@ -99,6 +101,7 @@ for issue in tflint_data.get("issues", []):
         "title": rule_name,
         "message": issue.get("message", ""),
         "file": issue.get("range", {}).get("filename", ""),
+        "reported_file": issue.get("reported_file", issue.get("range", {}).get("filename", "")),
         "line": issue.get("range", {}).get("start", {}).get("line", 0),
         "end_line": issue.get("range", {}).get("end", {}).get("line", 0),
         "resource": "",
@@ -125,7 +128,8 @@ for issue in [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetF
         "message": issue.get("iacDescription", {}).get("issue", issue.get("title", "")),
         "file": target_file,
         "line": issue.get("lineNumber", 0),
-        "resource": issue.get("resolve", ""),
+        "resource": issue.get("msg", ""),
+        "reported_file": issue.get("targetFile", ""),
         "remediation": issue.get("iacDescription", {}).get("resolve", ""),
         "remediation_url": issue.get("documentation", None),
         "detected_by": ["snyk"],
@@ -177,6 +181,8 @@ passed = "true" if not health_errors and (blocking == 0 or not fail_on) else "fa
 
 # Write aggregated results
 output = {
+    "scan_passed": passed == "true",
+    "scan_complete": not health_errors,
     "health_errors": health_errors,
     "total_findings": total,
     "by_severity": severity_counts,

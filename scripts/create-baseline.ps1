@@ -327,9 +327,9 @@ foreach ($t in $byTool.Keys) {
     Write-Host "    $t`: $($byTool[$t])" -ForegroundColor Gray
 }
 Write-Host ""
-Write-Host "Matching algorithm: SHA-256(rule_id | file_path)" -ForegroundColor Gray
-Write-Host "Line numbers excluded for refactoring resilience." -ForegroundColor Gray
+Write-Host "Schema 2.0 matches tool, rule, path, resource, line range and source content." -ForegroundColor Gray
+Write-Host "Each entry covers one occurrence; source changes require renewed approval." -ForegroundColor Gray
 Write-Host ""
-Write-Host "Baseline will expire in 90 days ($((Get-Date).AddDays(90).ToString('yyyy-MM-dd')))" -ForegroundColor Yellow
+Write-Host "Review this baseline within 90 days ($((Get-Date).AddDays(90).ToString('yyyy-MM-dd')))" -ForegroundColor Yellow
 Write-Host "Use -Force to refresh the baseline when needed." -ForegroundColor Yellow
 Write-Host ""

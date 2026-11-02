@@ -116,8 +116,9 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | `severity` | string | no | `CRITICAL,HIGH` | Severity filter for Trivy's misconfiguration scan only. The Trivy secret scan always uses `HIGH,CRITICAL`. Checkov and TFLint do not read it. The gate counts CRITICAL and HIGH whatever you set. | `reusable-scan.yml:35-39`, `205`, `234`, `247`, `260`, `808-812` |
 | `scanning-repository` | string | no | `agenticcodingops/auto-code-scanning` | Published platform repository; set explicitly for a reviewed mirror. | `reusable-scan.yml` |
 | `scanning-repo-ref` | string | no | the pinned revision's own release tag | Tag, branch or SHA of `scanning-repository` (the published platform repository by default) to read the configs and helper from. The default lives inside the workflow revision that `uses:` pins: release-please sets it to that release's tag, so an unset input reads the configs of the same release as the workflow. Releases before the one that carries this change default to `v1.0.0`, which is not a tag, so callers pinned to them must set it. Set it explicitly whenever it must differ from `uses:`. | `reusable-scan.yml:40-44`, `135-143` |
-| `fail-on-findings` | boolean | no | `true` | When `true`, the Aggregate Results job fails if a CRITICAL or HIGH finding remains after suppressions and the baseline. When `false`, findings never fail it. | `reusable-scan.yml:45-49`, `572`, `807-812`, `841-842` |
+| `fail-on-findings` | boolean | no | `true` | When `true`, the Aggregate Results job fails if a CRITICAL or HIGH finding remains after suppressions and the baseline. When `false`, findings do not fail it; scanner and report health remain mandatory. | `reusable-scan.yml:45-49`, `572`, `807-812`, `841-842` |
 | `upload-sarif` | boolean | no | `true` | Runs the Upload SARIF job. | `reusable-scan.yml:50-54`, `865` |
+| `allow-sarif-upload-errors` | boolean | no | `false` | Explicitly tolerate code-scanning delivery errors; scanner and report health remain mandatory. | `reusable-scan.yml` |
 | `post-pr-comment` | boolean | no | `true` | Runs the PR Comment job. It runs only on `pull_request` events and posts a new comment on every run. | `reusable-scan.yml:55-59`, `1002`, `1076-1081` |
 | `apply-suppressions` | boolean | no | `true` | Marks findings listed in `.scan-suppressions.yaml`, at the caller's repository root, as suppressed. See [Suppressions and baseline](#suppressions-and-baseline). | `reusable-scan.yml:60-64`, `570`, `724-775` |
 | `checkov-skip-checks` | string | no | `""` | Comma-separated built-in Checkov IDs, with no spaces. Merges with the cloud config's `skip-check` list and deduplicates. Each consumer ID must match `^CKV2?_[A-Z0-9]+_[0-9]+$`; invalid IDs fail setup with the offending value. | `reusable-scan.yml:65-69`; `scripts/checkov-consumer-options.py` |
@@ -145,10 +146,10 @@ selection and render behaviour. The accepted ID families are documented in the
 
 | Output | Value | Source |
 |---|---|---|
-| `findings-count` | Number of active findings, of every severity. Active means neither suppressed nor baselined. Trivy secret findings are not included. | `reusable-scan.yml:91-93`, `794`, `803`, `828` |
+| `findings-count` | Number of active findings, of every severity. Active means neither suppressed nor baselined. Trivy secret findings are included. | `reusable-scan.yml:91-93`, `794`, `803`, `828` |
 | `critical-count` | Number of active CRITICAL findings. | `reusable-scan.yml:94-96`, `804`, `829` |
 | `high-count` | Number of active HIGH findings. | `reusable-scan.yml:97-99`, `805`, `830` |
-| `scan-passed` | `true` when no active CRITICAL or HIGH finding remains, or when `fail-on-findings` is `false`. Otherwise `false`. | `reusable-scan.yml:100-102`, `807-812`, `831` |
+| `scan-passed` | `true` only when required scanner reports are healthy and either no active CRITICAL/HIGH finding remains or `fail-on-findings` is `false`. Otherwise `false`. | `reusable-scan.yml:100-102`, `807-812`, `831` |
 | `sarif-uploaded` | `true` when at least one of the four SARIF uploads succeeded, otherwise `false`. Empty when `upload-sarif` is `false`, because the job does not run. | `reusable-scan.yml:103-105`, `865`, `977-988` |
 
 ### Secrets
@@ -284,8 +285,9 @@ None. The `workflow_call` block declares no secrets (`code-security-scan.yml:23-
 | `contents: read` | every job | `code-security-scan.yml:66-67` |
 | `security-events: write` | Semgrep and Secret scan jobs | `code-security-scan.yml:132-134`, `211-213` |
 
-No job asks for `pull-requests`. The workflow posts no pull request comment and uploads no
-artifact.
+No job asks for `pull-requests`. The workflow posts no pull request comment.
+It uploads one run-local policy-helper artifact per call under a unique name;
+the scanner jobs download that same helper.
 
 ## `autonomous-fix.yml`
 
@@ -351,3 +353,8 @@ above to its `fix` job.
 [gh-token]: https://docs.github.com/en/actions/concepts/security/github_token
 [gh-concurrency]: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
 [gh-sarif]: https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github
+
+SARIF delivery failures fail the workflow by default when uploads are enabled.
+For repositories that deliberately tolerate optional delivery errors, set
+`allow-sarif-upload-errors: true`; this does not relax scanner or report validation.
+Missing reports are already rejected by the aggregate and are not uploaded.
