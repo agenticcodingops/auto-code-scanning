@@ -71,14 +71,8 @@ pre-commit:
 # Heavier scans at push time. These are best-effort locally (CI's
 # code-security-scan.yml / reusable-scan.yml is the authoritative backstop).
 pre-push:
-  parallel: true
   commands:
-    checkov:
-      glob: "*.tf"
-      run: hooks/dispatcher.sh checkov
-    tflint:
-      glob: "*.tf"
-      run: hooks/dispatcher.sh tflint
-    dotnet-build:
-      glob: "*.{cs,csproj}"
-      run: hooks/dispatcher.sh dotnet-build
+    scan-push-objects:
+      # A single reader retains every ref. Never filter on the current index.
+      use_stdin: true
+      run: bash hooks/dispatcher.sh pre-push --hooks checkov,tflint,dotnet-build

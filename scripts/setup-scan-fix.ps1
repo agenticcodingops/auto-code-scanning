@@ -110,7 +110,13 @@ if ($HooksRunner -eq "lefthook") {
     $pcSrc = Join-Path $PlatformRoot "templates/$Tier/pre-commit-config.yaml"
     if ((Test-Path $pcSrc) -and -not (Test-Path $pcDest)) { Copy-IfNewer $pcSrc $pcDest }
     if (Get-Command pre-commit -ErrorAction SilentlyContinue) {
-        Push-Location $RepoPath; try { pre-commit install | Out-Null; pre-commit install --hook-type pre-push | Out-Null; Ok "pre-commit hooks installed" } finally { Pop-Location }
+        Push-Location $RepoPath
+        try {
+            pre-commit install | Out-Null
+            & $py (Join-Path $RepoPath 'hooks/pre-push.py') --install-pre-commit
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install push transaction adapter' }
+            Ok "pre-commit hooks installed"
+        } finally { Pop-Location }
     } else { Warn "pre-commit not on PATH. Install: 'pip install pre-commit', then 'pre-commit install'" }
 }
 

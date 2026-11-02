@@ -5,6 +5,8 @@ param([Parameter(ValueFromRemainingArguments)]$ExtraArgs)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\common.ps1"
 
+Invoke-PushSnapshot -HookPath $PSCommandPath -HookArguments $ExtraArgs
+
 # Verify tool availability
 if (-not (Test-ToolAvailable 'checkov')) { exit 0 }
 
@@ -13,7 +15,7 @@ Start-ScanTimer
 # Detect scan directories
 $scanDirs = Get-ChangedDirs
 if (-not $scanDirs -or $scanDirs.Count -eq 0) {
-    Write-HookLog "PASS: No Terraform files staged"
+    Write-HookLog "PASS: No Terraform files selected"
     exit 0
 }
 $fileCount = Get-TfFileCount -Directories $scanDirs

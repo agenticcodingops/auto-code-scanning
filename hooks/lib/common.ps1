@@ -8,6 +8,16 @@ $global:_CommonPS1Loaded = $true
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-PushSnapshot {
+    param([string]$HookPath, [object[]]$HookArguments)
+    if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_LEGACY_PUSH_STATE -eq '1') { return }
+    $py = Find-WorkingPython
+    if (-not $py) { throw 'Python is required for push snapshots' }
+    $runner = Join-Path (Split-Path -Parent $HookPath) 'pre-push.py'
+    & $py $runner --shell ps1 --hooks ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
+    exit $LASTEXITCODE
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -273,6 +283,9 @@ function Invoke-GitPaths {
 }
 
 function Get-ChangedFilesForDetect {
+    if ($env:SCAN_PUSH_FILES) {
+        return @([IO.File]::ReadAllText($env:SCAN_PUSH_FILES).Split([char]0) | Where-Object { $_ -ne '' })
+    }
     $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
     if ($files.Count -eq 0) {
         git rev-parse --verify '@{push}' 2>$null | Out-Null
@@ -305,9 +318,9 @@ function Get-ChangedDirs {
             return @()
         }
 
-        $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
+        if (-not $env:SCAN_PUSH_FILES) {
+            $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
+            if ($LASTEXITCODE -ne 0) { return @() }
         }
 
         $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf$' }
@@ -393,7 +406,9 @@ function Get-StagedFiles {
 
     try {
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
-        $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+        $files = if ($env:SCAN_PUSH_FILES) { @(Get-ChangedFilesForDetect) } else {
+            @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+        }
         if (-not $files) { return @() }
         $files = @($files)
         if ($Extensions.Count -eq 0) { return $files }

@@ -419,9 +419,24 @@ running the fix loop. See
 
 ### Branch protection
 
-In **Settings → Branches → Branch protection rules** for `main`, mark the scan job a **required
-status check** (it appears as `Code Security Scan / Semgrep (csharp)` etc. after the first run) so
-nothing merges un-scanned. This is what turns the platform from advisory into enforced.
+In **Settings → Branches → Branch protection rules** for `main`, require **every**
+security job emitted by the scan callers. For the app-code caller, select:
+
+- `Detect languages`;
+- `Semgrep (csharp)` when C# is enabled;
+- `Semgrep (typescript)` when TypeScript/JavaScript is enabled;
+- `Secret scan` (keep `run-secret-scan: true`).
+
+Copy each full context from the pull request's Checks tab after the first run:
+caller workflow/job prefixes vary. A passing language job does not cover another
+language or the independent secret scan. Add a required matrix context whenever
+you enable another language. Keep `fail-on-findings: true`; requiring a report-only
+job does not block findings. Require these callers on every pull request to `main`,
+without path filters that could prevent a required check from running.
+
+If Terraform scanning is enabled, also require `Setup Scanning Tools`, `Trivy IaC Scan`,
+`Checkov Policy Scan`, `TFLint Scan` and `Aggregate Results`, plus `Snyk IaC Scan (Optional)` if enabled.
+Do not require optional fix-loop jobs: they do not run on every pull request.
 
 ---
 

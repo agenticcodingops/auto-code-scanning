@@ -9,6 +9,16 @@ _COMMON_SH_LOADED=1
 
 SCAN_HOOK_ID="${SCAN_HOOK_ID:-unknown}"
 
+# Pre-push wrappers re-enter only after the transaction runner has copied the
+# exact object tree. Legacy local-state selection requires an explicit opt-in.
+run_push_snapshot() {
+    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_LEGACY_PUSH_STATE:-0}" == 1 ]] && return 0
+    local py
+    py="$(find_python)" || { hook_error 'Python is required for push snapshots'; exit 1; }
+    "$py" "${SCRIPT_DIR}/pre-push.py" --shell sh --hooks "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
+    exit $?
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -246,6 +256,10 @@ read_nul_paths() {
 }
 
 _changed_files_for_detect() {
+    if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
+        cat -- "$SCAN_PUSH_FILES"
+        return
+    fi
     local listing reference
     listing="$(mktemp)" || return 1
     git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
@@ -267,7 +281,7 @@ _changed_files_for_detect() {
 # Usage: mapfile -t scan_dirs < <(detect_changed_dirs)
 # Output: Newline-separated list of directories, or empty if none
 detect_changed_dirs() {
-    if ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -z "${SCAN_PUSH_FILES:-}" ]] && { ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; }; then
         # Not a git repo — return empty so hooks skip rather than scan everything
         return 0
     fi
@@ -312,7 +326,11 @@ count_tf_files() {
 get_staged_files() {
     local path ext listing
     listing="$(mktemp)" || return 1
-    git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
+        cat -- "$SCAN_PUSH_FILES" > "$listing" || { rm -f -- "$listing"; return 1; }
+    else
+        git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    fi
     while IFS= read -r -d '' path; do
         if [[ $# -eq 0 ]]; then printf '%s\0' "$path"; continue; fi
         for ext in "$@"; do

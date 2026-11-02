@@ -182,6 +182,7 @@ def test_tflint_runtime_errors_use_explicit_compatibility_only(tmp_path, hook_bu
     trusted = tmp_path.parent / (tmp_path.name + '-trusted.hcl')
     trusted.write_text('# trusted fixture\n')
     result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ,
+                            SCAN_LEGACY_PUSH_STATE='1',
                             SCAN_TFLINT_CONFIG=str(trusted),
                             SCAN_TFLINT_PLUGIN_DIR=str(tmp_path.parent / 'trusted-plugins'),
                             SCAN_ALLOW_TOOL_ERRORS='1' if opt_in else '0'),
@@ -206,7 +207,7 @@ def test_optional_scanner_runs_in_each_selected_directory(tmp_path, hook_bundle,
     else:
         command = "function snyk { (Get-Location).Path | Set-Content -LiteralPath $env:TRACE; $global:LASTEXITCODE=0; '{\"infrastructureAsCodeIssues\":[]}' }; & '" + hook + "'; exit $LASTEXITCODE"
         args = [executable, '-NoProfile', '-Command', command]
-    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ, TRACE=str(trace), SNYK_TOKEN='fixture'),
+    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ, SCAN_LEGACY_PUSH_STATE='1', TRACE=str(trace), SNYK_TOKEN='fixture'),
                             capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 0, result.stdout + result.stderr
     actual = trace.read_text(encoding='utf-8-sig').strip().replace('\\','/')

@@ -99,7 +99,7 @@ def main(argv) -> int:
             copy(pc_src, pc_dst)
         if have("pre-commit"):
             subprocess.run(["pre-commit", "install"], cwd=repo, check=False)
-            subprocess.run(["pre-commit", "install", "--hook-type", "pre-push"], cwd=repo, check=False)
+            subprocess.run([sys.executable, str(repo / 'hooks/pre-push.py'), '--install-pre-commit'], cwd=repo, check=True)
             ok("pre-commit hooks installed")
         else:
             warn("pre-commit not on PATH. 'pip install pre-commit', then 'pre-commit install'")

@@ -5,6 +5,8 @@ param([Parameter(ValueFromRemainingArguments)]$ExtraArgs)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\common.ps1"
 
+Invoke-PushSnapshot -HookPath $PSCommandPath -HookArguments $ExtraArgs
+
 # Verify tool availability (fail-open if snyk not installed)
 if (-not (Test-ToolAvailable 'snyk')) { exit 0 }
 
@@ -24,10 +26,10 @@ if (-not $env:SNYK_TOKEN) {
 
 Start-ScanTimer
 
-# Detect scan directories (only dirs with staged .tf files)
+# Detect Terraform directories in the selected object tree.
 $scanDirs = Get-ChangedDirs
 if (-not $scanDirs -or $scanDirs.Count -eq 0) {
-    Write-HookLog "PASS: No Terraform files staged"
+    Write-HookLog "PASS: No Terraform files selected"
     exit 0
 }
 $fileCount = Get-TfFileCount -Directories $scanDirs

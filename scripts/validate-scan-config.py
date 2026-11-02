@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -26,6 +28,25 @@ def _find(start: Path, name: str) -> Path | None:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] == '--staged':
+        # Package-owned validator and schema, consumer-owned index bytes.
+        try:
+            root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).decode().strip()
+            changed = subprocess.check_output([
+                'git', '-C', root, 'diff', '--cached', '--name-only', '-z',
+                '--diff-filter=ACMR', '--', 'scan-config.yaml'])
+            if b'scan-config.yaml' not in changed.split(b'\0'):
+                print('[validate-scan-config] PASS: scan-config.yaml not staged')
+                return 0
+            content = subprocess.check_output(['git', '-C', root, 'show', ':scan-config.yaml'])
+            with tempfile.TemporaryDirectory(prefix='scan-config-') as directory:
+                path = Path(directory) / 'scan-config.yaml'
+                path.write_bytes(content)
+                os.environ['STRICT'] = '0' if os.environ.get('SCAN_ALLOW_TOOL_ERRORS') == '1' else '1'
+                return main([argv[0], str(path)])
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f'[validate-scan-config] ERROR: cannot read staged config: {exc}')
+            return 1
     strict = os.environ.get("STRICT", "0") == "1"
     cfg_path = Path(argv[1]) if len(argv) > 1 else None
     if cfg_path is None:

@@ -1,5 +1,11 @@
 # Hook Reference
 
+Pre-push hooks require the complete Git stdin transaction and scan isolated object
+trees. Config validation reads the consumer's staged root config. Upgrade the
+runner configuration and vendored files together; see
+[validation target migration](CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration)
+for runner setup, manual invocations, prerequisites and explicit legacy opt-ins.
+
 Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
 this covers both the original Terraform/IaC hooks and the new app-code hooks
 (C#/.NET, TypeScript/JavaScript, SQL) plus config validation.

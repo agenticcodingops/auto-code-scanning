@@ -83,7 +83,7 @@ The same config drives the local hooks **and** CI — no logic is duplicated.
 
 ```yaml
 global:
-  local_hooks_enabled: true          # off-switch: false pauses ALL local hooks (CI unaffected)
+  local_hooks_enabled: true          # false pauses scanners; config validation still runs
   blocking_severities: [CRITICAL, HIGH]
 languages:
   terraform:  { enabled: true,  tools: { trivy: {...}, checkov: {...}, tflint: {...} } }
@@ -98,18 +98,20 @@ fix_loop:  { enabled: false }                        # LAYER B (see below)
 
 Both runners call the **same** `hooks/dispatcher.sh`, which checks the off-switch, then
 OS-detects and execs the right per-tool implementation (`.ps1` on Windows, `.sh` on Unix).
-Hooks self-discover **staged** files, so they stay fast.
+Pre-commit hooks discover **staged** files. Pre-push hooks consume Git's complete
+ref transaction and scan private copies of the exact pushed trees. Upgrade the
+runner wiring with the hooks; see [validation target migration](docs/CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration).
 
 ```mermaid
 flowchart TD
     ev["git commit / git push"] --> lh["Lefthook (default)<br/>or pre-commit (alt)"]
     lh --> disp["hooks/dispatcher.sh hook-id"]
     disp --> ks{"scan-config.yaml<br/>local_hooks_enabled: false ?"}
-    ks -->|"yes"| skip["exit 0 — skip ALL local hooks<br/>(CI + fix-loop unaffected)"]
+    ks -->|"yes"| skip["skip scanner hooks<br/>config validation still runs<br/>(CI + fix-loop unaffected)"]
     ks -->|"no"| os{"OS ?"}
     os -->|"Windows"| ps["pwsh hook-id.ps1"]
     os -->|"Linux / macOS"| sh["hook-id.sh"]
-    ps --> tool["run tool on STAGED files<br/>Semgrep · Trivy · dotnet · eslint · …"]
+    ps --> tool["run tool on selected files<br/>index at commit · object tree at push"]
     sh --> tool
     tool --> res{"finding ≥ blocking severity ?"}
     res -->|"yes"| block["exit 1 — block commit/push"]
