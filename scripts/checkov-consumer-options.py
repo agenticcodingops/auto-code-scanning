@@ -50,7 +50,9 @@ def validate_render_count(value):
     return value
 
 
-def filter_sarif(sarif):
+def filter_sarif(sarif, allow_inline=None):
+    if allow_inline is None:
+        allow_inline = os.environ.get("ALLOW_INLINE_CHECKOV_SKIPS") == "true"
     """Checkov 3.3.19 labels skipped records with SARIF suppressions.
 
     Remove them rather than relying on code scanning to honour suppressions.
@@ -74,9 +76,16 @@ def filter_sarif(sarif):
                 for key in ("skipped", "suppressed")
             )
             if result.get("suppressions") or skipped:
-                removed += 1
-            else:
-                kept.append(result)
+                if allow_inline:
+                    removed += 1
+                    continue
+                result.pop("suppressions", None)
+                result.pop("check_result", None)
+                result["level"] = "error"
+                for key in ("status", "skipped", "suppressed", "check_result"):
+                    properties.pop(key, None)
+                    result.pop(key, None)
+            kept.append(result)
         run["results"] = kept
     return removed
 

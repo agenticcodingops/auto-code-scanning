@@ -32,6 +32,8 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from scan_policy import apply_exceptions, occurrence_fingerprint, suppression_file, load_suppression_entries, baseline_keys, scanner_path
+from scan_reports import validate_report
 
 # Severity normalization mappings
 TRIVY_SEVERITY_MAP = {
@@ -180,22 +182,22 @@ def run_trivy(scan_dir, severity_filter=None):
         "--format", "json",
         "--skip-check-update",
         "--exit-code", "0",
-        str(scan_dir),
     ]
 
     if severity_filter:
         cmd.extend(["--severity", ",".join(severity_filter)])
 
+    cmd.extend(["--", str(scan_dir)])
     rc, stdout, stderr = run_cmd(cmd)
 
-    if rc == 2 or (rc != 0 and not stdout):
+    if rc != 0:
         # Infrastructure error - fail-open
         print(f"  [WARN] Trivy scan failed (exit {rc}): {stderr.strip()[:200]}", file=sys.stderr)
         return findings, True  # error flag
 
     try:
-        data = json.loads(stdout) if stdout.strip() else {}
-    except json.JSONDecodeError:
+        data = validate_report(json.loads(stdout), "trivy")
+    except (ValueError, TypeError):
         print(f"  [WARN] Trivy returned invalid JSON", file=sys.stderr)
         return findings, True
 
@@ -214,8 +216,10 @@ def run_trivy(scan_dir, severity_filter=None):
                 "rule_id": rule_id,
                 "tool": "trivy",
                 "severity": normalized,
-                "file": target.replace("\\", "/"),
+                "file": scanner_path(target, "trivy", policy_root(scan_dir), scan_dir),
                 "message": mc.get("Title", mc.get("Description", "")),
+                "resource": mc.get("CauseMetadata", {}).get("Resource", ""),
+                "end_line": mc.get("CauseMetadata", {}).get("EndLine", line_val),
                 "remediation_url": generate_remediation_url("trivy", rule_id),
                 "fixable": False,
                 "fixed": False,
@@ -247,7 +251,7 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None):
 
     rc, stdout, stderr = run_cmd(cmd, timeout=600)
 
-    if rc == 2 or (rc != 0 and not stdout):
+    if rc not in (0, 1):
         print(f"  [WARN] Checkov scan failed (exit {rc}): {stderr.strip()[:200]}", file=sys.stderr)
         return findings, True, 0  # error flag, fix count
 
@@ -255,10 +259,10 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None):
 
     try:
         # Checkov can output an array or a single object
-        data = json.loads(stdout) if stdout.strip() else []
+        data = validate_report(json.loads(stdout), "checkov")
         if isinstance(data, dict):
             data = [data]
-    except json.JSONDecodeError:
+    except (ValueError, TypeError):
         print(f"  [WARN] Checkov returned invalid JSON", file=sys.stderr)
         return findings, True, 0
 
@@ -266,7 +270,7 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None):
         if not isinstance(check_type, dict):
             continue
 
-        failed_checks = check_type.get("results", {}).get("failed_checks", [])
+        failed_checks = check_type["results"]["failed_checks"] + check_type["results"].get("skipped_checks", [])
         for check in failed_checks:
             rule_id = check.get("check_id", "")
             raw_severity = check.get("severity", "MEDIUM")
@@ -282,8 +286,10 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None):
                 "rule_id": rule_id,
                 "tool": "checkov",
                 "severity": normalized,
-                "file": check.get("file_path", "").replace("\\", "/"),
+                "file": scanner_path(check.get("file_path", ""), "checkov", policy_root(scan_dir), scan_dir),
                 "message": check.get("check_name", check.get("name", "")),
+                "resource": check.get("resource", ""),
+                "end_line": (check.get("file_line_range") or [0])[-1],
                 "remediation_url": generate_remediation_url("checkov", rule_id),
                 "fixable": is_fixable,
                 "fixed": is_fixed,
@@ -302,14 +308,14 @@ def run_snyk(scan_dir, severity_filter=None):
     # Check if snyk is available
     if not shutil.which("snyk"):
         print("  [INFO] Snyk CLI not installed — skipping (optional)", file=sys.stderr)
-        return findings, False
+        return findings, True
 
     # Check authentication
     if not os.environ.get("SNYK_TOKEN"):
         rc, _, _ = run_cmd(["snyk", "whoami"], timeout=10)
         if rc != 0:
             print("  [INFO] Snyk not authenticated — skipping (optional)", file=sys.stderr)
-            return findings, False
+            return findings, True
 
     cmd = [
         "snyk", "iac", "test",
@@ -332,18 +338,18 @@ def run_snyk(scan_dir, severity_filter=None):
 
     rc, stdout, stderr = run_cmd(cmd)
 
-    if rc == 2 or (rc != 0 and not stdout):
+    if rc not in (0, 1):
         print(f"  [WARN] Snyk scan failed (exit {rc}): {stderr.strip()[:200]}", file=sys.stderr)
         return findings, True
 
     try:
-        data = json.loads(stdout) if stdout.strip() else {}
-    except json.JSONDecodeError:
+        data = validate_report(json.loads(stdout), "snyk")
+    except (ValueError, TypeError):
         print("  [WARN] Snyk returned invalid JSON", file=sys.stderr)
         return findings, True
 
     # Parse Snyk JSON output
-    issues = data.get("infrastructureAsCodeIssues", [])
+    issues = [issue for doc in (data if isinstance(data, list) else [data]) for issue in doc["infrastructureAsCodeIssues"]]
     for issue in issues:
         raw_severity = issue.get("severity", "medium")
         normalized = map_snyk_severity(raw_severity)
@@ -367,56 +373,25 @@ def run_snyk(scan_dir, severity_filter=None):
     return findings, False
 
 
-def load_baseline(scan_dir):
-    """Load baseline entries for filtering. Returns a set of hashes."""
-    baseline_dir = Path(scan_dir)
-    while baseline_dir != baseline_dir.parent:
-        baseline_file = baseline_dir / ".scan-baseline" / "baseline.json"
-        if baseline_file.exists():
-            try:
-                data = json.loads(baseline_file.read_text(encoding="utf-8"))
-                return {e.get("hash") for e in data.get("entries", []) if e.get("hash")}
-            except (json.JSONDecodeError, OSError):
-                pass
-        baseline_dir = baseline_dir.parent
-    return set()
+def policy_root(scan_dir):
+    current = Path(scan_dir).resolve()
+    for parent in (current, *current.parents):
+        if (parent / "scan-config.yaml").exists() or (parent / ".git").exists():
+            return parent
+    return current
+
+
+def load_baseline(scan_dir, allow_legacy=False):
+    return baseline_keys(policy_root(scan_dir) / ".scan-baseline/baseline.json", allow_legacy)
 
 
 def compute_baseline_hash(rule_id, file_path):
-    """Compute the baseline hash for a finding: SHA-256(rule_id + '|' + file_path)."""
-    key = f"{rule_id}|{file_path}"
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+    """Legacy identity, used only with explicit migration opt-in."""
+    return hashlib.sha256(f"{rule_id}|{file_path}".encode()).hexdigest()
 
 
-def load_suppressions(scan_dir):
-    """Load active suppressions. Returns a dict keyed by (rule_id, tool)."""
-    suppression_path = Path(scan_dir)
-    while suppression_path != suppression_path.parent:
-        supp_file = suppression_path / ".scan-suppressions.yaml"
-        if supp_file.exists():
-            try:
-                import yaml
-                data = yaml.safe_load(supp_file.read_text(encoding="utf-8"))
-                if not isinstance(data, dict):
-                    return {}
-                suppressions = {}
-                for section_key in ["trivy_suppressions", "checkov_suppressions", "tflint_suppressions", "gitleaks_suppressions", "snyk_suppressions"]:
-                    implied_tool = section_key.replace("_suppressions", "")
-                    entries = data.get(section_key, [])
-                    if not isinstance(entries, list):
-                        continue
-                    for entry in entries:
-                        if isinstance(entry, dict):
-                            tool = entry.get("tool", implied_tool)
-                            key = (entry.get("rule_id"), tool)
-                            suppressions[key] = entry.get("reason", "suppressed")
-                return suppressions
-            except ImportError:
-                print("  [WARN] PyYAML not installed - suppression filtering skipped", file=sys.stderr)
-            except Exception as e:
-                print(f"  [WARN] Could not load suppressions: {e}", file=sys.stderr)
-        suppression_path = suppression_path.parent
-    return {}
+def load_suppressions(scan_dir, allow_legacy=False):
+    return load_suppression_entries(suppression_file(policy_root(scan_dir)), allow_legacy)
 
 
 def filter_by_severity(findings, severity_filter):
@@ -546,6 +521,10 @@ def main():
         help="Ignore suppression filtering",
     )
 
+    parser.add_argument("--allow-legacy-exceptions", action="store_true",
+                        help="Explicit migration opt-in for schema 1.0 exceptions")
+    parser.add_argument("--policy-root", default=None,
+                        help="Trusted policy checkout (CI supplies the protected base)")
     args = parser.parse_args()
 
     scan_dir = Path(args.directory).resolve()
@@ -555,6 +534,8 @@ def main():
 
     severity_filter = [s.strip().upper() for s in args.severity.split(",")]
     tools_to_run = [t.strip().lower() for t in args.tools.split(",")]
+    if not tools_to_run or any(tool not in {"trivy", "checkov", "snyk"} for tool in tools_to_run):
+        parser.error("Select one or more supported scanners")
 
     # Auto-detect cloud provider if not specified
     cloud_provider = args.cloud_provider or detect_cloud_provider(str(scan_dir))
@@ -614,30 +595,16 @@ def main():
     # Apply severity filter
     filtered_findings = filter_by_severity(all_findings, severity_filter)
 
-    # Apply baseline filtering
-    if not args.skip_baseline:
-        baseline_hashes = load_baseline(str(scan_dir))
-        if baseline_hashes:
-            for f in filtered_findings:
-                h = compute_baseline_hash(f.get("rule_id", ""), f.get("file", ""))
-                if h in baseline_hashes:
-                    f["_baselined"] = True
-            filtered_findings = [f for f in filtered_findings if not f.get("_baselined")]
-
-    # Apply suppression filtering
-    if not args.skip_suppressions:
-        suppressions = load_suppressions(str(scan_dir))
-        if suppressions:
-            for f in filtered_findings:
-                key = (f.get("rule_id"), f.get("tool"))
-                if key in suppressions:
-                    f["_suppressed"] = True
-            filtered_findings = [f for f in filtered_findings if not f.get("_suppressed")]
-
-    # Clean up internal flags
-    for f in filtered_findings:
-        f.pop("_baselined", None)
-        f.pop("_suppressed", None)
+    try:
+        apply_exceptions(filtered_findings, policy_root(scan_dir),
+                         args.policy_root or policy_root(scan_dir),
+                         suppressions=not args.skip_suppressions,
+                         baseline=not args.skip_baseline,
+                         allow_legacy=args.allow_legacy_exceptions)
+        filtered_findings = [f for f in filtered_findings if not f["suppressed"] and not f["baseline"]]
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"Policy validation failed: {exc}", file=sys.stderr)
+        had_error = True
 
     duration_ms = int((time.time() - start_time) * 1000)
 
@@ -647,6 +614,8 @@ def main():
         args.auto_fix, total_fix_count,
     )
 
+    report["scan_complete"] = not had_error
+
     # Write output file
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -654,6 +623,7 @@ def main():
         output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     except OSError as e:
         print(f"  [WARN] Could not write output file: {e}", file=sys.stderr)
+        had_error = True
 
     # Display output
     if args.format == "json":
@@ -665,7 +635,7 @@ def main():
         ))
 
     # Exit code
-    if had_error and not filtered_findings:
+    if had_error:
         # Tool error -- signal ambiguity to caller (exit 2 per CLI contract)
         sys.exit(2)
     elif filtered_findings:

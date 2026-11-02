@@ -1,8 +1,12 @@
 # Reusable Workflows
 
-This page lists every input, output, secret and permission of the three reusable
-workflows that an adopting repository calls. Use it when you write or review a caller
-workflow.
+## Scan policy migration
+
+Schema 2.0, trusted-base policy, mandatory scanner health and compatibility opt-ins
+are described in [CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#scan-policy-and-occurrence-approval-migration).
+Upgrade hooks and scripts together.
+
+Use this reference when writing or reviewing a caller workflow.
 
 The current release is `v2.3.6`. <!-- x-release-please-version -->
 
@@ -118,6 +122,8 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | `checkov-skip-checks` | string | no | `""` | Comma-separated built-in Checkov IDs, with no spaces. Merges with the cloud config's `skip-check` list and deduplicates. Each consumer ID must match `^CKV2?_[A-Z0-9]+_[0-9]+$`; invalid IDs fail setup with the offending value. | `reusable-scan.yml:65-69`; `scripts/checkov-consumer-options.py` |
 | `checkov-render-iter-count` | string | no | `""` | Positive integer. Exports `RENDER_EDGES_DUPLICATE_ITER_COUNT` for the Checkov action step only. Empty leaves it unset; invalid values fail setup. | `reusable-scan.yml:70-74`; `scripts/checkov-consumer-options.py` |
 | `apply-baseline` | boolean | no | `true` | Marks findings listed in `.scan-baseline/baseline.json` as baselined. | `reusable-scan.yml:75-79`, `571`, `777-791` |
+| `allow-legacy-exceptions` | boolean | no | `false` | Explicit schema 1.0 migration opt-in. | `scan_policy.py` |
+| `allow-inline-checkov-skips` | boolean | no | `false` | Honor source inline skips only when explicitly requested by the trusted caller. | `aggregate_scan.py` |
 | `enable-snyk` | boolean | no | `false` | Runs the Snyk IaC job. Needs the `SNYK_TOKEN` secret. The job installs `snyk@1.1307.4` from npm (an exact version; before this it installed whatever npm called latest, up to and including v2.3.2). | `reusable-scan.yml:80-84`, `497`, `507-508` |
 | `upload-metrics` | boolean | no | `true` | Uploads the artifact `scan-metrics-<cloud-provider>-<run_id>`, kept for 90 days. | `reusable-scan.yml:85-89`, `1092`, `1137-1142` |
 
@@ -214,77 +220,32 @@ never fail it (`reusable-scan.yml:45-49`, `808-812`). How each tool's severity i
 | Tool | Severity used | Source |
 |---|---|---|
 | Trivy | Trivy's own severity. | `reusable-scan.yml:640` |
-| Checkov | The report's `severity`, or MEDIUM when it has none. Open-source Checkov reports no severity without a platform API key (the 2.1.0 entry of `CHANGELOG.md`), so Checkov findings are normally MEDIUM and do not block. | `reusable-scan.yml:660-664` |
+| Checkov | The report's `severity`, or HIGH when it has none. Missing severity metadata does not weaken the gate. | `reusable-scan.yml:660-664` |
 | TFLint | Rule severity `error` becomes HIGH, `warning` MEDIUM, `notice` LOW. A TFLint rule at `error` level counts toward the gate. | `reusable-scan.yml:682`, `689` |
 | Snyk | `critical`, `high`, `medium`, `low` map to the same level. | `reusable-scan.yml:703`, `711` |
 
-#### Trivy secret findings are not counted
+#### Scanner health and secret findings
 
-The Aggregate step loads `trivy-secrets-results.json` but builds findings from the
-misconfiguration report only (`reusable-scan.yml:597-604`, `633-651`). Secret findings
-reach code scanning under `trivy-secrets` when `upload-sarif` is `true`. They do not
-change the outputs, the gate or the comment. The secret scan step does not fail its job
-either (`continue-on-error: true`, `reusable-scan.yml:241-251`). For a secret gate, use
-`code-security-scan.yml` with `run-secret-scan: true`.
+The aggregate counts secret findings alongside IaC findings. It runs after every
+scan job, checks all required job results, validates each required report and
+rejects scanner/parser errors. Missing or malformed reports cannot produce a
+successful aggregate, even with `fail-on-findings: false`.
 
-#### A green job does not prove its scanner ran
+#### Scanner configuration
 
-Aggregate Results runs even when a scan job failed (`if: always()`,
-`reusable-scan.yml:550`), and skips any report it cannot find or parse
-(`reusable-scan.yml:588-631`). Make the setup and scan jobs required status checks too,
-not only Aggregate Results: that catches a job that fails, such as a failed
-`tflint --init` (`reusable-scan.yml:395-405`).
-
-It does not catch a scanner that wrote no report. The Trivy, Checkov and TFLint scan steps
-have `continue-on-error: true` (`reusable-scan.yml:211`, `251`, `309`, `478`), and the
-result uploads keep `upload-artifact`'s default `if-no-files-found: warn`
-(`reusable-scan.yml:265-275`, `350-358`, `480-486`). So, for example, the Checkov job can
-pass with no `checkov-results.json`, and every required check stays green without a
-Checkov scan. To fail on a missing report, add a job to your caller like the `verify` job
-of `reusable-scan-self-test.yml` (lines 151-226). It downloads the run's artifacts and fails
-when the Checkov or Trivy report is missing or TFLint reported an error.
-
-#### Checkov uses this repository's config
-
-Checkov reads `configs/<cloud>/.checkov.yaml` from the configs checkout, not a
-`.checkov.yaml` in your repository (`reusable-scan.yml:154`, `302`; the 2.1.0 entry of
-`CHANGELOG.md`).
-
-Consumer skips are merged with the configured list and passed through `skip_check`.
-Before artifact upload and again before code scanning upload, the workflow removes
-SARIF results marked with suppression or skip status, including inline
-`#checkov:skip=...` annotations. A filtering error blocks the Checkov upload. It keeps
-unsuppressed failed results, including a failure for the same rule on another resource.
-The workflow does not rely on code scanning to honour SARIF suppression metadata.
+The platform's reviewed cloud config and explicit caller skip lists remain in
+effect. Scanner ignore/configuration files in the source checkout are materialized
+from the exact base SHA before scans. Inline Checkov skips remain active findings
+and visible SARIF records by default. `allow-inline-checkov-skips: true` explicitly
+restores source-inline compatibility in trusted IaC callers.
 
 #### Suppressions and baseline
 
-- **Suppressions.** The step reads `.scan-suppressions.yaml` at the repository root, in
-  the sections `trivy_suppressions`, `checkov_suppressions`, `tflint_suppressions` and
-  `snyk_suppressions` (`reusable-scan.yml:724-775`). Each entry stands alone. It counts only
-  while its `expires_date` (`YYYY-MM-DD`) is today or later. An entry that is not a mapping,
-  has no `rule_id`, has no `expires_date`, or has an `expires_date` that is not a string or
-  not a valid date is skipped with a workflow warning that names its section and rule
-  (`reusable-scan.yml:751-769`), and the other entries still apply. A section that is not a
-  list is skipped the same way. Quote the date, for example `expires_date: "2026-12-31"`:
-  PyYAML reads an unquoted `2026-12-31` as a date object, and a full timestamp is not a
-  `YYYY-MM-DD` string either, so both are skipped with the warning. Up to v2.3.0 one such
-  entry, in any section, stopped every suppression in the file from being applied, and a
-  malformed date string was skipped without a message. The local `validate-suppressions`
-  hook accepts the unquoted form (`hooks/validate-suppressions.py:89-90`), so it does not warn
-  you. An entry matches on `rule_id` and `tool` only, so it suppresses that rule in every
-  file; `tool` must be `trivy`, `checkov`, `tflint` or `snyk` (`reusable-scan.yml:767`,
-  `772`). The workflow does not read `file_pattern`. If PyYAML cannot be imported, or the file
-  cannot be parsed or is not a mapping, no suppression is applied and a workflow warning is
-  shown (`reusable-scan.yml:732-741`). The setup job installs the YAML reader used by the
-  Checkov options helper. For the approval rules, see
-  [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md).
-- **Baseline.** The step reads `.scan-baseline/baseline.json`. A finding is baselined
-  when the SHA-256 of `<rule_id>|<file>` is one of its `entries[].hash` values
-  (`reusable-scan.yml:780-791`). `scripts/create-baseline.ps1` writes that file in that
-  format (`create-baseline.ps1:49`, `97-107`, `240`). Whether the file paths it records
-  locally match the paths in a CI run is UNKNOWN; compare one entry with
-  `aggregated.json` before you rely on it.
+CI reads the configured registry and `.scan-baseline/baseline.json` from a separate
+trusted-base checkout. Both use schema 2.0 occurrence fingerprints and bounded
+counts. Registry validation is mandatory; invalid entries fail the gate as a unit.
+`file_pattern` further restricts a match. See [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md)
+for the approval floor, expiry checks and migration options.
 
 ## `code-security-scan.yml`
 
@@ -295,8 +256,8 @@ For the scan-config side, see [APP-CODE-SCANNING.md](APP-CODE-SCANNING.md).
 
 | Input | Type | Required | Default | What it does | Source |
 |---|---|---|---|---|---|
-| `languages` | string | no | `""` | Comma-separated: `csharp`, `typescript`. Other values are dropped. When empty, the workflow reads `scan-config.yaml` at the caller's repository root and scans each of those two languages whose `languages.<name>.enabled` is `true`. If it cannot read that file, it logs a warning and scans no language. | `code-security-scan.yml:26-30`, `96-115` |
-| `severity` | string | no | `ERROR` | Passed to `semgrep --severity`. Give one level: `INFO`, `WARNING` or `ERROR`. Semgrep reports rules of exactly that level; it is not a minimum. Semgrep 1.100.0 rejects a comma-separated value such as `ERROR,WARNING` with exit code 2 (tested locally): the SARIF step then writes an empty report and the gate step fails. | `code-security-scan.yml:31-35`, `169-179`, `195-200` |
+| `languages` | string | no | `""` | Comma-separated: `csharp`, `typescript`. Unsupported values fail detection. When empty, the workflow reads `scan-config.yaml` from the trusted base and scans each of those two languages whose `languages.<name>.enabled` is `true`. If it cannot read that file, detection fails. | `code-security-scan.yml:26-30`, `96-115` |
+| `severity` | string | no | `ERROR` | Passed to `semgrep --severity`. Give one level: `INFO`, `WARNING` or `ERROR`. Semgrep reports rules of exactly that level; it is not a minimum. Semgrep 1.100.0 rejects a comma-separated value such as `ERROR,WARNING` with exit code 2 (tested locally): the report step fails rather than substituting an empty report. | `code-security-scan.yml:31-35`, `169-179`, `195-200` |
 | `category-prefix` | string | no | `scan-` | Prefix of the SARIF categories `<prefix>semgrep-<language>` and `<prefix>trivy-secrets`. An empty value becomes `scan-`. When `languages` is empty and `scan-config.yaml` sets `ci.sarif.category_prefix`, that value replaces this input. | `code-security-scan.yml:36-40`, `97`, `111-113`, `186`, `242` |
 | `semgrep-version` | string | no | `1.100.0` | Semgrep version installed with pip. | `code-security-scan.yml:41-45`, `147-151` |
 | `run-secret-scan` | boolean | no | `true` | Runs the Secret scan job: Trivy 0.71.0, secret scanner, CRITICAL and HIGH, over the whole checkout except `node_modules`, `dist`, `build`, `bin`, `obj` and `.terraform`. | `code-security-scan.yml:46-50`, `210`, `223-235` |

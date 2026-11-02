@@ -46,7 +46,8 @@
         "templates/starter/pre-commit-config.yaml",
         "templates/strict/pre-commit-config.yaml",
         "templates/workflows/code-security-scan.yml",
-        "templates/workflows/terraform-scan.yml"
+        "templates/workflows/terraform-scan.yml",
+        ".github/workflows/code-security-scan.yml"
       ]
     }
   }

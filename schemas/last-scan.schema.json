@@ -3,7 +3,13 @@
   "title": "Agent Scan Report",
   "description": "Schema for AI agent scanning interface output. Written to .scanning/last-scan.json by scan.py. Subset of Unified Result with agent-specific auto-fix fields.",
   "type": "object",
-  "required": ["schema_version", "scan_id", "scan_timestamp", "summary", "findings"],
+  "required": [
+    "schema_version",
+    "scan_id",
+    "scan_timestamp",
+    "summary",
+    "findings"
+  ],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -31,7 +37,13 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["trivy", "checkov", "tflint", "gitleaks", "snyk"]
+        "enum": [
+          "trivy",
+          "checkov",
+          "tflint",
+          "gitleaks",
+          "snyk"
+        ]
       },
       "description": "List of tools that were executed during this scan"
     },
@@ -48,7 +60,10 @@
     },
     "summary": {
       "type": "object",
-      "required": ["total_findings", "by_severity"],
+      "required": [
+        "total_findings",
+        "by_severity"
+      ],
       "properties": {
         "total_findings": {
           "type": "integer",
@@ -57,10 +72,26 @@
         "by_severity": {
           "type": "object",
           "properties": {
-            "CRITICAL": { "type": "integer", "minimum": 0, "default": 0 },
-            "HIGH": { "type": "integer", "minimum": 0, "default": 0 },
-            "MEDIUM": { "type": "integer", "minimum": 0, "default": 0 },
-            "LOW": { "type": "integer", "minimum": 0, "default": 0 }
+            "CRITICAL": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "HIGH": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "MEDIUM": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "LOW": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
           },
           "additionalProperties": false
         },
@@ -92,12 +123,22 @@
       "items": {
         "$ref": "#/$defs/agent_finding"
       }
+    },
+    "scan_complete": {
+      "type": "boolean",
+      "description": "False when any required scanner or policy failed"
     }
   },
   "$defs": {
     "agent_finding": {
       "type": "object",
-      "required": ["rule_id", "tool", "severity", "file", "message"],
+      "required": [
+        "rule_id",
+        "tool",
+        "severity",
+        "file",
+        "message"
+      ],
       "properties": {
         "rule_id": {
           "type": "string",
@@ -105,12 +146,23 @@
         },
         "tool": {
           "type": "string",
-          "enum": ["trivy", "checkov", "tflint", "gitleaks", "snyk"],
+          "enum": [
+            "trivy",
+            "checkov",
+            "tflint",
+            "gitleaks",
+            "snyk"
+          ],
           "description": "Tool that detected this finding"
         },
         "severity": {
           "type": "string",
-          "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          "enum": [
+            "CRITICAL",
+            "HIGH",
+            "MEDIUM",
+            "LOW"
+          ],
           "description": "Normalized severity level"
         },
         "file": {
@@ -139,6 +191,29 @@
           "type": "boolean",
           "default": false,
           "description": "Whether auto-fix was applied to this finding"
+        },
+        "fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^v1:[0-9a-f]{64}$"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suppressed": {
+          "type": "boolean"
+        },
+        "baseline": {
+          "type": "boolean"
+        },
+        "suppression_reason": {
+          "type": "string"
         }
       },
       "additionalProperties": false

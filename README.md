@@ -171,6 +171,13 @@ Measured on a Windows machine on 2026-10-11: every command above passed except t
 - the environment-setup workflow: runs in CI only: it runs only when its own workflow file changes.
 - the automated review workflows: runs in CI only: they post a review and need a token.
 
+### Scan integrity migration
+
+Pull requests apply base-commit policy. Upgrade suppression registries and
+baselines to schema 2.0 with exact occurrence fingerprints, and re-vendor hooks
+and scripts together. See [the migration guide](docs/CONSUMER-MIGRATION.md#scan-policy-and-occurrence-approval-migration)
+for required adopter actions and explicit compatibility options.
+
 ### How CI scans run
 
 Reusable `workflow_call` workflows emit **SARIF per tool under distinct categories**
@@ -202,10 +209,10 @@ checkov-skip-checks: "CKV_AZURE_35,CKV2_AZURE_1,CKV_TF_1"
 checkov-render-iter-count: "20"
 ```
 
-The job summary records the effective skip list and render setting. Skipped Checkov
-results, including inline `#checkov:skip=...` suppressions, are removed from SARIF
-before upload. No upgrade note is needed: the empty defaults keep today's scanner
-selection and render behaviour. See [the reusable workflow reference](docs/REUSABLE-WORKFLOWS.md)
+The job summary records the effective skip list and render setting. Inline skips
+remain visible and gated by default. Suppression and baseline schema 2.0 binds
+each approval to one occurrence; legacy matching requires an explicit migration
+opt-in. Scanner failures always block completion, including report-only runs. See [the reusable workflow reference](docs/REUSABLE-WORKFLOWS.md)
 for permissions, outputs and suppression semantics.
 
 ```mermaid

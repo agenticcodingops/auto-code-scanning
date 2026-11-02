@@ -8,14 +8,15 @@ richer reporting.
 
 Validation Rules (Errors - block):
   V-001: YAML must be syntactically valid
-  V-002: schema_version must be present and equal to "1.0"
+  V-002: schema_version must be "2.0" (legacy requires explicit opt-in)
   V-003: All required fields must be present in each entry
   V-004: tool must be one of the allowed enum values
   V-005: approved_date and expires_date must be valid ISO dates
   V-006: expires_date must be <= max_expiry_days after approved_date
-  V-007: approved_by must be present when severity in require_security_approval
-  V-008: No duplicate (rule_id, tool) pairs in the same tool section
+  V-007: approval always required for HIGH/CRITICAL and configured extra levels
+  V-008: No duplicate (rule_id, tool, fingerprint) occurrence keys
   V-009: rule_id must match expected pattern for declared tool
+  V-010: Versioned occurrence fingerprint required
 
 Warnings:
   W-001: Suppression expires within 30 days
@@ -49,13 +50,13 @@ except ImportError:
     sys.exit(1)
 
 # Required fields per suppression entry
-REQUIRED_FIELDS = ["rule_id", "tool", "reason", "owner", "approved_date", "expires_date"]
+REQUIRED_FIELDS = ["rule_id", "tool", "reason", "owner", "approved_date", "expires_date", "severity"]
 
 # Minimum reason length
 MIN_REASON_LENGTH = 10
 
 # Allowed tool values
-ALLOWED_TOOLS = {"trivy", "checkov", "tflint", "gitleaks"}
+ALLOWED_TOOLS = {"trivy", "checkov", "tflint", "gitleaks", "snyk"}
 
 # Allowed severity values
 ALLOWED_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
@@ -63,7 +64,8 @@ ALLOWED_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
 # Rule ID patterns by tool
 RULE_ID_PATTERNS = {
     "trivy": re.compile(r"^AVD-[A-Z]+-\d+$"),
-    "checkov": re.compile(r"^CKV_[A-Z]+_\d+$"),
+    "checkov": re.compile(r"^CKV2?_[A-Z0-9]+_\d+$"),
+    "snyk": re.compile(r"^SNYK-[A-Z0-9-]+$"),
     "tflint": re.compile(r"^[a-z][a-z0-9_-]+$"),
     "gitleaks": re.compile(r"^[a-z][a-z0-9-]+$"),
 }
@@ -83,6 +85,8 @@ TOOL_SECTIONS = {
 
 def parse_iso_date(date_str):
     """Parse an ISO 8601 date string (YYYY-MM-DD) into a date object."""
+    if isinstance(date_str, datetime):
+        return None
     if isinstance(date_str, date):
         return date_str
     try:
@@ -130,9 +134,11 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
 
     prefix = f"{section_key}[{index}]"
     max_expiry_days = settings.get("max_expiry_days", 180)
-    require_approval = settings.get("require_security_approval", ["CRITICAL", "HIGH"])
+    require_approval = settings.get("require_security_approval", [])
     if not isinstance(require_approval, list):
+        result.error("V-007", "require_security_approval must be a list")
         require_approval = []
+    require_approval = {"CRITICAL", "HIGH"}.union(str(s) for s in require_approval)
 
     # V-003: Required fields
     for field in REQUIRED_FIELDS:
@@ -164,6 +170,8 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
 
     # V-006: expires_date <= max_expiry_days after approved_date
     if approved_date and expires_date:
+        if approved_date > date.today() or expires_date < approved_date:
+            result.error("V-005", f"{prefix} invalid approval date range")
         max_allowed = approved_date + timedelta(days=max_expiry_days)
         if expires_date > max_allowed:
             result.error(
@@ -203,7 +211,7 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
     # Expiry checks
     if check_expiry and expires_date:
         days_until_expiry = (expires_date - date.today()).days
-        if days_until_expiry <= 0:
+        if days_until_expiry < 0:
             if ci_mode:
                 result.error("V-006", f"{prefix} EXPIRED on {expires_date} ({abs(days_until_expiry)} days ago)")
             else:
@@ -226,7 +234,7 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
         )
 
 
-def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False):
+def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False, allow_legacy=False):
     """Validate a suppression file. Returns a ValidationResult."""
     # CI mode implies check_expiry
     if ci_mode:
@@ -259,13 +267,26 @@ def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False):
     schema_version = data.get("schema_version")
     if schema_version is None:
         result.error("V-002", "'schema_version' is required")
-    elif str(schema_version) != "1.0":
-        result.error("V-002", f"'schema_version' must be '1.0', got '{schema_version}'")
+    elif str(schema_version) != "2.0" and not (allow_legacy and str(schema_version) == "1.0"):
+        result.error("V-002", f"'schema_version' must be '2.0', got '{schema_version}'")
 
     # Extract settings
     settings = data.get("settings", {})
     if not isinstance(settings, dict):
+        result.error("V-001", "settings must be a mapping")
         settings = {}
+    settings = dict(settings)
+    maximum = settings.get("max_expiry_days", 180)
+    try:
+        if isinstance(maximum, (bool, float)):
+            raise ValueError()
+        maximum = int(maximum)
+        if maximum < 1 or maximum > 180:
+            raise ValueError()
+    except (ValueError, TypeError):
+        result.error("V-006", "max_expiry_days must be an integer between 1 and 180")
+        maximum = 180
+    settings["max_expiry_days"] = maximum
 
     # Validate required settings fields
     for field in ["max_expiry_days", "require_security_approval", "review_frequency_days"]:
@@ -291,10 +312,16 @@ def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False):
 
             # V-008: No duplicate (rule_id, tool) pairs
             if isinstance(entry, dict):
+                fingerprint = entry.get("fingerprint")
+                if not (allow_legacy and str(schema_version) == "1.0"):
+                    if not isinstance(fingerprint, str) or not re.fullmatch(r"v1:[0-9a-f]{64}", fingerprint):
+                        result.error("V-010", f"{section_key}[{i}] requires a v1 occurrence fingerprint")
+                if entry.get("file_pattern") is not None and not isinstance(entry["file_pattern"], str):
+                    result.error("V-003", "file_pattern must be a string")
                 rule_id = entry.get("rule_id")
                 entry_tool = entry.get("tool")
                 if rule_id and entry_tool:
-                    key = (str(rule_id), str(entry_tool))
+                    key = (str(rule_id), str(entry_tool), str(fingerprint))
                     if key in seen_rule_ids:
                         result.error("V-008", f"{section_key}[{i}] duplicate (rule_id='{rule_id}', tool='{entry_tool}')")
                     else:
@@ -372,6 +399,8 @@ def main():
         help="Output format (default: text)",
     )
 
+    parser.add_argument("--allow-legacy-exceptions", action="store_true",
+                        help="Explicitly accept schema 1.0 exceptions during migration")
     args = parser.parse_args()
 
     file_path = Path(args.file)
@@ -385,7 +414,8 @@ def main():
     # CI mode implies check-expiry
     check_expiry = args.check_expiry or args.ci
 
-    result = validate_file(file_path, strict=args.strict, check_expiry=check_expiry, ci_mode=args.ci)
+    result = validate_file(file_path, strict=args.strict, check_expiry=check_expiry, ci_mode=args.ci,
+                           allow_legacy=args.allow_legacy_exceptions)
 
     if args.format == "json":
         print(format_json(result, file_path))

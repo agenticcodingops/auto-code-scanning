@@ -19,6 +19,11 @@ import validate_suppressions as vs  # noqa: E402
 
 def write_suppression_file(tmpdir, data):
     """Helper to write a suppression YAML file for testing."""
+    for section, entries in data.items():
+        if section.endswith('_suppressions') and isinstance(entries, list):
+            for entry in entries:
+                entry.setdefault('fingerprint', 'v1:' + 'a' * 64)
+                entry.setdefault('severity', 'MEDIUM')
     filepath = Path(tmpdir) / ".scan-suppressions.yaml"
     filepath.write_text(yaml.dump(data, default_flow_style=False))
     return str(filepath)
@@ -84,7 +89,7 @@ class TestValidateFile:
             today = date.today()
             expires = today + timedelta(days=90)
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "settings": {
                     "max_expiry_days": 180,
                     "require_security_approval": ["CRITICAL", "HIGH"],
@@ -121,7 +126,7 @@ class TestValidateFile:
     def test_wrong_schema_version(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             data = {
-                "schema_version": "2.0",
+                "schema_version": "9.0",
                 "trivy_suppressions": [],
             }
             filepath = write_suppression_file(tmpdir, data)
@@ -133,7 +138,7 @@ class TestValidateFile:
     def test_missing_required_field(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
@@ -152,7 +157,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
@@ -174,7 +179,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "settings": {"max_expiry_days": 180},
                 "trivy_suppressions": [
                     {
@@ -197,7 +202,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "settings": {
                     "max_expiry_days": 180,
                     "require_security_approval": ["CRITICAL", "HIGH"],
@@ -233,7 +238,7 @@ class TestValidateFile:
                 "expires_date": str(today + timedelta(days=90)),
             }
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [entry, entry],
             }
             filepath = write_suppression_file(tmpdir, data)
@@ -246,7 +251,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "INVALID-FORMAT",
@@ -268,7 +273,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "checkov_suppressions": [
                     {
                         "rule_id": "CKV_AWS_19",
@@ -303,7 +308,7 @@ class TestValidateFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
@@ -327,7 +332,7 @@ class TestStrictMode:
         with tempfile.TemporaryDirectory() as tmpdir:
             today = date.today()
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
@@ -360,7 +365,7 @@ class TestCIMode:
             past = date.today() - timedelta(days=30)
             expired = date.today() - timedelta(days=1)
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
@@ -381,7 +386,7 @@ class TestCIMode:
             past = date.today() - timedelta(days=30)
             expired = date.today() - timedelta(days=1)
             data = {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "trivy_suppressions": [
                     {
                         "rule_id": "AVD-AWS-0107",
