@@ -187,6 +187,8 @@ def test_tflint_init_requires_external_config(tmp_path,shell,config):
     trusted = tmp_path / 'trusted.hcl'; trusted.write_text('config { plugin_dir = \"./plugins\" }\n' if config == 'override' else '# trusted config\n')
     env = {k:v for k,v in os.environ.items() if not k.startswith('SCAN_')}
     env['PATH'] = str(tools) + os.pathsep + env['PATH']
+    # This fixture tests the wrapper's input boundary, without a push transaction.
+    env['SCAN_LEGACY_PUSH_STATE'] = '1'
     env['SCAN_TFLINT_PLUGIN_DIR'] = str(tmp_path / 'plugins')
     if config != 'missing': env['SCAN_TFLINT_CONFIG'] = str(trusted if config in ('external','override') else repo / '.tflint.hcl')
     suffix='sh' if shell=='bash' else 'ps1'
@@ -379,6 +381,7 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
     tools=tmp_path/'tools'; tools.mkdir()
     wrapper=tools/'python'; wrapper.write_text(f'#!/usr/bin/env bash\nexec "{Path(base_python).as_posix()}" "$@"\n',newline='\n'); wrapper.chmod(0o755)
     common=tmp_path/'common.sh'; common.write_text((ROOT/'hooks/lib/common.sh').read_text(encoding='utf-8'),newline='\n')
+    shutil.copyfile(ROOT/'hooks/lib/scan_config.py', tmp_path/'scan_config.py')
     env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
     result=subprocess.run([bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing'],cwd=repo,env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stderr

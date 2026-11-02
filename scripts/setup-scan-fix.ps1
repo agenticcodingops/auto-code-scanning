@@ -36,6 +36,18 @@ function Info  { param($m) Write-Host "[INFO] $m" -ForegroundColor White }
 function Ok    { param($m) Write-Host "[OK]   $m" -ForegroundColor Green }
 function Warn  { param($m) Write-Host "[WARN] $m" -ForegroundColor Yellow }
 function Step  { param($m) Write-Host "`n=== $m ===" -ForegroundColor Cyan }
+$script:FailedSteps = @()
+function Install-Step {
+    param([string]$Label, [scriptblock]$Action)
+    try {
+        & $Action
+        if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+        Ok $Label
+    } catch {
+        $script:FailedSteps += $Label
+        Warn "FAILED: ${Label}: $_. Resolve the error above and re-run setup."
+    }
+}
 function Find-Py {
     foreach ($c in @('python', 'python3', 'py')) {
         if (Get-Command $c -ErrorAction SilentlyContinue) { try { & $c -c "" 2>$null; if ($LASTEXITCODE -eq 0) { return $c } } catch {} }
@@ -110,7 +122,17 @@ if ($HooksRunner -eq "lefthook") {
     $pcSrc = Join-Path $PlatformRoot "templates/$Tier/pre-commit-config.yaml"
     if ((Test-Path $pcSrc) -and -not (Test-Path $pcDest)) { Copy-IfNewer $pcSrc $pcDest }
     if (Get-Command pre-commit -ErrorAction SilentlyContinue) {
-        Push-Location $RepoPath; try { pre-commit install | Out-Null; pre-commit install --hook-type pre-push | Out-Null; Ok "pre-commit hooks installed" } finally { Pop-Location }
+        Push-Location $RepoPath
+        try {
+            Install-Step 'pre-commit hook installation' {
+                if (-not $py) { throw 'Python is required to install the pre-commit hook' }
+                pre-commit install
+            }
+            Install-Step 'push transaction adapter installation' {
+                if (-not $py) { throw 'Python is required to install the push transaction adapter' }
+                & $py (Join-Path $RepoPath 'hooks/pre-push.py') --install-pre-commit
+            }
+        } finally { Pop-Location }
     } else { Warn "pre-commit not on PATH. Install: 'pip install pre-commit', then 'pre-commit install'" }
 }
 
@@ -180,11 +202,15 @@ if (Test-Path $verify) {
     try { & pwsh -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | Select-Object -First 30 } catch { Warn "verify-scanning reported issues: $_" } finally { Pop-Location }
 } else { Info "verify-scanning.ps1 not found; skipping" }
 
-Write-Host "`n=== SETUP COMPLETE ===" -ForegroundColor Green
+if ($script:FailedSteps.Count) {
+    Warn "Setup finished with failed steps: $($script:FailedSteps -join ', ')"
+    Write-Host "`n=== SETUP COMPLETED WITH ERRORS ===" -ForegroundColor Yellow
+} else { Write-Host "`n=== SETUP COMPLETE ===" -ForegroundColor Green }
 Write-Host "Next:" -ForegroundColor Cyan
 Write-Host "  1. Review scan-config.yaml (enabled languages, fix_loop)" -ForegroundColor White
 Write-Host "  2. Review the caller workflows' immutable commit pins" -ForegroundColor White
 if ($HooksRunner -eq 'lefthook') { Write-Host "  3. Test: stage a file and 'git commit' (or 'lefthook run pre-commit')" -ForegroundColor White }
 else { Write-Host "  3. Test: 'pre-commit run --all-files'" -ForegroundColor White }
 if ($EnableFixLoop) { Write-Host "  4. Add the 'ai-autofix' label to a PR to opt it into the fix-loop" -ForegroundColor White }
+if ($script:FailedSteps.Count) { exit 1 }
 exit 0

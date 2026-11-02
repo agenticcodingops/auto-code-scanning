@@ -10,11 +10,13 @@ affecting the reusable CI workflows or the fix-loop.
 
 ```yaml
 global:
-  local_hooks_enabled: false   # default true; set false to skip ALL local hooks
+  local_hooks_enabled: false   # default true; pauses scanners, not config validation
 ```
 
-`hooks/dispatcher.sh` checks this first and exits `0` immediately when it is `false`, so
-**every** local pre-commit/pre-push hook is skipped in that repo. CI scanning
+`hooks/dispatcher.sh` skips pre-commit scanners when this is `false`. Pre-push
+scanners read the switch from each pushed object, so an unstaged edit cannot
+substitute for committed policy. Staged `scan-config.yaml` validation always runs,
+including when the switch is false. CI scanning
 (`code-security-scan.yml` / `reusable-scan.yml`) and the agentic fix-loop are **not**
 affected. Flip it back to `true` (or remove the line) to re-enable. Only an explicit
 `false` disables — a missing key keeps scanning on.

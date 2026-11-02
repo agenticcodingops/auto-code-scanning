@@ -9,6 +9,16 @@ _COMMON_SH_LOADED=1
 
 SCAN_HOOK_ID="${SCAN_HOOK_ID:-unknown}"
 
+# Pre-push wrappers re-enter only after the transaction runner has copied the
+# exact object tree. Legacy local-state selection requires an explicit opt-in.
+run_push_snapshot() {
+    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_LEGACY_PUSH_STATE:-0}" == 1 ]] && return 0
+    local py
+    py="$(find_python)" || { hook_error 'Python is required for push snapshots'; exit 1; }
+    "$py" "${SCRIPT_DIR}/pre-push.py" --shell sh --hooks "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
+    exit $?
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -32,13 +42,13 @@ hook_verbose() {
 }
 
 # ---------------------------------------------------------------------------
-# Exit code handling (fail-open)
+# Exit code handling (block incomplete scans unless explicitly opted out)
 # ---------------------------------------------------------------------------
 
 # Classify a tool exit code:
 #   exit 0 = no findings (pass)
 #   exit 1 = security findings found (block)
-#   exit 2+ = infrastructure error (fail-open, warn + allow)
+#   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
 #
 # Usage: handle_exit_code $tool_exit_code
 # Returns: 0 (pass/fail-open) or 1 (findings found)
@@ -114,7 +124,12 @@ assert_external_path() {
         case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
         [[ "$external_path" == /* && ! -L "$external_path" ]] || { hook_error 'Trusted path must be absolute and unlinked'; exit 1; }
         local root parent canonical
-        root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
+            root="$PWD"
+        else
+            require_scan_git
+            root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+        fi
         root="$(cd "$root" && pwd -P)"
         parent="$(cd "$(dirname -- "$external_path")" && pwd -P)" || exit 1
         canonical="$parent/${external_path##*/}"
@@ -122,10 +137,12 @@ assert_external_path() {
         return 0
     fi
     if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
+    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]] || require_scan_git
     "$py" -I - "$external_path" <<'PYEXTERNAL'  || exit 1
-import pathlib, subprocess, sys
+import os, pathlib, subprocess, sys
 try:
-    root = pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+    root = (pathlib.Path.cwd() if os.environ.get('SCAN_PUSH_SNAPSHOT') == '1' else
+            pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())).resolve()
 except subprocess.CalledProcessError:
     root = pathlib.Path.cwd().resolve()
 p = pathlib.Path(sys.argv[1])
@@ -245,7 +262,16 @@ read_nul_paths() {
     rm -f -- "$listing"
 }
 
+require_scan_git() {
+    command -v git >/dev/null 2>&1 || { hook_error 'git is required to read scan inputs; scan incomplete'; exit 1; }
+}
+
 _changed_files_for_detect() {
+    if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
+        cat -- "$SCAN_PUSH_FILES"
+        return
+    fi
+    require_scan_git
     local listing reference
     listing="$(mktemp)" || return 1
     git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
@@ -267,9 +293,16 @@ _changed_files_for_detect() {
 # Usage: mapfile -t scan_dirs < <(detect_changed_dirs)
 # Output: Newline-separated list of directories, or empty if none
 detect_changed_dirs() {
-    if ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        # Not a git repo — return empty so hooks skip rather than scan everything
-        return 0
+    if [[ -z "${SCAN_PUSH_FILES:-}" ]]; then
+        require_scan_git
+        if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
+                hook_error 'Could not enumerate push scan inputs; scan incomplete'
+                return 1
+            fi
+            # A local caller outside a repository has no selected inputs.
+            return 0
+        fi
     fi
 
     _changed_files_for_detect | while IFS= read -r -d '' path; do
@@ -312,7 +345,12 @@ count_tf_files() {
 get_staged_files() {
     local path ext listing
     listing="$(mktemp)" || return 1
-    git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
+        cat -- "$SCAN_PUSH_FILES" > "$listing" || { rm -f -- "$listing"; return 1; }
+    else
+        require_scan_git
+        git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
+    fi
     while IFS= read -r -d '' path; do
         if [[ $# -eq 0 ]]; then printf '%s\0' "$path"; continue; fi
         for ext in "$@"; do
@@ -327,14 +365,19 @@ get_staged_files() {
 # rm -rf it (and should set a trap).
 # Usage: tmpdir="$(export_staged_to_tmp "${files[@]}")"; trap 'rm -rf "$tmpdir"' EXIT
 export_staged_to_tmp() {
+    require_scan_git
     local tmpdir
-    tmpdir="$(mktemp -d)"
+    tmpdir="$(mktemp -d)" || return 1
     local file file_dir
     for file in "$@"; do
         [[ -z "${file}" ]] && continue
         file_dir="."; [[ "$file" == */* ]] && file_dir="${file%/*}"
         [[ "${file_dir}" != "." ]] && mkdir -p "${tmpdir}/${file_dir}"
-        git show ":${file}" -- > "${tmpdir}/${file}" 2>/dev/null || true
+        git show ":${file}" -- > "${tmpdir}/${file}" 2>/dev/null || {
+            rm -rf -- "$tmpdir"
+            hook_error "Could not export staged '$file'; scan incomplete"
+            return 1
+        }
     done
     echo "${tmpdir}"
 }
@@ -352,9 +395,8 @@ find_python() {
     return 1
 }
 
-# Read a dotted key from scan-config.yaml (e.g. languages.csharp.build.solution).
-# Falls back to the default if the config, python, PyYAML, or key is missing — so
-# hooks degrade gracefully (e.g. empty solution => auto-detect) rather than break.
+# Read a dotted string key. Missing config/keys retain defaults; malformed
+# configuration blocks with a named error instead of silently using defaults.
 # Usage: solution="$(read_scan_config languages.csharp.build.solution '')"
 read_scan_config() {
     local key="${1:?key required}"
@@ -362,21 +404,8 @@ read_scan_config() {
     local cfg="${SCAN_CONFIG_FILE:-scan-config.yaml}"
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
-    py="$(find_python)" || { echo "${default}"; return 0; }
-    "${py}" -E -P - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
-import sys
-key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    import yaml
-    with open(cfg, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    cur = data
-    for part in key.split("."):
-        cur = cur[part]
-    print(cur if cur is not None and cur != "" else default)
-except Exception:
-    print(default)
-PYEOF
+    py="$(find_python)" || { hook_error 'Python is required to read scan-config.yaml'; return 1; }
+    "${py}" -E -P "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
 }
 
 # Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).

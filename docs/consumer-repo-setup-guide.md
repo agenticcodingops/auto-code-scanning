@@ -43,8 +43,9 @@ You get **two layers**, both driven by a single `scan-config.yaml`:
 
 ## 1. Before you start (prerequisites)
 
-You only need the tools for the languages you actually scan — every hook is **fail-open**, so a
-missing tool warns and allows the commit rather than blocking you. Install what's relevant:
+You need the tools for the languages you scan. Incomplete scans block by default;
+transaction-bound push setup, malformed configuration, unsafe tree entries and
+missing required policies return `1` and block the push. Install what's relevant:
 
 | Tool | Needed for | Install (Windows) | Install (macOS/Linux) |
 |---|---|---|---|
@@ -93,8 +94,9 @@ git clone --branch v2.3.6 https://github.com/agenticcodingops/auto-code-scanning
    └────────────────────────────────────────────────────────┘
 ```
 
-- **Local hooks** scan only **staged files** (fast, <15s) and are **fail-open** (a missing tool
-  or infra error never blocks you; only real findings do).
+- **Local commit hooks** select staged files. **Push hooks** scan isolated copies
+  of the exact pushed trees and fail closed on incomplete validation. See the
+  [exit-code contract](HOOK-REFERENCE.md#exit-code-contract) for local opt-ins.
 - **CI workflows** are the authoritative backstop and upload SARIF to the Security tab.
 - The **dispatcher** (`hooks/dispatcher.sh`) auto-detects the OS and runs the `.ps1` on Windows or
   the `.sh` elsewhere — so the same config works for every contributor.
@@ -419,9 +421,24 @@ running the fix loop. See
 
 ### Branch protection
 
-In **Settings → Branches → Branch protection rules** for `main`, mark the scan job a **required
-status check** (it appears as `Code Security Scan / Semgrep (csharp)` etc. after the first run) so
-nothing merges un-scanned. This is what turns the platform from advisory into enforced.
+In **Settings → Branches → Branch protection rules** for `main`, require **every**
+security job emitted by the scan callers. For the app-code caller, select:
+
+- `Detect languages`;
+- `Semgrep (csharp)` when C# is enabled;
+- `Semgrep (typescript)` when TypeScript/JavaScript is enabled;
+- `Secret scan` (keep `run-secret-scan: true`).
+
+Copy each full context from the pull request's Checks tab after the first run:
+caller workflow/job prefixes vary. A passing language job does not cover another
+language or the independent secret scan. Add a required matrix context whenever
+you enable another language. Keep `fail-on-findings: true`; requiring a report-only
+job does not block findings. Require these callers on every pull request to `main`,
+without path filters that could prevent a required check from running.
+
+If Terraform scanning is enabled, also require `Setup Scanning Tools`, `Trivy IaC Scan`,
+`Checkov Policy Scan`, `TFLint Scan` and `Aggregate Results`, plus `Snyk IaC Scan (Optional)` if enabled.
+Do not require optional fix-loop jobs: they do not run on every pull request.
 
 ---
 

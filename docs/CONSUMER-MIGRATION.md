@@ -1,5 +1,77 @@
 # Runbook: Migrate an Inline Scan or Fix Loop to the Platform
 
+## Push-object and staged-config validation migration
+
+Re-vendor `hooks/`, `scripts/validate-scan-config.py` and `schemas/` together.
+Pre-push scanners now scan a private copy of **each local object named by Git's
+stdin transaction**, including new branches, annotated tags, alternate destinations
+and non-HEAD/multiple refs. Deletions have no local tree and are skipped. Each tip's
+whole tree is scanned, rather than guessing a range from the current index or
+tracking branch. Uncommitted files, checkout filters and archive attributes cannot
+replace the scanned bytes. This can expose existing findings and take longer.
+The temporary copy is deleted after scanning; source files and the index are
+untouched. Reports are exported to the consumer's `.scanning/last-scan.json` before
+cleanup, and earlier reports are cleared when the next attempt produces no report.
+Unavailable/non-tree objects, symlinks, submodules and filesystem path collisions
+block the push because a complete isolated scan cannot be guaranteed.
+Transaction-bound validation is fail-closed: setup errors, malformed transactions
+or configuration, unsafe tree entries and missing required policies return `1`.
+Configuration shape errors name the invalid key on one line; they never fall
+back to defaults. This includes errors in the adapter's runner configuration.
+
+**Track scanner policy before upgrading.** Push scans require the policy scanner's
+`.checkov.yaml` in the pushed tree under
+`.scanning/configs`, or under a tracked repository-relative `SCAN_CONFIG_DIR`.
+The setup guide ignores `.scanning/`, so either force-add the required policy files
+or commit them under another directory and configure `SCAN_CONFIG_DIR` accordingly.
+An absolute override must resolve inside the consumer repository. Missing required
+policies or an external policy directory blocks the push; the runner never silently
+falls back to different rules. Config files and source bytes come from the same tip.
+The linter instead requires an external trusted `SCAN_TFLINT_CONFIG` and
+`SCAN_TFLINT_PLUGIN_DIR`, as described in the
+[trusted-input migration](#trusted-execution-and-output-migration).
+Individual legacy wrappers remain available only through the opt-in below.
+
+- **Lefthook:** replace the `pre-push` block with the current
+  `templates/lefthook/lefthook.yml` block. It has one command with `use_stdin: true`
+  and no file glob, which fans out the complete transaction to all selected tools.
+  Adjust its `--hooks` list to the push scanners you enable.
+- **pre-commit:** after installing its push hook, run
+  `python hooks/pre-push.py --install-pre-commit` from the consumer root. The
+  current setup-scan-fix scripts do this automatically. The adapter preserves the
+  original hook, runs every configured platform push scanner against all refs,
+  then forwards the complete input to the original runner for other hooks. Python
+  and PyYAML are required. Reinstall the adapter if you replace the push hook.
+  Older setup-scanning installers need this manual step after vendoring `hooks/`.
+  The runner's ref environment variables alone do not preserve a multi-ref push.
+  The adapter recognizes platform repository entries and local entries that
+  explicitly call the vendored dispatcher. It removes only those handled entries
+  from a temporary config for the saved runner; unrelated IDs/aliases and user
+  skip settings stay intact. Explicit per-hook stage overrides (including legacy
+  `push`) take precedence; otherwise platform manifest
+  stages apply before configuration-wide defaults. Windows runners prefer PowerShell
+  7, then Windows PowerShell, then Git Bash, as the dispatcher does.
+
+For manual validation, feed a real four-field transaction to a push wrapper or
+`python hooks/pre-push.py --hooks checkov,tflint,dotnet-build` on stdin. A direct
+`pre-commit run --hook-stage pre-push --all-files` has no transaction and blocks.
+During a reviewed migration only, `SCAN_LEGACY_PUSH_STATE=1` explicitly restores
+the old index/tracking-ref/worktree behavior for individual push wrappers. It is
+off by default and provides no assurance about the pushed objects. The adapter
+and batch runner always use snapshots.
+
+The local hook off-switch cannot suppress push-object scans through an unstaged
+config edit: push scans read an explicit `local_hooks_enabled: false` from the
+pushed tree itself. Config validation rejects staged symlinks/type changes to
+unsupported objects and always checks the exact
+root `scan-config.yaml` blob in the consumer's index, even when hook code is in
+a separate package or the worktree file differs. Python, PyYAML, the vendored
+schema and jsonschema are required; missing validation infrastructure blocks by
+default. A configured build path must remain inside the snapshot, and a missing
+build solution blocks. `SCAN_ALLOW_TOOL_ERRORS=1` explicitly retains the former local validation
+fail-open behavior for missing prerequisites. Invalid staged YAML still blocks.
+CI remains the authoritative backstop.
+
 ## Scan policy and occurrence approval migration
 
 Pull-request scans use policy from the exact base commit. Language selection,
@@ -320,8 +392,13 @@ Requiring the new jobs only after the merge would leave this and any concurrent 
 mergeable with no scan gate. The jobs to require:
 
 - for the Terraform scan: Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan,
-  TFLint Scan and Aggregate Results;
-- for the code scan: the jobs of the `code-scan` call.
+  TFLint Scan and Aggregate Results, plus Snyk IaC Scan (Optional) if enabled;
+- for the code scan: `Detect languages`, `Semgrep (csharp)` for enabled C#,
+  `Semgrep (typescript)` for enabled TypeScript/JavaScript, and `Secret scan`.
+  Keep `run-secret-scan: true` and `fail-on-findings: true`. Add every newly enabled
+  language's matrix context to branch protection. One passing language check does
+  not cover the other language or secrets. Enable callers on every pull request
+  without path filters. See [the setup guide](consumer-repo-setup-guide.md#branch-protection).
 
 Use the names on the pull request's Checks tab. Never require the fix loop's jobs: they
 run only on a trusted review or a dispatch.

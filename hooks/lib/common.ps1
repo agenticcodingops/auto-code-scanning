@@ -8,6 +8,16 @@ $global:_CommonPS1Loaded = $true
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-PushSnapshot {
+    param([string]$HookPath, [object[]]$HookArguments)
+    if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_LEGACY_PUSH_STATE -eq '1') { return }
+    $py = Find-WorkingPython
+    if (-not $py) { throw 'Python is required for push snapshots' }
+    $runner = Join-Path (Split-Path -Parent $HookPath) 'pre-push.py'
+    & $py $runner --shell ps1 --hooks ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
+    exit $LASTEXITCODE
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -35,13 +45,13 @@ function Write-HookVerbose {
 }
 
 # ---------------------------------------------------------------------------
-# Exit code handling (fail-open)
+# Exit code handling (block incomplete scans unless explicitly opted out)
 # ---------------------------------------------------------------------------
 
 # Classify a tool exit code:
 #   exit 0 = no findings (pass)
 #   exit 1 = security findings found (block)
-#   exit 2+ = infrastructure error (fail-open, warn + allow)
+#   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
 function Get-HookExitCode {
     param(
         [Parameter(Mandatory)]
@@ -122,7 +132,10 @@ function Assert-ExternalPath {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path)) { throw 'Trusted path must be absolute' }
     Assert-SafeWritePath $Path
-    $root = (& git rev-parse --show-toplevel 2>$null)
+    $root = if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { (Get-Location).Path } else {
+        Assert-GitAvailable
+        & git rev-parse --show-toplevel 2>$null
+    }
     if (-not $root) { $root = (Get-Location).Path }
     $root = [IO.Path]::GetFullPath($root).TrimEnd('/', '\')
     $full = [IO.Path]::GetFullPath($Path)
@@ -250,8 +263,15 @@ function Build-FindingsJson {
 # scanned. Best-effort — CI is the authoritative backstop.
 # Read the native stdout stream intact before splitting on NUL. PowerShell's
 # native command pipeline otherwise splits newline-containing pathnames.
+function Assert-GitAvailable {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw 'git is required to read scan inputs; scan incomplete'
+    }
+}
+
 function Invoke-GitPaths {
     param([string[]]$Arguments)
+    Assert-GitAvailable
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = 'git'
     $info.Arguments = $Arguments -join ' '
@@ -273,6 +293,9 @@ function Invoke-GitPaths {
 }
 
 function Get-ChangedFilesForDetect {
+    if ($env:SCAN_PUSH_FILES) {
+        return @([IO.File]::ReadAllText($env:SCAN_PUSH_FILES).Split([char]0) | Where-Object { $_ -ne '' })
+    }
     $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
     if ($files.Count -eq 0) {
         git rev-parse --verify '@{push}' 2>$null | Out-Null
@@ -300,14 +323,13 @@ function Get-OrdinalUniquePaths {
 
 function Get-ChangedDirs {
     try {
-        $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
-        if (-not $gitAvailable) {
-            return @()
-        }
-
-        $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
+        if (-not $env:SCAN_PUSH_FILES) {
+            Assert-GitAvailable
+            $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { throw 'Could not enumerate push scan inputs; scan incomplete' }
+                return @()
+            }
         }
 
         $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf$' }
@@ -338,11 +360,14 @@ function Get-ChangedDirs {
 # Returns empty array when no files are staged
 function Get-AllChangedDirs {
     try {
-        $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
-        if (-not $gitAvailable) { return @() }
-
-        $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-        if ($LASTEXITCODE -ne 0) { return @() }
+        if (-not $env:SCAN_PUSH_FILES) {
+            Assert-GitAvailable
+            $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { throw 'Could not enumerate push scan inputs; scan incomplete' }
+                return @()
+            }
+        }
 
         $changedFiles = Get-ChangedFilesForDetect
 
@@ -392,8 +417,10 @@ function Get-StagedFiles {
     param([string[]]$Extensions = @())
 
     try {
-        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
-        $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+        $files = if ($env:SCAN_PUSH_FILES) { @(Get-ChangedFilesForDetect) } else {
+            Assert-GitAvailable
+            @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+        }
         if (-not $files) { return @() }
         $files = @($files)
         if ($Extensions.Count -eq 0) { return $files }
@@ -408,6 +435,7 @@ function Get-StagedFiles {
 function Export-StagedFilesToTempDir {
     param([string[]]$Files)
 
+    Assert-GitAvailable
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "scan-staged-$(Get-Random)"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     foreach ($file in @($Files)) {
@@ -425,9 +453,8 @@ function Export-StagedFilesToTempDir {
             if ($LASTEXITCODE -ne 0) { throw "git show exit $LASTEXITCODE" }
             $content | Set-Content -LiteralPath $targetFile -Encoding UTF8
         } catch {
-            # WARN, never stay silent: a dropped staged file makes secret/IaC hooks
-            # scan missing content and report a false CLEAN. Surface the gap.
-            Write-HookWarn "could not export staged '$file' to temp dir (skipped from scan)"
+            Remove-Item -LiteralPath $tmpDir -Recurse -Force
+            throw "Could not export staged '$file'; scan incomplete"
         }
     }
     return $tmpDir
@@ -438,7 +465,7 @@ function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -I -c "" 2>$null
+                & $cand -I -c "pass" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }
@@ -446,7 +473,7 @@ function Find-WorkingPython {
     return $null
 }
 
-# Read a dotted key from scan-config.yaml; returns $Default if missing/unparseable.
+# Read a dotted string key; defaults apply only to missing config/keys.
 # Usage: $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
 function Read-ScanConfigValue {
     param(
@@ -458,33 +485,13 @@ function Read-ScanConfigValue {
     if (-not (Test-Path $cfg)) { return $Default }
 
     $py = Find-WorkingPython
-    if (-not $py) { return $Default }
-
-    $script = @'
-import sys
-key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    import yaml
-    with open(cfg, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    cur = data
-    for part in key.split("."):
-        cur = cur[part]
-    print(cur if cur is not None and cur != "" else default)
-except Exception:
-    print(default)
-'@
-    $tmp = New-TemporaryFile
-    try {
-        Set-Content -Path $tmp -Value $script -Encoding UTF8
-        $out = & $py -E -P $tmp $Key $Default $cfg 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $out) { return $Default }
-        return ($out | Select-Object -First 1).ToString().Trim()
-    } catch {
-        return $Default
-    } finally {
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+    if (-not $py) {
+        [Console]::Error.WriteLine('[scan-config] ERROR: Python is required to read scan-config.yaml')
+        exit 1
     }
+    & $py -E -P "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
+        ForEach-Object { $_.ToString().Trim() }
+    if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
 # Count Semgrep findings by severity from a --json output file (native parse).
