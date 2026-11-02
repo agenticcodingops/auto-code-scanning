@@ -377,8 +377,14 @@ intact:
 
 ```yaml
 # .github/workflows/autonomous-fix.yml (excerpt — setup wrote the full file)
+permissions: {}
 jobs:
   fix:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      issues: write
     if: >-
       github.event_name == 'workflow_dispatch' ||
       ( github.event.pull_request.head.repo.full_name == github.repository &&
@@ -402,9 +408,10 @@ v2.3.4 also says `secrets: inherit`; replace that with the three secrets above. 
 `secrets: inherit` here: it hands the called workflow every secret of your repository and
 organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 
-The template grants only `contents: read`, but the reusable workflow's jobs also need
-`pull-requests: write`, `issues: write` and `actions: read`. Add all four as job-level
-`permissions:` on `fix`; see
+The template grants `contents: read`, `actions: read`, `pull-requests: write` and
+`issues: write` at job level on `fix`. Keep all four: the caller's permissions are the
+ceiling for the reusable workflow's jobs, which narrow their own grants. Branch pushes
+use the separate `AUTOFIX_TOKEN` secret. See
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml).
 
 ### Branch protection
