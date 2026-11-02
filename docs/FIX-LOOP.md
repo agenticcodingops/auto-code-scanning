@@ -115,9 +115,11 @@ Key enforcement (all mechanical, independent of the prompt):
 - `verify` checks out the **exact analyzed SHA**, applies the patch and runs `build_verify_cmd`.
   It runs with `cache-mode: none`: GitHub gives it a cache token that can neither save nor
   restore, so the build cannot leave a cache entry for another job or workflow, even on a
-  `workflow_dispatch` run whose cache scope is the default branch. A build that tries to save
-  a cache gets a skipped save, not a failure. The workflow sets `cache-mode: none` for its
-  other jobs too, since none of them uses the cache.
+  `workflow_dispatch` run whose cache scope is the default branch. `actions/cache` and the
+  `@actions/cache` toolkit skip a save the mode does not allow and carry on; another cache
+  client may treat the refused request as an error and fail the build, which fails `verify`
+  and stops the push. Keep `build_verify_cmd` free of Actions cache saves. The workflow sets
+  `cache-mode: none` for its other jobs too, since none of them uses the cache.
 - `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
   commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
   It restores nothing from the Actions cache, which the PR's code can write to in other runs
