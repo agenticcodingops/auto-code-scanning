@@ -19,6 +19,10 @@ def test_python_setup_vendors_schemas(tmp_path: Path, monkeypatch):
     copied_names = {path.name for path in (tmp_path / "schemas").iterdir()}
     assert copied_names == source_names
     assert (tmp_path / "scripts/validate-scan-config.py").is_file()
+    for name in ('scan.py', 'scan_policy.py', 'scan_reports.py', 'validate-suppressions.py',
+                 'create-baseline.ps1', 'finalize_baseline.py'):
+        assert (tmp_path / 'scripts' / name).is_file()
+        assert name in (setup_scan_fix.PLATFORM_ROOT / 'scripts/setup-scan-fix.ps1').read_text()
 
 
 def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):

@@ -94,22 +94,10 @@ if ($MonorepoScope) {
     $scopedDirs = $MonorepoScope -split "," | ForEach-Object { $_.Trim() }
 }
 
-# SHA-256 hash function for baseline matching per FR-074b
-function Get-BaselineHash {
-    param(
-        [string]$RuleId,
-        [string]$FilePath
-    )
-    $input_string = "$RuleId|$FilePath"
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($input_string)
-    $hash = $sha256.ComputeHash($bytes)
-    return [System.BitConverter]::ToString($hash).Replace("-", "").ToLower()
-}
-
 # Initialize baseline structure per data-model.md Baseline entity
 $baseline = @{
-    schema_version = "1.0"
+    schema_version = "2.0"
+    scan_directory = $TerraformDir
     created_date = $timestamp
     created_by = "create-baseline.ps1"
     cloud_provider = $CloudProvider
@@ -129,18 +117,22 @@ function New-TrivyBaseline {
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $trivyJson = trivy config $dir --severity CRITICAL,HIGH,MEDIUM,LOW --format json --quiet 2>$null
+        $trivyJson = trivy config --severity CRITICAL,HIGH,MEDIUM,LOW --include-non-failures --format json --quiet -- $dir 2>$null
         if ($trivyJson) {
             try {
                 $trivyResults = $trivyJson | ConvertFrom-Json
                 foreach ($result in $trivyResults.Results) {
                     foreach ($misconfig in $result.Misconfigurations) {
+                        if ($misconfig.Status -eq 'PASS') { continue }
                         $ruleId = $misconfig.AVDID ?? $misconfig.ID
                         $filePath = $result.Target
                         $entries += @{
-                            hash = Get-BaselineHash $ruleId $filePath
                             rule_id = $ruleId
-                            file_path = $filePath
+                            file = $filePath
+                            scan_directory = $dir
+                            line = $misconfig.CauseMetadata.StartLine
+                            end_line = $misconfig.CauseMetadata.EndLine
+                            resource = $misconfig.CauseMetadata.Resource
                             tool = "trivy"
                             severity = $misconfig.Severity
                             baselined_date = $dateStamp
@@ -178,9 +170,12 @@ function New-CheckovBaseline {
                     $ruleId = $check.check_id
                     $filePath = $check.file_path
                     $entries += @{
-                        hash = Get-BaselineHash $ruleId $filePath
                         rule_id = $ruleId
-                        file_path = $filePath
+                        file = $filePath
+                        scan_directory = $dir
+                        line = $check.file_line_range[0]
+                        end_line = $check.file_line_range[-1]
+                        resource = $check.resource
                         tool = "checkov"
                         severity = $check.severity ?? "MEDIUM"
                         baselined_date = $dateStamp
@@ -209,7 +204,7 @@ function New-TflintBaseline {
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $tflintJson = tflint --format json $dir 2>$null
+        $tflintJson = tflint --chdir=$dir --format json 2>$null
         if ($tflintJson) {
             try {
                 $tflintResults = $tflintJson | ConvertFrom-Json
@@ -217,9 +212,12 @@ function New-TflintBaseline {
                     $ruleId = $issue.rule.name
                     $filePath = $issue.range.filename
                     $entries += @{
-                        hash = Get-BaselineHash $ruleId $filePath
                         rule_id = $ruleId
-                        file_path = $filePath
+                        file = $filePath
+                        scan_directory = $dir
+                        line = $issue.range.start.line
+                        end_line = $issue.range.end.line
+                        resource = ""
                         tool = "tflint"
                         severity = $issue.rule.severity
                         baselined_date = $dateStamp
@@ -280,19 +278,20 @@ switch ($Tool) {
 
 $baseline.entries = $allEntries
 
-# Deduplicate by hash (same rule+file from different scan runs)
-$uniqueHashes = @{}
-$dedupedEntries = @()
-foreach ($entry in $allEntries) {
-    if (-not $uniqueHashes.ContainsKey($entry.hash)) {
-        $uniqueHashes[$entry.hash] = $true
-        $dedupedEntries += $entry
-    }
-}
-$baseline.entries = $dedupedEntries
-
-# Save baseline as single JSON file
-$baseline | ConvertTo-Json -Depth 10 | Set-Content $metadataFile -Encoding UTF8
+# Finalize occurrence fingerprints using the shared SHA-256 implementation.
+# Do not deduplicate repeated occurrences: each approval has a bounded count.
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+$python = Find-WorkingPython
+if (-not $python) { throw 'Baseline creation requires Python' }
+$sourceRoot = git rev-parse --show-toplevel
+if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
+$pending = New-TemporaryFile
+try {
+    $baseline | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $pending -Encoding UTF8
+    & $python "$PSScriptRoot/finalize_baseline.py" $pending $metadataFile $sourceRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Baseline identity validation failed' }
+} finally { Remove-Item -LiteralPath $pending -ErrorAction SilentlyContinue }
+$dedupedEntries = $allEntries
 
 # Summary
 $bySeverity = @{ CRITICAL = 0; HIGH = 0; MEDIUM = 0; LOW = 0 }
@@ -328,9 +327,9 @@ foreach ($t in $byTool.Keys) {
     Write-Host "    $t`: $($byTool[$t])" -ForegroundColor Gray
 }
 Write-Host ""
-Write-Host "Matching algorithm: SHA-256(rule_id | file_path)" -ForegroundColor Gray
-Write-Host "Line numbers excluded for refactoring resilience." -ForegroundColor Gray
+Write-Host "Schema 2.0 matches tool, rule, path, resource, line range and source content." -ForegroundColor Gray
+Write-Host "Each entry covers one occurrence; source changes require renewed approval." -ForegroundColor Gray
 Write-Host ""
-Write-Host "Baseline will expire in 90 days ($((Get-Date).AddDays(90).ToString('yyyy-MM-dd')))" -ForegroundColor Yellow
+Write-Host "Review this baseline within 90 days ($((Get-Date).AddDays(90).ToString('yyyy-MM-dd')))" -ForegroundColor Yellow
 Write-Host "Use -Force to refresh the baseline when needed." -ForegroundColor Yellow
 Write-Host ""

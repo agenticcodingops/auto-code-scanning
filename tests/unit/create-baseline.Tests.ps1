@@ -41,18 +41,13 @@ Describe "create-baseline.ps1" {
         }
     }
 
-    Describe "Baseline Hash Function" {
-
-        It "Should define Get-BaselineHash function" {
-            $ScriptContent | Should -Match "function Get-BaselineHash"
+    Describe "Occurrence Identity" {
+        It "Uses the shared baseline finalizer" {
+            $ScriptContent | Should -Match "finalize_baseline.py"
         }
-
-        It "Should use SHA-256 hashing" {
-            $ScriptContent | Should -Match "SHA256|sha256"
-        }
-
-        It "Should hash rule_id + pipe + file_path" {
-            $ScriptContent | Should -Match 'rule_id.*\|.*file_path|"\|"'
+        It "Preserves location and resource metadata" {
+            $ScriptContent | Should -Match "end_line"
+            $ScriptContent | Should -Match "resource"
         }
     }
 
@@ -93,8 +88,8 @@ Describe "create-baseline.ps1" {
             $ScriptContent | Should -Match "rule_id"
         }
 
-        It "Should include file_path in each entry" {
-            $ScriptContent | Should -Match "file_path"
+        It "Should include file in each entry" {
+            $ScriptContent | Should -Match "file ="
         }
 
         It "Should include tool in each entry" {

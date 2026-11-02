@@ -68,10 +68,10 @@ def test_invalid_render_count(value):
 def test_sarif_fixture_keeps_failed_result_and_rule(fixtures_dir):
     sarif = json.loads((fixtures_dir / "checkov-suppressed.sarif").read_text())
     rules = copy.deepcopy(sarif["runs"][0]["tool"])
-    assert options.filter_sarif(sarif) == 1
+    assert options.filter_sarif(sarif, allow_inline=True) == 1
     assert [result["message"]["text"] for result in sarif["runs"][0]["results"]] == ["Failed resource"]
     assert sarif["runs"][0]["tool"] == rules
-    assert options.filter_sarif(sarif) == 0
+    assert options.filter_sarif(sarif, allow_inline=True) == 0
 
 
 @pytest.mark.parametrize("marker", [
@@ -84,7 +84,7 @@ def test_sarif_fixture_keeps_failed_result_and_rule(fixtures_dir):
 def test_skip_status_removed_across_runs(marker):
     failed = {"ruleId": "CKV_TF_1", "properties": {"suppressed": False}, "suppressions": []}
     sarif = {"runs": [{"results": [marker, failed]}, {"results": [marker]}, {}]}
-    assert options.filter_sarif(sarif) == 2
+    assert options.filter_sarif(sarif, allow_inline=True) == 2
     assert sarif["runs"][0]["results"] == [failed]
     assert sarif["runs"][1]["results"] == []
 
@@ -163,21 +163,3 @@ def test_workflow_scopes_env_and_gates_upload_after_filter_failure(repo_root):
     assert "steps.filter-checkov.outcome == 'success'" in upload["if"]
     artifact = next(step for step in jobs["scan-checkov"]["steps"] if step["name"] == "Upload Checkov results")
     assert "steps.filter-checkov-artifact.outcome == 'success'" in artifact["if"]
-
-
-@pytest.mark.parametrize("contents,warning", [
-    ("checkov_suppressions: [{rule_id: CKV_TF_1, tool: checkov}]", "missing expires_date"),
-    ("checkov_suppressions: [", "Could not parse/apply .scan-suppressions.yaml"),
-])
-def test_aggregate_warns_for_ignored_or_unparseable_suppressions(repo_root, tmp_path, monkeypatch, capsys, contents, warning):
-    steps = workflow(repo_root)["jobs"]["aggregate"]["steps"]
-    script = next(step["run"] for step in steps if step.get("id") == "aggregate")
-    section = script.split("# Apply suppressions", 1)[1].split("# Apply baseline", 1)[0]
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("APPLY_SUPPRESSIONS", "true")
-    Path(".scan-suppressions.yaml").write_text(contents)
-    from datetime import datetime, timezone
-    exec(section, {"os": os, "datetime": datetime, "timezone": timezone, "findings": []})
-    output = capsys.readouterr().out
-    assert "::warning::" in output
-    assert warning in output

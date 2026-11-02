@@ -91,7 +91,7 @@ jobs:
           download_external_modules: false
 
       - name: Filter SARIF before verification
-        run: python3 scripts/checkov-consumer-options.py filter-sarif consumer-results.sarif
+        run: ALLOW_INLINE_CHECKOV_SKIPS=true python3 scripts/checkov-consumer-options.py filter-sarif consumer-results.sarif
 
       - name: Verify skips and rendered network rules
         run: |

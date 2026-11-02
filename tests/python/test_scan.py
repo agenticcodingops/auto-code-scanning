@@ -265,137 +265,27 @@ class TestRunCmd:
         assert "not found" in stderr.lower()
 
 
-class TestLoadBaseline:
-    """Test baseline loading."""
+class TestExceptionLoading:
+    def test_absent_policy_is_empty(self, tmp_path):
+        assert not scan.load_baseline(tmp_path)
+        assert not scan.load_suppressions(tmp_path)
 
-    def test_no_baseline_returns_empty_set(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = scan.load_baseline(tmpdir)
-            assert result == set()
+    def test_legacy_baseline_requires_opt_in(self, tmp_path):
+        path = tmp_path / '.scan-baseline'
+        path.mkdir()
+        (path / 'baseline.json').write_text(json.dumps({
+            'schema_version': '1.0', 'entries': [{'hash': 'abc123'}]}))
+        with pytest.raises(ValueError):
+            scan.load_baseline(tmp_path)
+        assert scan.load_baseline(tmp_path, allow_legacy=True)['abc123'] == 1
 
-    def test_load_valid_baseline(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            baseline_dir = Path(tmpdir) / ".scan-baseline"
-            baseline_dir.mkdir()
-            baseline_file = baseline_dir / "baseline.json"
-            baseline_data = {
-                "entries": [
-                    {"hash": "abc123", "rule_id": "CKV_AWS_19", "file_path": "main.tf"},
-                    {"hash": "def456", "rule_id": "AVD-AWS-0107", "file_path": "vpc.tf"},
-                ]
-            }
-            baseline_file.write_text(json.dumps(baseline_data))
-            result = scan.load_baseline(tmpdir)
-            assert "abc123" in result
-            assert "def456" in result
-            assert len(result) == 2
-
-
-class TestLoadSuppressions:
-    """Test suppression loading."""
-
-    def test_no_suppression_file_returns_empty_dict(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = scan.load_suppressions(tmpdir)
-            assert result == {}
-
-    def test_load_valid_suppressions_with_tool_field(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text(textwrap.dedent("""\
-                trivy_suppressions:
-                  - rule_id: AVD-AWS-0107
-                    tool: trivy
-                    reason: accepted risk
-                checkov_suppressions:
-                  - rule_id: CKV_AWS_19
-                    tool: checkov
-                    reason: not applicable
-            """))
-            result = scan.load_suppressions(tmpdir)
-            assert ("AVD-AWS-0107", "trivy") in result
-            assert result[("AVD-AWS-0107", "trivy")] == "accepted risk"
-            assert ("CKV_AWS_19", "checkov") in result
-            assert result[("CKV_AWS_19", "checkov")] == "not applicable"
-
-    def test_load_suppressions_fallback_tool_from_section_key(self):
-        """When tool field is omitted, tool should be derived from section key."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text(textwrap.dedent("""\
-                trivy_suppressions:
-                  - rule_id: AVD-AWS-0107
-                    reason: accepted risk
-                checkov_suppressions:
-                  - rule_id: CKV_AWS_19
-                    reason: not applicable
-                tflint_suppressions:
-                  - rule_id: some_rule
-                    reason: tflint suppressed
-            """))
-            result = scan.load_suppressions(tmpdir)
-            # Tool derived from section key when tool field is absent
-            assert ("AVD-AWS-0107", "trivy") in result
-            assert ("CKV_AWS_19", "checkov") in result
-            assert ("some_rule", "tflint") in result
-
-    def test_load_suppressions_missing_file(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = scan.load_suppressions(tmpdir)
-            assert result == {}
-
-    def test_load_suppressions_import_error(self):
-        """ImportError when yaml is missing should warn and return empty."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text("trivy_suppressions: []")
-            with patch.dict(sys.modules, {"yaml": None}):
-                # Force re-import to trigger ImportError
-                import importlib
-                with patch("builtins.__import__", side_effect=ImportError("No module named 'yaml'")):
-                    result = scan.load_suppressions(tmpdir)
-                    assert result == {}
-
-    def test_load_suppressions_malformed_yaml(self):
-        """Malformed YAML should warn and return empty."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text("!!invalid:\n  - [broken yaml\n")
-            result = scan.load_suppressions(tmpdir)
-            # Malformed YAML triggers an exception, should return {}
-            assert result == {}
-
-    def test_load_suppressions_non_dict_data(self):
-        """YAML file containing a list instead of a dict should return empty."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text("- item1\n- item2\n")
-            result = scan.load_suppressions(tmpdir)
-            assert result == {}
-
-    def test_load_suppressions_default_reason(self):
-        """Entries without a reason field should default to 'suppressed'."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text(textwrap.dedent("""\
-                trivy_suppressions:
-                  - rule_id: AVD-AWS-0107
-                    tool: trivy
-            """))
-            result = scan.load_suppressions(tmpdir)
-            assert result[("AVD-AWS-0107", "trivy")] == "suppressed"
-
-    def test_load_suppressions_gitleaks_section(self):
-        """Gitleaks suppressions section should be loaded."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            supp_file = Path(tmpdir) / ".scan-suppressions.yaml"
-            supp_file.write_text(textwrap.dedent("""\
-                gitleaks_suppressions:
-                  - rule_id: generic-api-key
-                    reason: test key only
-            """))
-            result = scan.load_suppressions(tmpdir)
-            assert ("generic-api-key", "gitleaks") in result
+    @pytest.mark.parametrize('contents', ['[]', 'false', 'trivy_suppressions: [',
+                                        'trivy_suppressions: [{rule_id: AVD-AWS-0107}]'])
+    def test_invalid_registry_is_an_error(self, tmp_path, contents):
+        import yaml
+        (tmp_path / '.scan-suppressions.yaml').write_text(contents)
+        with pytest.raises((ValueError, yaml.YAMLError)):
+            scan.load_suppressions(tmp_path)
 
 
 class TestFindingLineField:
