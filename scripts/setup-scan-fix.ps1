@@ -112,7 +112,9 @@ if ($HooksRunner -eq "lefthook") {
     if (Get-Command pre-commit -ErrorAction SilentlyContinue) {
         Push-Location $RepoPath
         try {
+            if (-not $py) { throw 'Python is required to install the push transaction adapter' }
             pre-commit install | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install the pre-commit hook' }
             & $py (Join-Path $RepoPath 'hooks/pre-push.py') --install-pre-commit
             if ($LASTEXITCODE -ne 0) { throw 'Could not install push transaction adapter' }
             Ok "pre-commit hooks installed"

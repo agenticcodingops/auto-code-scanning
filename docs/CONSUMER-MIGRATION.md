@@ -13,6 +13,16 @@ The temporary copy is deleted after scanning; the checkout and index are untouch
 Unavailable/non-tree objects, symlinks, submodules and filesystem path collisions
 block the push because a complete isolated scan cannot be guaranteed.
 
+**Track scanner policy before upgrading.** Push scans require the policy scanner's
+`.checkov.yaml` and the linter's `.tflint.hcl` in the pushed tree under
+`.scanning/configs`, or under a tracked repository-relative `SCAN_CONFIG_DIR`.
+The setup guide ignores `.scanning/`, so either force-add the required policy files
+or commit them under another directory and configure `SCAN_CONFIG_DIR` accordingly.
+An absolute override must resolve inside the consumer repository. Missing required
+policies or an external policy directory blocks the push; the runner never silently
+falls back to different rules. Config files and source bytes come from the same tip.
+Individual legacy wrappers remain available only through the opt-in below.
+
 - **Lefthook:** replace the `pre-push` block with the current
   `templates/lefthook/lefthook.yml` block. It has one command with `use_stdin: true`
   and no file glob, which fans out the complete transaction to all selected tools.
@@ -25,6 +35,13 @@ block the push because a complete isolated scan cannot be guaranteed.
   and PyYAML are required. Reinstall the adapter if you replace the push hook.
   Older setup-scanning installers need this manual step after vendoring `hooks/`.
   The runner's ref environment variables alone do not preserve a multi-ref push.
+  The adapter recognizes platform repository entries and local entries that
+  explicitly call the vendored dispatcher. It removes only those handled entries
+  from a temporary config for the saved runner; unrelated IDs/aliases and user
+  skip settings stay intact. Explicit per-hook stage overrides (including legacy
+  `push`) take precedence; otherwise platform manifest
+  stages apply before configuration-wide defaults. Windows runners prefer PowerShell
+  7, then Windows PowerShell, then Git Bash, as the dispatcher does.
 
 For manual validation, feed a real four-field transaction to a push wrapper or
 `python hooks/pre-push.py --hooks checkov,tflint,dotnet-build` on stdin. A direct
@@ -36,7 +53,8 @@ and batch runner always use snapshots.
 
 The local hook off-switch cannot suppress push-object scans through an unstaged
 config edit: push scans read an explicit `local_hooks_enabled: false` from the
-pushed tree itself. Config validation always checks the exact
+pushed tree itself. Config validation rejects staged symlinks/type changes to
+unsupported objects and always checks the exact
 root `scan-config.yaml` blob in the consumer's index, even when hook code is in
 a separate package or the worktree file differs. Python, PyYAML, the vendored
 schema and jsonschema are required; missing validation infrastructure blocks by

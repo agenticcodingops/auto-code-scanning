@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 
 HOOKS = ('trivy-iac-full', 'checkov', 'checkov-strict', 'tflint', 'snyk-iac', 'dotnet-build')
+# Every supported push hook explicitly declares this stage in the manifest.
+# Config-wide default_stages only applies when a manifest has no stages.
+MANIFEST_STAGES = {hook: ['pre-push'] for hook in HOOKS}
 HERE = Path(__file__).resolve().parent
+PLATFORM_REPOSITORY = 'https://github.com/agenticcodingops/auto-code-scanning'
 
 
 def git(*args: str) -> bytes:
@@ -29,6 +35,32 @@ def bash() -> str:
     if not executable:
         raise ValueError('Bash is required for the hook runner')
     return executable
+
+
+def select_shell(requested: str, *, windows: bool | None = None) -> tuple[str, str]:
+    windows = os.name == 'nt' if windows is None else windows
+    if requested == 'ps1' or (requested == 'auto' and windows):
+        executable = shutil.which('pwsh') or shutil.which('powershell')
+        if executable:
+            return 'ps1', executable
+        if requested == 'ps1':
+            raise ValueError('PowerShell is required for the selected implementation')
+    return 'sh', bash()
+
+
+def policy_directory() -> str:
+    configured = os.environ.get('SCAN_CONFIG_DIR', '.scanning/configs')
+    path = Path(configured)
+    if path.is_absolute():
+        root = Path(os.fsdecode(git('rev-parse', '--show-toplevel')).strip())
+        try:
+            path = path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError('Push policies must be tracked inside the repository') from exc
+    portable = PurePosixPath(path.as_posix().replace('\\', '/'))
+    if '..' in portable.parts or ':' in portable.as_posix():
+        raise ValueError('Push policy directory must remain inside the pushed tree')
+    return portable.as_posix()
 
 
 def tips(records: str) -> list[str]:
@@ -91,9 +123,17 @@ def materialize(oid: str, destination: Path) -> list[str]:
                 if mode == b'100755':
                     target.chmod(0o755)
                 names.append(name)
+        except BaseException:
+            # A failed destination write can leave the child blocked on a full
+            # output pipe. Stop it before waiting, including on interruption.
+            blobs.kill()
+            raise
         finally:
-            blobs.stdin.close()
-            blobs.wait()
+            try:
+                blobs.stdin.close()
+            finally:
+                blobs.stdout.close()
+                blobs.wait()
     return names
 
 
@@ -101,7 +141,11 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
     objects = tips(records)
     if not records.strip() and not from_git:
         raise ValueError('Missing Git pre-push records; use the transaction-aware runner')
+    if not objects or not hooks:
+        return 0
     status = 0
+    implementation, executable = select_shell(shell)
+    policy_dir = policy_directory()
     for oid in objects:
         with tempfile.TemporaryDirectory(prefix='scan-push-') as temporary:
             snapshot = Path(temporary) / 'tree'
@@ -118,7 +162,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
             manifest = Path(temporary) / 'paths'
             manifest.write_bytes(b''.join(os.fsencode(p) + b'\0' for p in names))
             env = dict(os.environ, SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
-                       SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR='.scanning/configs')
+                       SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR=policy_dir)
             for key in tuple(env):
                 if key.startswith('GIT_'):
                     del env[key]
@@ -128,6 +172,10 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                 extensions = ('.cs', '.csproj') if hook == 'dotnet-build' else ('.tf',)
                 if not any(name.lower().endswith(extensions) for name in names):
                     continue
+                policy = { 'checkov': '.checkov.yaml', 'checkov-strict': '.checkov.yaml',
+                           'tflint': '.tflint.hcl' }.get(hook)
+                if policy and not (snapshot / policy_dir / policy).is_file():
+                    raise ValueError(f'{hook} requires tracked {policy_dir}/{policy}; no fallback policy is allowed')
                 if hook == 'dotnet-build':
                     build = config.get('languages', {}).get('csharp', {}).get('build', {})
                     for field in ('working_dir', 'solution'):
@@ -136,19 +184,51 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                         if path.is_absolute() or '..' in path.parts or ':' in configured:
                             raise ValueError('Build paths must remain inside the pushed snapshot')
                 print(f'[pre-push] {hook}: scanning object {oid}', flush=True)
-                script = str(HERE / f'{hook}.{shell}')
-                command = (['pwsh', '-NoProfile', '-File', script] if shell == 'ps1'
-                           else [bash(), script])
+                script = str(HERE / f'{hook}.{implementation}')
+                command = ([executable, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script] if implementation == 'ps1'
+                           else [executable, script])
                 result = subprocess.run(command + extra, cwd=snapshot, env=env)
                 status = max(status, int(result.returncode != 0))
     return status
 
 
-def configured_hooks() -> list[tuple[str, list[str]]]:
+def platform_hook(repo: dict, hook: dict) -> bool:
+    if hook.get('id') not in HOOKS:
+        return False
+    location = repo.get('repo', '').rstrip('/')
+    if location in (PLATFORM_REPOSITORY, PLATFORM_REPOSITORY + '.git'):
+        return True
+    if location == 'local':
+        entry = shlex.split(hook.get('entry', ''))
+        return any(part.replace('\\', '/') == 'hooks/dispatcher.sh' and
+                   entry[index + 1:index + 2] == [hook['id']]
+                   for index, part in enumerate(entry))
+    return False
+
+
+def push_configuration() -> tuple[list[tuple[str, list[str]]], dict]:
     import yaml
     config = yaml.safe_load(Path('.pre-commit-config.yaml').read_text(encoding='utf-8'))
-    return [(h['id'], h.get('args', [])) for repo in config['repos'] for h in repo['hooks']
-            if h['id'] in HOOKS and 'pre-push' in h.get('stages', config.get('default_stages', ['pre-push']))]
+    forwarded = copy.deepcopy(config)
+    selected = []
+    retained_repos = []
+    for repo in forwarded['repos']:
+        retained = []
+        for hook in repo['hooks']:
+            if platform_hook(repo, hook) and any(stage in ('pre-push', 'push')
+                    for stage in hook.get('stages', MANIFEST_STAGES[hook['id']])):
+                selected.append((hook['id'], hook.get('args', [])))
+            else:
+                retained.append(hook)
+        if retained:
+            repo['hooks'] = retained
+            retained_repos.append(repo)
+    forwarded['repos'] = retained_repos
+    return selected, forwarded
+
+
+def configured_hooks() -> list[tuple[str, list[str]]]:
+    return push_configuration()[0]
 
 
 def install() -> int:
@@ -164,6 +244,8 @@ def install() -> int:
         return 0
     if 'File generated by pre-commit' not in content:
         raise ValueError('Refusing to replace an unrecognized pre-push hook')
+    if '# end templated' not in content:
+        raise ValueError('Unrecognized runner template; cannot safely preserve its configuration')
     if original.exists():
         if 'File generated by pre-commit' not in original.read_text(encoding='utf-8'):
             raise ValueError('Unrecognized pre-push backup; review before reinstalling')
@@ -172,15 +254,24 @@ def install() -> int:
         legacy = path.with_name('pre-push.legacy')
         if legacy.is_file() and marker in legacy.read_text(encoding='utf-8'):
             legacy.unlink()
-    path.replace(original)
-    # Relative, repo-owned entry point; no machine-specific paths in generated files.
-    path.write_text('#!/usr/bin/env bash\n' + marker + '\n'
-                    'for py in python3 python py; do\n'
-                    '  if command -v "$py" >/dev/null && "$py" -c "" 2>/dev/null; then\n'
-                    '    exec "$py" hooks/pre-push.py --pre-commit-runner "$@"\n'
-                    '  fi\ndone\necho "Python is required for push snapshots" >&2\nexit 1\n',
-                    encoding='utf-8', newline='\n')
-    path.chmod(0o755)
+    # Prepare and back up before atomically replacing the active hook.
+    # open(newline=...) works on every supported Python, including 3.8 and 3.9.
+    prepared = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n',
+                                         prefix='.scan-push-', dir=path.parent, delete=False) as output:
+            prepared = Path(output.name)
+            output.write('#!/usr/bin/env bash\n' + marker + '\n'
+                         'for py in python3 python py; do\n'
+                         '  if command -v "$py" >/dev/null && "$py" -c "" 2>/dev/null; then\n'
+                         '    exec "$py" hooks/pre-push.py --pre-commit-runner "$@"\n'
+                         '  fi\ndone\necho "Python is required for push snapshots" >&2\nexit 1\n')
+        prepared.chmod(0o755)
+        shutil.copy2(path, original)
+        prepared.replace(path)
+    finally:
+        if prepared is not None and prepared.exists():
+            prepared.unlink()
     return 0
 
 
@@ -189,20 +280,32 @@ def main() -> int:
     parser.add_argument('--install-pre-commit', action='store_true')
     parser.add_argument('--pre-commit-runner', action='store_true')
     parser.add_argument('--stdin-from-git', action='store_true')
-    parser.add_argument('--shell', choices=('sh', 'ps1'), default='ps1' if os.name == 'nt' else 'sh')
+    parser.add_argument('--shell', choices=('auto', 'sh', 'ps1'), default='auto')
     parser.add_argument('--hooks', default='checkov,tflint,dotnet-build')
     args, extra = parser.parse_known_args()
     if args.install_pre_commit:
         return install()
     records = sys.stdin.read()
     if args.pre_commit_runner:
-        hooks = configured_hooks()
+        import yaml
+        hooks, forwarded = push_configuration()
         status = scan(records, hooks, args.shell, from_git=True)
         if status:
             return status
         original = os.fsdecode(git('rev-parse', '--git-path', 'hooks/pre-push.pre-commit')).strip()
-        env = dict(os.environ, SKIP=','.join(filter(None, [os.environ.get('SKIP', ''), *HOOKS])))
-        return subprocess.run([bash(), original, *extra], input=records, text=True, env=env).returncode
+        source = Path(original).read_text(encoding='utf-8')
+        if '# end templated' not in source:
+            raise ValueError('Original runner template is unrecognized')
+        source = source.replace('# end templated', '# end templated\nARGS+=(--config "$SCAN_PUSH_FILTERED_CONFIG")', 1)
+        with tempfile.TemporaryDirectory(prefix='scan-push-config-') as directory:
+            path = Path(directory) / 'pre-commit-config.yaml'
+            with path.open('w', encoding='utf-8', newline='\n') as output:
+                yaml.safe_dump(forwarded, output)
+            env = dict(os.environ, SCAN_PUSH_FILTERED_CONFIG=str(path))
+            # Keep the saved runner's interpreter, hook directory, arguments and
+            # legacy chaining. Only its config is overridden in this invocation.
+            return subprocess.run([bash(), '-c', source, original, *extra],
+                                  input=records, text=True, env=env).returncode
     return scan(records, [(h, extra) for h in args.hooks.split(',')], args.shell, from_git=args.stdin_from_git)
 
 
