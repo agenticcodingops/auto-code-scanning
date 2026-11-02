@@ -59,6 +59,9 @@ param(
     [switch]$Detailed
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeTree $OutputPath
+
 # Ensure output directory exists
 if (-not (Test-Path $OutputPath)) {
     New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
@@ -295,9 +298,11 @@ catch {
 # SAVE METRICS
 # =============================================================================
 $metricsFile = Join-Path $OutputPath "metrics-$dateStamp.json"
+Assert-SafeWritePath $metricsFile
 $metrics | ConvertTo-Json -Depth 10 | Set-Content $metricsFile -Encoding UTF8
 
 $latestFile = Join-Path $OutputPath "metrics-latest.json"
+Assert-SafeWritePath $latestFile
 $metrics | ConvertTo-Json -Depth 10 | Set-Content $latestFile -Encoding UTF8
 
 # =============================================================================
@@ -311,7 +316,9 @@ if ($UploadArtifact -and $env:GITHUB_ACTIONS) {
 
     # Set output for workflow consumption
     if ($env:GITHUB_OUTPUT) {
+        Assert-SafeWritePath $env:GITHUB_OUTPUT
         "metrics-file=$metricsFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        Assert-SafeWritePath $env:GITHUB_OUTPUT
         "artifact-name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
     }
 }

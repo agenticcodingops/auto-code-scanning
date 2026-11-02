@@ -179,7 +179,12 @@ def test_tflint_runtime_errors_use_explicit_compatibility_only(tmp_path, hook_bu
     else:
         command = f"function tflint {{ $global:LASTEXITCODE=0; if ($args -notcontains '--init') {{ $global:LASTEXITCODE={status} }} }}; & '{hook}'; exit $LASTEXITCODE"
         args = [executable, '-NoProfile', '-Command', command]
-    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ, SCAN_ALLOW_TOOL_ERRORS='1' if opt_in else '0'),
+    trusted = tmp_path.parent / (tmp_path.name + '-trusted.hcl')
+    trusted.write_text('# trusted fixture\n')
+    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ,
+                            SCAN_TFLINT_CONFIG=str(trusted),
+                            SCAN_TFLINT_PLUGIN_DIR=str(tmp_path.parent / 'trusted-plugins'),
+                            SCAN_ALLOW_TOOL_ERRORS='1' if opt_in else '0'),
                             capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == (0 if opt_in else 1), result.stdout + result.stderr
 

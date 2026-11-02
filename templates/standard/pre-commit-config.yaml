@@ -8,27 +8,25 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: c4a0b883114b00d8d76b479c820ce7950211c99b  # v4.5.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        args: ["--unsafe"]
       - id: check-json
       - id: detect-private-key
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.88.0
+    rev: 4bf25029a7a45d7d69592250dd3c327a74d77631  # v1.88.0
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
-      - id: terraform_tflint
-        args:
-          - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
     rev: v2.3.6  # x-release-please-version
     hooks:
+      - id: tflint
+        stages: [pre-push]
       - id: trivy-secrets
         stages: [pre-commit]
       - id: gitleaks

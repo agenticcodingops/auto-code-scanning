@@ -182,7 +182,7 @@ def test_gate_uses_trusted_base_config(wf, raw):
 
 def test_pyyaml_is_ensured_where_yaml_is_parsed(raw):
     # config job + both gate jobs install pyyaml so a missing dep can't silently break it.
-    assert raw.count("pip install --quiet --disable-pip-version-check pyyaml") >= 3
+    assert raw.count("pip install --quiet --disable-pip-version-check PyYAML==6.0.3") >= 3
 
 
 # ---------------------------------------------------------------------------

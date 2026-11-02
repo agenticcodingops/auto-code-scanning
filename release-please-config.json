@@ -23,7 +23,9 @@
       "changelog-path": "CHANGELOG.md",
       "version-file": "version.txt",
       "extra-files": [
+        ".github/workflows/autonomous-fix.yml",
         ".github/workflows/reusable-scan.yml",
+        "scripts/.pre-commit-config.yaml",
         "README.md",
         "docs/APP-CODE-SCANNING.md",
         "docs/BUMP-THE-SCAN.md",

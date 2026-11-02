@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from safe_io import assert_safe_path, assert_safe_tree, copy_file
 
 # Minimum tool versions
 MIN_VERSIONS = {
@@ -131,92 +132,30 @@ def detect_os():
         return system
 
 
-def install_tool_brew(package, display_name, cmd_name=None):
-    """Install a tool via Homebrew (macOS)."""
+def install_pinned_binary(package, display_name):
     global tools_installed, tools_failed
-    cmd_name = cmd_name or package
-
-    if command_exists(cmd_name):
-        ver = get_tool_version(cmd_name)
-        if meets_minimum(cmd_name, ver):
-            min_str = f" (>= {version_str(MIN_VERSIONS.get(cmd_name, ()))})" if cmd_name in MIN_VERSIONS else ""
-            log_ok(f"{display_name} v{version_str(ver)}{min_str}")
-            tools_installed += 1
-            return True
-
-    log_info(f"Installing {display_name} via Homebrew...")
-    rc, _, stderr = run_cmd(["brew", "install", package])
-    if rc == 0 and command_exists(cmd_name):
-        ver = get_tool_version(cmd_name)
-        log_ok(f"{display_name} installed (v{version_str(ver)})")
-        tools_installed += 1
-        return True
-    else:
-        log_warn(f"{display_name} installation failed: {stderr}")
+    destination = Path.home() / '.local-scanning-tools' / 'bin'
+    rc, _, error = run_cmd([sys.executable, str(Path(__file__).with_name('install-scanner.py')),
+                            package, '--destination', str(destination)])
+    if rc:
+        log_err(f"{display_name} installation failed: {error}")
         tools_failed += 1
         return False
+    os.environ['PATH'] = str(destination) + os.pathsep + os.environ.get('PATH', '')
+    tools_installed += 1
+    return True
+
+
+def install_tool_brew(package, display_name, cmd_name=None):
+    return install_pinned_binary(package, display_name)
 
 
 def install_tool_apt(package, display_name, cmd_name=None):
-    """Install a tool via apt (Linux). Falls back to snap/direct download."""
-    global tools_installed, tools_failed
-    cmd_name = cmd_name or package
-
-    if command_exists(cmd_name):
-        ver = get_tool_version(cmd_name)
-        if meets_minimum(cmd_name, ver):
-            min_str = f" (>= {version_str(MIN_VERSIONS.get(cmd_name, ()))})" if cmd_name in MIN_VERSIONS else ""
-            log_ok(f"{display_name} v{version_str(ver)}{min_str}")
-            tools_installed += 1
-            return True
-
-    log_info(f"Installing {display_name} via apt...")
-    rc, _, stderr = run_cmd(["sudo", "apt-get", "install", "-y", package])
-    if rc == 0 and command_exists(cmd_name):
-        ver = get_tool_version(cmd_name)
-        log_ok(f"{display_name} installed (v{version_str(ver)})")
-        tools_installed += 1
-        return True
-    else:
-        log_warn(f"{display_name} apt installation failed: {stderr}")
-        tools_failed += 1
-        return False
+    return install_pinned_binary(package, display_name)
 
 
 def install_trivy_linux():
-    """Install Trivy on Linux via official repo."""
-    global tools_installed, tools_failed
-
-    if command_exists("trivy"):
-        ver = get_tool_version("trivy")
-        if meets_minimum("trivy", ver):
-            log_ok(f"Trivy v{version_str(ver)} (>= {version_str(MIN_VERSIONS['trivy'])})")
-            tools_installed += 1
-            return True
-
-    log_info("Installing Trivy via official repository...")
-    commands = [
-        ["sudo", "apt-get", "install", "-y", "wget", "apt-transport-https", "gnupg", "lsb-release"],
-        ["bash", "-c", "wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null"],
-        ["bash", "-c", 'echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list'],
-        ["sudo", "apt-get", "update"],
-        ["sudo", "apt-get", "install", "-y", "trivy"],
-    ]
-    for cmd in commands:
-        rc, _, stderr = run_cmd(cmd)
-        if rc != 0:
-            log_warn(f"Trivy installation step failed: {stderr}")
-            tools_failed += 1
-            return False
-
-    if command_exists("trivy"):
-        ver = get_tool_version("trivy")
-        log_ok(f"Trivy installed (v{version_str(ver)})")
-        tools_installed += 1
-        return True
-
-    tools_failed += 1
-    return False
+    return install_pinned_binary('trivy', 'Trivy')
 
 
 def install_pip_tool(package, display_name, cmd_name=None):
@@ -233,7 +172,7 @@ def install_pip_tool(package, display_name, cmd_name=None):
             return True
 
     log_info(f"Installing {display_name} via pip...")
-    rc, _, stderr = run_cmd([sys.executable, "-m", "pip", "install", package, "--quiet"])
+    rc, _, stderr = run_cmd([sys.executable, "-m", "pip", "install", {"pre-commit":"pre-commit==4.3.0", "checkov":"checkov==3.3.19"}[package], "--quiet"])
     if rc == 0:
         # pip install may put the command somewhere not yet on PATH; recheck
         if command_exists(cmd_name):
@@ -263,7 +202,7 @@ def install_snyk():
         return False
 
     log_info("Installing Snyk CLI via npm (optional - requires Snyk license)...")
-    rc, _, stderr = run_cmd(["npm", "install", "-g", "snyk"])
+    rc, _, stderr = run_cmd(["npm", "install", "-g", "snyk@1.1307.4"])
     if rc == 0 and command_exists("snyk"):
         ver = get_tool_version("snyk")
         log_ok(f"Snyk CLI installed (v{version_str(ver)}) [optional]")
@@ -278,6 +217,7 @@ def install_snyk():
 
 def install_tools(os_type, dry_run=False):
     """Install all required tools for the detected OS."""
+    global tools_installed
     if dry_run:
         log_info("Dry run - would install: trivy, checkov, tflint, gitleaks, pre-commit")
         return
@@ -293,10 +233,6 @@ def install_tools(os_type, dry_run=False):
         return
 
     if os_type == "macos":
-        # Check Homebrew
-        if not command_exists("brew"):
-            log_err("Homebrew not found. Install from https://brew.sh")
-            return
 
         install_tool_brew("trivy", "Trivy")
         install_tool_brew("tflint", "tflint")
@@ -305,23 +241,7 @@ def install_tools(os_type, dry_run=False):
     elif os_type == "linux":
         install_trivy_linux()
 
-        # tflint on Linux - direct download
-        if not command_exists("tflint"):
-            log_info("Installing tflint via install script...")
-            rc, _, _ = run_cmd(["bash", "-c", "curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash"])
-            if rc == 0 and command_exists("tflint"):
-                ver = get_tool_version("tflint")
-                log_ok(f"tflint installed (v{version_str(ver)})")
-                global tools_installed, tools_failed
-                tools_installed += 1
-            else:
-                log_warn("tflint installation failed")
-                tools_failed += 1
-        else:
-            ver = get_tool_version("tflint")
-            if meets_minimum("tflint", ver):
-                log_ok(f"tflint v{version_str(ver)} (>= {version_str(MIN_VERSIONS['tflint'])})")
-                tools_installed += 1
+        install_pinned_binary('tflint', 'TFLint')
 
         # Gitleaks on Linux
         if not command_exists("gitleaks"):
@@ -345,6 +265,8 @@ def copy_configs(cloud_provider, repo_path):
     log_step(f"Copying {cloud_provider.upper()} Configs")
 
     scanning_config_dir = repo_path / ".scanning" / "configs"
+    assert_safe_path(repo_path)
+    assert_safe_path(scanning_config_dir)
     scanning_config_dir.mkdir(parents=True, exist_ok=True)
 
     # Look for configs in multiple locations (first match wins)
@@ -382,7 +304,7 @@ def copy_configs(cloud_provider, repo_path):
             count = 0
             for f in provider_dir.iterdir():
                 if f.is_file():
-                    shutil.copy2(f, scanning_config_dir / f.name)
+                    copy_file(f, scanning_config_dir / f.name)
                     log_info(f"Copied {f.name}")
                     count += 1
             log_ok(f"Copied {count} provider config(s) for {cloud_provider.upper()}")
@@ -394,13 +316,13 @@ def copy_configs(cloud_provider, repo_path):
                 if f.is_file():
                     dest = scanning_config_dir / f.name
                     if not dest.exists():
-                        shutil.copy2(f, dest)
+                        copy_file(f, dest)
 
         # Copy suppression template to repo root
         suppression_src = scanning_config_dir / ".scan-suppressions.yaml"
         suppression_dest = repo_path / ".scan-suppressions.yaml"
         if suppression_src.exists() and not suppression_dest.exists():
-            shutil.copy2(suppression_src, suppression_dest)
+            copy_file(suppression_src, suppression_dest)
             log_ok("Copied suppression template to .scan-suppressions.yaml")
     else:
         log_warn(f"Could not find config source for {cloud_provider}")
@@ -413,7 +335,7 @@ def copy_tier_template(tier, repo_path, config_source_dir, force=False):
     """Copy the tier template to .pre-commit-config.yaml."""
     log_step(f"Setting Up {tier} Tier Template")
 
-    dest = repo_path / ".pre-commit-config.yaml"
+    dest = assert_safe_path(repo_path / ".pre-commit-config.yaml")
     if dest.exists() and not force:
         log_info(".pre-commit-config.yaml already exists - skipping template copy")
         log_info("Use --force to overwrite existing config")
@@ -442,7 +364,7 @@ def copy_tier_template(tier, repo_path, config_source_dir, force=False):
     if template_source:
         if dest.exists():
             log_info(f"Overwriting existing .pre-commit-config.yaml (--force)")
-        shutil.copy2(template_source, dest)
+        copy_file(template_source, dest)
         log_ok(f"Copied {tier} tier template to .pre-commit-config.yaml")
     else:
         log_warn(f"Could not find {tier} tier template")

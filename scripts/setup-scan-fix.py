@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from safe_io import copy_file, copy_tree, assert_safe_path
+
 PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -33,8 +35,7 @@ def have(cmd) -> bool:
 
 
 def copy(src: Path, dst: Path):
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
+    copy_file(src, dst)
 
 
 def main(argv) -> int:
@@ -48,7 +49,7 @@ def main(argv) -> int:
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args(argv[1:])
 
-    repo = Path(args.repo_path).resolve()
+    repo = assert_safe_path(args.repo_path)
     langs = args.languages
     if args.cloud_provider and "terraform" not in langs:
         langs = ",".join([p for p in [langs, "terraform"] if p])
@@ -71,11 +72,11 @@ def main(argv) -> int:
     # 2) Vendor hooks + scripts
     step("Vendoring shared hooks + scripts")
     if repo != PLATFORM_ROOT:
-        shutil.copytree(PLATFORM_ROOT / "hooks", repo / "hooks", dirs_exist_ok=True)
-        shutil.copytree(PLATFORM_ROOT / "schemas", repo / "schemas", dirs_exist_ok=True)
+        copy_tree(PLATFORM_ROOT / "hooks", repo / "hooks")
+        copy_tree(PLATFORM_ROOT / "schemas", repo / "schemas")
         for s in ("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py",
                   "validate-scan-config.py", "render-scan-config.py", "scan.py",
-                  "scan_policy.py", "scan_reports.py", "validate-suppressions.py",
+                  "safe_io.py", "scan_policy.py", "scan_reports.py", "validate-suppressions.py",
                   "create-baseline.ps1", "finalize_baseline.py"):
             copy(PLATFORM_ROOT / "scripts" / s, repo / "scripts" / s)
         ok("Copied hooks/, schemas/, and shared scripts/")
@@ -124,7 +125,7 @@ def main(argv) -> int:
         copy(PLATFORM_ROOT / "templates/workflows/terraform-scan.yml", repo / ".github/workflows/terraform-scan.yml")
     if args.enable_fix_loop:
         copy(PLATFORM_ROOT / "templates/fix-loop/autonomous-fix.yml", repo / ".github/workflows/autonomous-fix.yml")
-    ok("Caller workflows copied (remember to pin @vX.Y.Z)")
+    ok("Caller workflows copied (review the immutable commit pins)")
 
     # 6+7) Labels + secret verification
     if args.enable_fix_loop:
@@ -166,7 +167,7 @@ def main(argv) -> int:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 
     print("\n=== SETUP COMPLETE ===")
-    print("Next: review scan-config.yaml; pin caller workflows to a release tag; test a commit.")
+    print("Next: review scan-config.yaml; review caller workflow commit pins; test a commit.")
     if args.enable_fix_loop:
         print("Add the 'ai-autofix' label to a PR to opt it into the fix-loop.")
     return 0

@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import sys
+from safe_io import write_text
 from scan_policy import occurrence_fingerprint, scanner_path
 
 
@@ -21,4 +22,4 @@ def finalize(data, root):
 if __name__ == "__main__":
     source, destination, root = sys.argv[1:]
     data = json.loads(Path(source).read_text(encoding="utf-8-sig"))
-    Path(destination).write_text(json.dumps(finalize(data, root), indent=2) + "\n", encoding="utf-8")
+    write_text(destination, json.dumps(finalize(data, root), indent=2) + "\n")

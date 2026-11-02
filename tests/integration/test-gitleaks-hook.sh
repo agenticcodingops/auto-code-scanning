@@ -26,7 +26,7 @@ fi
 py=""
 # The Windows "python3" app-execution alias exists and does not run Python.
 for candidate in python3 python py; do
-    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c "import json" >/dev/null 2>&1; then
+    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -I -c "import json" >/dev/null 2>&1; then
         py="${candidate}"
         break
     fi
@@ -57,7 +57,7 @@ git config user.name "scanner-eval"
 git config commit.gpgsign false
 
 # Deterministic high-entropy fakes. The strings stay in this temp repo.
-"${py}" - <<'PY'
+"${py}" -I - <<'PY'
 import hashlib
 import json
 import pathlib
@@ -96,6 +96,8 @@ pathlib.Path(".runtime-secrets.json").write_text(
 )
 PY
 
+# A same-named repository module must not replace a standard-library parser.
+printf 'REPOSITORY_MODULE = True\n' > json.py
 git add sample.txt
 
 export SCAN_HOOK_ID="gitleaks"
@@ -121,7 +123,7 @@ write_exec_wrapper() {
 
 prepare_parser_free_path() {
     local tool target
-    for tool in gitleaks git mktemp wc date mkdir rm cat dirname; do
+    for tool in gitleaks git mktemp wc date mkdir rm mv cat dirname; do
         target="$(command -v "${tool}" 2>/dev/null || true)"
         if [[ -z "${target}" ]]; then
             echo "FAIL: ${tool} is required to build a parser-free PATH" >&2
@@ -173,7 +175,7 @@ run_hook() {
 assert_no_secrets() {
     local label="$1"
     shift
-    "${py}" - "${label}" "$@" <<'PY'
+    "${py}" -I - "${label}" "$@" <<'PY'
 import json
 import pathlib
 import sys
@@ -214,7 +216,7 @@ if [[ "${status}" -ne 1 ]]; then
     exit 1
 fi
 assert_no_secrets "findings" "${out_file}" "${err_file}"
-"${py}" - "${out_file}" "${err_file}" <<'PY'
+"${py}" -I - "${out_file}" "${err_file}" <<'PY'
 import json
 import pathlib
 import sys
@@ -266,7 +268,7 @@ for item in findings:
 print("PASS: 3 findings with rule, file, and line, and no secret value")
 PY
 
-if [[ "${impl}" == "sh" ]]; then
+if [[ "${impl}" == "sh" && "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
     echo "=== sh: JSON findings report and no parser ==="
     prepare_parser_free_path
     hook_path="${parser_free}"
@@ -281,7 +283,7 @@ if [[ "${impl}" == "sh" ]]; then
         exit 1
     fi
     assert_no_secrets "no-parser" "${out_file}" "${err_file}"
-    "${py}" - "${out_file}" "${err_file}" <<'PY'
+    "${py}" -I - "${out_file}" "${err_file}" <<'PY'
 import json
 import pathlib
 import sys
@@ -346,7 +348,7 @@ if [[ "${impl}" == "ps1" ]]; then
         echo "FAIL: unparsed report leaked the stub marker" >&2
         exit 1
     fi
-    "${py}" - <<'PY'
+    "${py}" -I - <<'PY'
 import json
 import pathlib
 import sys
@@ -375,7 +377,7 @@ if [[ "${status}" -ne 0 ]]; then
     exit 1
 fi
 assert_no_secrets "broken-config" "${out_file}" "${err_file}"
-"${py}" - "${out_file}" "${err_file}" <<'PY'
+"${py}" -I - "${out_file}" "${err_file}" <<'PY'
 import json
 import pathlib
 import sys
@@ -400,7 +402,7 @@ if scan["summary"]["total_findings"] != 0 or scan["findings"]:
 print("PASS: broken config warned and allowed the commit")
 PY
 
-if [[ "${impl}" == "sh" ]]; then
+if [[ "${impl}" == "sh" && "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
     echo "=== sh: broken config and no parser ==="
     hook_path="${parser_free}"
     status="$(run_hook "${out_file}" "${err_file}")"
@@ -418,7 +420,7 @@ if [[ "${impl}" == "sh" ]]; then
         cat "${err_file}" >&2
         exit 1
     fi
-    "${py}" - <<'PY'
+    "${py}" -I - <<'PY'
 import json
 import pathlib
 import sys
@@ -442,7 +444,7 @@ if [[ "${status}" -ne 0 ]]; then
     cat "${err_file}" >&2
     exit 1
 fi
-"${py}" - <<'PY'
+"${py}" -I - <<'PY'
 import json
 import pathlib
 import sys
@@ -454,7 +456,7 @@ if scan["summary"]["total_findings"] != 0 or scan["findings"]:
 print("PASS: clean staged file")
 PY
 
-if [[ "${impl}" == "sh" ]]; then
+if [[ "${impl}" == "sh" && "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
     echo "=== sh: clean file and no parser ==="
     hook_path="${parser_free}"
     status="$(run_hook "${out_file}" "${err_file}")"
@@ -465,7 +467,7 @@ if [[ "${impl}" == "sh" ]]; then
         cat "${err_file}" >&2
         exit 1
     fi
-    "${py}" - <<'PY'
+    "${py}" -I - <<'PY'
 import json
 import pathlib
 import sys

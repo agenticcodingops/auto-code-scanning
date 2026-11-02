@@ -65,22 +65,94 @@ function Get-HookExitCode {
 # JSON output
 # ---------------------------------------------------------------------------
 
+function Resolve-HookPath {
+    param([string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
+function Assert-SafeWritePath {
+    param([string]$Path)
+    $current = Resolve-HookPath $Path
+    while ($current) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Refusing a symlink or reparse point in output path'
+        }
+        $parent = [IO.Directory]::GetParent($current)
+        $current = if ($parent) { $parent.FullName } else { $null }
+    }
+}
+
+function Assert-SafeTree {
+    param([string]$Path)
+    Assert-SafeWritePath $Path
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        foreach ($item in Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction Stop) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw 'Refusing a symlink or reparse point in output tree'
+            }
+        }
+    }
+}
+
 function Ensure-ScanningDir {
-    $scanDir = '.scanning'
-    if (-not (Test-Path $scanDir)) {
-        New-Item -ItemType Directory -Path $scanDir -Force | Out-Null
+    Assert-SafeWritePath '.scanning/last-scan.json'
+    if (-not (Test-Path -LiteralPath '.scanning')) {
+        New-Item -ItemType Directory -Path '.scanning' | Out-Null
     }
 }
 
 function Write-ScanJson {
-    param(
-        [Parameter(Mandatory)]
-        [string]$JsonContent
-    )
-
+    param([Parameter(Mandatory)][string]$JsonContent)
     Ensure-ScanningDir
-    $JsonContent | Set-Content -Path '.scanning/last-scan.json' -Encoding UTF8 -NoNewline
-    Write-HookVerbose "Wrote scan results to .scanning/last-scan.json"
+    $temporary = Resolve-HookPath (Join-Path '.scanning' ('.scan-write-' + [guid]::NewGuid()))
+    $destination = Resolve-HookPath '.scanning/last-scan.json'
+    try {
+        [IO.File]::WriteAllText($temporary, $JsonContent)
+        Assert-SafeWritePath '.scanning/last-scan.json'
+        if ([IO.File]::Exists($destination)) {
+            [IO.File]::Replace($temporary, $destination, [NullString]::Value)
+        } else {
+            [IO.File]::Move($temporary, $destination)
+        }
+    } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
+}
+
+function Assert-ExternalPath {
+    param([string]$Path)
+    if (-not [IO.Path]::IsPathRooted($Path)) { throw 'Trusted path must be absolute' }
+    Assert-SafeWritePath $Path
+    $root = (& git rev-parse --show-toplevel 2>$null)
+    if (-not $root) { $root = (Get-Location).Path }
+    $root = [IO.Path]::GetFullPath($root).TrimEnd('/', '\')
+    $full = [IO.Path]::GetFullPath($Path)
+    if ($full -eq $root -or $full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Trusted path must be outside the scanned checkout'
+    }
+}
+
+function Assert-TrustedTflintConfig {
+    param([string]$Path)
+    Assert-ExternalPath $Path
+    if (-not $Path.EndsWith('.hcl', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Trusted linter configuration must be an HCL file ending in .hcl'
+    }
+    if ((Get-Content -LiteralPath $Path -Raw) -cmatch 'plugin_dir') {
+        throw 'Remove plugin_dir from the trusted config; use SCAN_TFLINT_PLUGIN_DIR'
+    }
+}
+
+function Get-TrustedAppTool {
+    param([string]$Tool)
+    $bin = [Environment]::GetEnvironmentVariable("SCAN_$($Tool.ToUpper())_BIN")
+    $config = [Environment]::GetEnvironmentVariable("SCAN_$($Tool.ToUpper())_CONFIG")
+    foreach ($path in @($bin, $config)) {
+        if (-not $path -or -not [IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Set SCAN_$($Tool.ToUpper())_BIN and SCAN_$($Tool.ToUpper())_CONFIG to external trusted files"
+        }
+        Assert-ExternalPath $path
+    }
+    return @($bin, $config)
 }
 
 function New-ScanId {
@@ -366,7 +438,7 @@ function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -ErrorAction SilentlyContinue) {
             try {
-                & $cand -c "" 2>$null
+                & $cand -I -c "" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $cand }
             } catch { }
         }
@@ -405,7 +477,7 @@ except Exception:
     $tmp = New-TemporaryFile
     try {
         Set-Content -Path $tmp -Value $script -Encoding UTF8
-        $out = & $py $tmp $Key $Default $cfg 2>$null
+        $out = & $py -E -P $tmp $Key $Default $cfg 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $out) { return $Default }
         return ($out | Select-Object -First 1).ToString().Trim()
     } catch {
@@ -530,6 +602,8 @@ function Test-ToolAvailable {
         Write-HookWarn "$ToolName unavailable; explicit local fail-open opt-in"
         return $false
     }
+    $command = Get-Command $ToolName -ErrorAction Stop
+    if ($command.CommandType -in @('Application', 'ExternalScript')) { Assert-ExternalPath $command.Source }
     return $true
 }
 

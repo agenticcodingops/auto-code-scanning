@@ -57,6 +57,9 @@ param(
     [switch]$ShowVerbose
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeTree $OutputPath
+
 # Ensure output directory exists
 if (-not (Test-Path $OutputPath)) {
     New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
@@ -208,9 +211,11 @@ if (-not $results.summary.pre_push_within_target) {
 
 # Save results
 $resultsFile = Join-Path $OutputPath "performance-$dateStamp.json"
+Assert-SafeWritePath $resultsFile
 $results | ConvertTo-Json -Depth 10 | Set-Content $resultsFile -Encoding UTF8
 
 $latestFile = Join-Path $OutputPath "performance-latest.json"
+Assert-SafeWritePath $latestFile
 $results | ConvertTo-Json -Depth 10 | Set-Content $latestFile -Encoding UTF8
 
 # Display summary

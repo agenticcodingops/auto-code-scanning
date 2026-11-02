@@ -7,12 +7,11 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: c4a0b883114b00d8d76b479c820ce7950211c99b  # v4.5.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        args: ["--unsafe"]
       - id: check-json
       - id: check-added-large-files
         args: ["--maxkb=500"]
@@ -20,18 +19,17 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.88.0
+    rev: 4bf25029a7a45d7d69592250dd3c327a74d77631  # v1.88.0
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
       - id: terraform_docs
-      - id: terraform_tflint
-        args:
-          - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
     rev: v2.3.6  # x-release-please-version
     hooks:
+      - id: tflint
+        stages: [pre-push]
       - id: trivy-secrets
         stages: [pre-commit]
       - id: gitleaks
@@ -59,7 +57,7 @@ repos:
   # security concern. Only enable if your team uses conventional commits.
   # -----------------------------------------------------------------------
   # - repo: https://github.com/commitizen-tools/commitizen
-  #   rev: v3.29.1
+  #   rev: a3498aba5e94c9f7c4acb529b5e7eb6df65fd053  # v3.29.1
   #   hooks:
   #     - id: commitizen
   #       stages: [commit-msg]

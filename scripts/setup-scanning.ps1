@@ -53,6 +53,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeWritePath (Get-Location).Path
+
 $ProgressPreference = "SilentlyContinue"
 
 # ============================================================================
@@ -110,7 +113,11 @@ function Test-AdminRights {
 }
 
 function Refresh-EnvironmentPath {
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $scannerBin = Join-Path $env:USERPROFILE '.local-scanning-tools/bin'
+    $paths = @($scannerBin) + @($env:Path -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') +
+        @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';')
+    $env:Path = ($paths | Where-Object { $_ } | Select-Object -Unique) -join ';'
 }
 
 function Test-CommandExists {
@@ -139,55 +146,11 @@ function Test-ToolMeetsMinimum {
 }
 
 function Install-ChocolateyPackage {
-    param(
-        [string]$PackageName,
-        [string]$DisplayName,
-        [string]$CommandName = $PackageName
-    )
-
-    if (Test-CommandExists $CommandName) {
-        $version = Get-ToolVersion -Command $CommandName
-        if ($version -and (Test-ToolMeetsMinimum -ToolName $CommandName -Actual $version)) {
-            Write-Success "$DisplayName already installed (v$version, >= $($Script:MinVersions[$CommandName]))"
-            $Script:ToolsInstalled++
-            return $true
-        } elseif ($version -and -not (Test-ToolMeetsMinimum -ToolName $CommandName -Actual $version)) {
-            Write-Warn "$DisplayName v$version installed but below minimum $($Script:MinVersions[$CommandName]). Upgrading..."
-            try {
-                choco upgrade $PackageName -y --no-progress 2>&1 | Out-Null
-                Refresh-EnvironmentPath
-            } catch {
-                Write-Err "Failed to upgrade $DisplayName : $_"
-                $Script:ToolsFailed++
-                return $false
-            }
-        } else {
-            Write-Success "$DisplayName already installed"
-            $Script:ToolsInstalled++
-            return $true
-        }
-    }
-
-    Write-Info "Installing $DisplayName..."
-    try {
-        choco install $PackageName -y --no-progress 2>&1 | Out-Null
-        Refresh-EnvironmentPath
-
-        if (Test-CommandExists $CommandName) {
-            $version = Get-ToolVersion -Command $CommandName
-            Write-Success "$DisplayName installed (v$version)"
-            $Script:ToolsInstalled++
-            return $true
-        } else {
-            Write-Warn "$DisplayName installed but command not found - may need PATH refresh"
-            $Script:ToolsInstalled++
-            return $true
-        }
-    } catch {
-        Write-Err "Failed to install $DisplayName : $_"
-        $Script:ToolsFailed++
-        return $false
-    }
+    param([string]$PackageName, [string]$DisplayName, [string]$CommandName = $PackageName)
+    & python "$PSScriptRoot/install-scanner.py" $PackageName
+    if ($LASTEXITCODE -ne 0) { throw "Verified installation failed: $DisplayName" }
+    $env:PATH = (Join-Path $env:USERPROFILE '.local-scanning-tools/bin') + [IO.Path]::PathSeparator + $env:PATH
+    $Script:ToolsInstalled++
 }
 
 # ============================================================================
@@ -229,59 +192,12 @@ if (-not (Test-Path ".git")) {
 # ============================================================================
 
 if (-not $SkipTools) {
-    # Install Chocolatey
-    if (-not $SkipChocolatey) {
-        Write-Step "Setting Up Chocolatey Package Manager"
-
-        if (Test-CommandExists "choco") {
-            Write-Success "Chocolatey already installed"
-        } else {
-            Write-Info "Installing Chocolatey..."
-            try {
-                Set-ExecutionPolicy Bypass -Scope Process -Force
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                $installScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
-                Invoke-Expression $installScript
-                Refresh-EnvironmentPath
-
-                if (Test-CommandExists "choco") {
-                    Write-Success "Chocolatey installed successfully"
-                } else {
-                    Write-Err "Chocolatey installation completed but 'choco' command not found"
-                    Write-Host "Please close and reopen PowerShell, then run this script again" -ForegroundColor Yellow
-                    exit 1
-                }
-            } catch {
-                Write-Err "Failed to install Chocolatey: $_"
-                exit 1
-            }
-        }
+    # Bootstrap dependencies are provisioned separately through the operator's
+    # managed package source; setup never executes remote installer scripts.
+    if (-not (Test-CommandExists 'python') -or -not (Test-CommandExists 'git')) {
+        throw 'Install Python and Git through your managed package source, then rerun setup'
     }
-
-    Write-Step "Installing Security Scanning Tools"
-
-    # Install Python (required for Checkov and pre-commit)
-    if (-not (Test-CommandExists "python")) {
-        Write-Info "Installing Python..."
-        try {
-            choco install python -y --no-progress 2>&1 | Out-Null
-            Refresh-EnvironmentPath
-        } catch {
-            Write-Err "Failed to install Python: $_"
-        }
-    }
-    Write-Success "Python available"
-
-    # Install Git (if not present)
-    if (-not (Test-CommandExists "git")) {
-        Write-Info "Installing Git..."
-        try {
-            choco install git -y --no-progress 2>&1 | Out-Null
-            Refresh-EnvironmentPath
-        } catch {
-            Write-Warn "Failed to install Git: $_"
-        }
-    }
+    Write-Step 'Installing verified scanner binaries'
 
     # Install Trivy
     Install-ChocolateyPackage -PackageName "trivy" -DisplayName "Trivy (IaC Security Scanner)"
@@ -300,7 +216,7 @@ if (-not $SkipTools) {
 
     Write-Info "Upgrading pip..."
     try {
-        python -m pip install --upgrade pip --quiet 2>&1 | Out-Null
+        python -m pip install pip==25.2 --quiet 2>&1 | Out-Null
     } catch {
         Write-Warn "Could not upgrade pip: $_"
     }
@@ -308,7 +224,7 @@ if (-not $SkipTools) {
     # Install pre-commit
     Write-Info "Installing pre-commit..."
     try {
-        pip install pre-commit --quiet 2>&1 | Out-Null
+        python -m pip install pre-commit==4.3.0 --quiet 2>&1 | Out-Null
         if (Test-CommandExists "pre-commit") {
             $version = Get-ToolVersion -Command "pre-commit"
             if ($version -and (Test-ToolMeetsMinimum -ToolName "pre-commit" -Actual $version)) {
@@ -330,7 +246,7 @@ if (-not $SkipTools) {
     # Install Checkov
     Write-Info "Installing Checkov (this may take a minute)..."
     try {
-        pip install checkov --quiet 2>&1 | Out-Null
+        python -m pip install checkov==3.3.19 --quiet 2>&1 | Out-Null
         if (Test-CommandExists "checkov") {
             $version = Get-ToolVersion -Command "checkov"
             if ($version -and (Test-ToolMeetsMinimum -ToolName "checkov" -Actual $version)) {
@@ -368,7 +284,7 @@ if (-not $SkipTools) {
     } elseif (Test-CommandExists "npm") {
         Write-Info "Installing Snyk CLI via npm (optional - requires Snyk license)..."
         try {
-            npm install -g snyk 2>&1 | Out-Null
+            npm install -g snyk@1.1307.4 2>&1 | Out-Null
             if (Test-CommandExists "snyk") {
                 $version = Get-ToolVersion -Command "snyk"
                 Write-Success "Snyk CLI installed (v$version) [optional]"
@@ -394,6 +310,7 @@ Write-Step "Copying $($CloudProvider.ToUpper()) Configs to .scanning/configs/"
 $scanningConfigDir = Join-Path $Script:RepoPath ".scanning" "configs"
 
 if (-not (Test-Path $scanningConfigDir)) {
+    Assert-SafeWritePath $scanningConfigDir
     New-Item -ItemType Directory -Path $scanningConfigDir -Force | Out-Null
     Write-Info "Created .scanning/configs/ directory"
 }
@@ -426,6 +343,7 @@ if ($cacheConfigDir) {
     if (Test-Path $providerDir) {
         $configFiles = Get-ChildItem -Path $providerDir -File
         foreach ($file in $configFiles) {
+            Assert-SafeTree $scanningConfigDir
             Copy-Item -Path $file.FullName -Destination $scanningConfigDir -Force
             Write-Verbose "Copied $($file.Name) to .scanning/configs/"
         }
@@ -439,6 +357,7 @@ if ($cacheConfigDir) {
         foreach ($file in $commonFiles) {
             $destPath = Join-Path $scanningConfigDir $file.Name
             if (-not (Test-Path $destPath)) {
+                Assert-SafeWritePath $destPath
                 Copy-Item -Path $file.FullName -Destination $destPath -Force
                 Write-Verbose "Copied common config: $($file.Name)"
             }
@@ -453,6 +372,7 @@ if ($cacheConfigDir) {
 $suppressionDest = Join-Path $Script:RepoPath ".scan-suppressions.yaml"
 $suppressionSrc = Join-Path $scanningConfigDir ".scan-suppressions.yaml"
 if (-not (Test-Path $suppressionDest) -and (Test-Path $suppressionSrc)) {
+    Assert-SafeWritePath $suppressionDest
     Copy-Item -Path $suppressionSrc -Destination $suppressionDest -Force
     Write-Success "Copied suppression template to .scan-suppressions.yaml"
 }
@@ -488,6 +408,7 @@ if (Test-Path $preCommitConfigDest) {
     }
 
     if ($templateSource) {
+        Assert-SafeWritePath $preCommitConfigDest
         Copy-Item -Path $templateSource -Destination $preCommitConfigDest -Force
         Write-Success "Copied $Tier tier template to .pre-commit-config.yaml"
     } else {

@@ -55,6 +55,9 @@ param(
     [string]$Format = "both"
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeTree $OutputPath
+
 # Ensure output directory exists
 if (-not (Test-Path $OutputPath)) {
     New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
@@ -364,6 +367,7 @@ RECOMMENDATIONS
 
     # Save to file
     $textFile = Join-Path $OutputPath "suppression-report-$dateStamp.txt"
+    Assert-SafeWritePath $textFile
     $textReport | Set-Content $textFile -Encoding UTF8
     Write-Host "`nText report saved: $textFile" -ForegroundColor Green
 }
@@ -371,11 +375,13 @@ RECOMMENDATIONS
 # Output JSON report
 if ($Format -in @("json", "both")) {
     $jsonFile = Join-Path $OutputPath "suppression-report-$dateStamp.json"
+    Assert-SafeWritePath $jsonFile
     $report | ConvertTo-Json -Depth 10 | Set-Content $jsonFile -Encoding UTF8
     Write-Host "JSON report saved: $jsonFile" -ForegroundColor Green
 
     # Also save as latest
     $latestFile = Join-Path $OutputPath "suppression-report-latest.json"
+    Assert-SafeWritePath $latestFile
     $report | ConvertTo-Json -Depth 10 | Set-Content $latestFile -Encoding UTF8
 }
 

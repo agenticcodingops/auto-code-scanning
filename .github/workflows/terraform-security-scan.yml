@@ -54,6 +54,7 @@ jobs:
       - name: Run Trivy IaC scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.75.0"
           scan-type: 'config'
           scan-ref: 'terraform'
           severity: 'CRITICAL,HIGH'
@@ -73,6 +74,7 @@ jobs:
       - name: Run Trivy secret scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
+          version: "v0.75.0"
           scan-type: 'fs'
           scanners: 'secret'
           severity: 'HIGH,CRITICAL'
@@ -130,7 +132,10 @@ jobs:
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
         with:
-          tflint_version: latest
+          tflint_version: v0.64.0
+          checksums: |
+            cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+            560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb
 
       - name: Initialize TFLint
         run: tflint --init --config=.tflint.hcl

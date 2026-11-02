@@ -85,7 +85,7 @@ py=""
 # The Windows "python3" app-execution alias exists and exits without running
 # Python. Use the first interpreter that can actually import json.
 for candidate in python3 python; do
-    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c "import json" >/dev/null 2>&1; then
+    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -I -c "import json" >/dev/null 2>&1; then
         py="${candidate}"
         break
     fi
@@ -93,7 +93,7 @@ done
 
 if [[ -n "${py}" ]]; then
     set +e
-    total_high="$("${py}" - "$(to_py_path "${report_file}")" "$(to_py_path "${findings_file}")" "$(to_py_path "${details_file}")" <<'PY'
+    total_high="$("${py}" -I - "$(to_py_path "${report_file}")" "$(to_py_path "${findings_file}")" "$(to_py_path "${details_file}")" <<'PY'
 import json
 import sys
 

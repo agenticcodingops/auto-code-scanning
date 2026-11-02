@@ -39,6 +39,9 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeWritePath (Get-Location).Path
+
 $ProgressPreference = "SilentlyContinue"
 
 # Script-level variables
@@ -183,159 +186,22 @@ function Test-PythonAvailable {
 # ============================================================================
 
 function Install-Scoop {
-    Write-Step "Setting up Scoop package manager..."
-
-    if (Test-CommandAvailable "scoop") {
-        Write-Success "Scoop is already installed"
-        scoop update 2>$null
-        return $true
-    }
-
-    Write-Info "Installing Scoop (no admin required)..."
-    try {
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
-        Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
-
-        if (Test-CommandAvailable "scoop") {
-            Write-Success "Scoop installed successfully"
-            return $true
-        }
-
-        $scoopPath = "$env:USERPROFILE\scoop\shims"
-        if (Test-Path $scoopPath) {
-            $env:Path = "$scoopPath;$env:Path"
-            Write-Success "Scoop installed successfully (PATH updated)"
-            return $true
-        }
-
-        Write-Fail "Scoop installation failed"
-        return $false
-    } catch {
-        Write-Fail "Failed to install Scoop: $_"
-        Write-Info "You can manually install from: https://scoop.sh"
-        return $false
-    }
+    # Retained entry point: package-manager bootstrap is an operator action.
+    if (-not $Script:PythonCmd) { throw 'Install Python through your managed package source, then rerun setup' }
+    return $true
 }
-
-# ============================================================================
-# TOOL INSTALLATION VIA SCOOP
-# ============================================================================
 
 function Install-ScoopTools {
-    Write-Step "Installing security tools via Scoop..."
-
-    if (-not (Test-CommandAvailable "scoop")) {
-        Write-Warn "Scoop not available - skipping Scoop installations"
-        return
-    }
-
-    Write-Info "Adding Scoop buckets..."
-    scoop bucket add extras 2>$null
-    scoop bucket add main 2>$null
-
-    Install-ScoopPackage -Name "Trivy" -Package "trivy"
-    Install-ScoopPackage -Name "tflint" -Package "tflint"
-    Install-ScoopPackage -Name "Gitleaks" -Package "gitleaks"
-
-    # Install Python if not present
-    if (-not $Script:PythonCmd) {
-        Install-ScoopPackage -Name "Python" -Package "python"
-        if (Test-CommandAvailable "python") {
-            $Script:PythonCmd = "python"
-        }
-    }
-}
-
-function Install-ScoopPackage {
-    param(
-        [string]$Name,
-        [string]$Package
-    )
-
-    if (Test-CommandAvailable $Package) {
-        $version = Get-ToolVersion -Command $Package
-        if ($version -and (Test-ToolMeetsMinimum -ToolName $Package -Actual $version)) {
-            $minStr = if ($Script:MinVersions.ContainsKey($Package)) { " (>= $($Script:MinVersions[$Package]))" } else { "" }
-            Write-Success "$Name already installed (v$version$minStr)"
-            $Script:ToolsInstalled++
-            return
-        }
-    }
-
-    Write-Info "Installing $Name..."
-    scoop install $Package 2>$null
-
-    if (Test-CommandAvailable $Package) {
-        $version = Get-ToolVersion -Command $Package
-        Write-Success "$Name installed (v$version)"
+    foreach ($tool in @('trivy', 'tflint', 'gitleaks')) {
+        & $Script:PythonCmd "$PSScriptRoot/install-scanner.py" $tool --destination "$Script:ToolsDir/bin"
+        if ($LASTEXITCODE -ne 0) { throw "Verified installation failed: $tool" }
         $Script:ToolsInstalled++
-    } else {
-        Write-Warn "$Name installation via Scoop failed - will try alternative method"
-        $Script:ToolsFailed++
     }
+    Add-ToUserPath -Directory "$Script:ToolsDir/bin"
 }
 
-# ============================================================================
-# MANUAL DOWNLOAD FALLBACKS
-# ============================================================================
-
-function Install-TrivyManually {
-    if (Test-CommandAvailable "trivy") { return }
-
-    Write-Step "Downloading Trivy manually..."
-
-    if (-not (Test-Path $Script:ToolsDir)) {
-        New-Item -ItemType Directory -Path $Script:ToolsDir -Force | Out-Null
-    }
-
-    try {
-        $trivyUrl = "https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.58.0_windows-64bit.zip"
-        $trivyZip = "$Script:ToolsDir\trivy.zip"
-        $trivyDir = "$Script:ToolsDir\trivy"
-
-        Write-Info "Downloading from GitHub releases..."
-        Invoke-WebRequest -Uri $trivyUrl -OutFile $trivyZip -UseBasicParsing
-
-        Write-Info "Extracting..."
-        Expand-Archive -Path $trivyZip -DestinationPath $trivyDir -Force
-        Remove-Item $trivyZip -Force
-
-        Add-ToUserPath -Directory $trivyDir
-        Write-Success "Trivy downloaded to $trivyDir"
-    } catch {
-        Write-Warn "Manual Trivy download failed: $_"
-        Write-Info "You can manually download from: https://github.com/aquasecurity/trivy/releases"
-    }
-}
-
-function Install-TflintManually {
-    if (Test-CommandAvailable "tflint") { return }
-
-    Write-Step "Downloading tflint manually..."
-
-    if (-not (Test-Path $Script:ToolsDir)) {
-        New-Item -ItemType Directory -Path $Script:ToolsDir -Force | Out-Null
-    }
-
-    try {
-        $tflintUrl = "https://github.com/terraform-linters/tflint/releases/latest/download/tflint_windows_amd64.zip"
-        $tflintZip = "$Script:ToolsDir\tflint.zip"
-        $tflintDir = "$Script:ToolsDir\tflint"
-
-        Write-Info "Downloading from GitHub releases..."
-        Invoke-WebRequest -Uri $tflintUrl -OutFile $tflintZip -UseBasicParsing
-
-        Write-Info "Extracting..."
-        Expand-Archive -Path $tflintZip -DestinationPath $tflintDir -Force
-        Remove-Item $tflintZip -Force
-
-        Add-ToUserPath -Directory $tflintDir
-        Write-Success "tflint downloaded to $tflintDir"
-    } catch {
-        Write-Warn "Manual tflint download failed: $_"
-        Write-Info "You can manually download from: https://github.com/terraform-linters/tflint/releases"
-    }
-}
+function Install-TrivyManually { }
+function Install-TflintManually { }
 
 function Add-ToUserPath {
     param([string]$Directory)
@@ -360,7 +226,7 @@ function Install-PythonTools {
 
     # Ensure pip is available and upgraded
     & $Script:PythonCmd -m ensurepip --upgrade 2>$null
-    & $Script:PythonCmd -m pip install --upgrade pip --user --quiet 2>$null
+    & $Script:PythonCmd -m pip install pip==25.2 --user --quiet 2>$null
 
     # Install pre-commit
     Install-PipPackage -Name "pre-commit"
@@ -379,7 +245,8 @@ function Install-PipPackage {
     param([string]$Name)
 
     Write-Info "Installing $Name..."
-    & $Script:PythonCmd -m pip install $Name --user --quiet 2>$null
+    $pinned = @{ 'pre-commit' = 'pre-commit==4.3.0'; 'checkov' = 'checkov==3.3.19' }
+    & $Script:PythonCmd -m pip install $pinned[$Name] --user --quiet 2>$null
 }
 
 function Update-PythonScriptsPath {
@@ -435,6 +302,7 @@ function Copy-CloudConfigs {
     $scanningConfigDir = Join-Path $Script:RepoPath ".scanning" "configs"
 
     if (-not (Test-Path $scanningConfigDir)) {
+        Assert-SafeWritePath $scanningConfigDir
         New-Item -ItemType Directory -Path $scanningConfigDir -Force | Out-Null
         Write-Info "Created .scanning/configs/ directory"
     }
@@ -462,6 +330,7 @@ function Copy-CloudConfigs {
         if (Test-Path $providerDir) {
             $configFiles = Get-ChildItem -Path $providerDir -File
             foreach ($file in $configFiles) {
+                Assert-SafeTree $scanningConfigDir
                 Copy-Item -Path $file.FullName -Destination $scanningConfigDir -Force
                 Write-Verbose "Copied $($file.Name)"
             }
@@ -473,6 +342,7 @@ function Copy-CloudConfigs {
             Get-ChildItem -Path $commonDir -File | ForEach-Object {
                 $destPath = Join-Path $scanningConfigDir $_.Name
                 if (-not (Test-Path $destPath)) {
+                    Assert-SafeWritePath $destPath
                     Copy-Item -Path $_.FullName -Destination $destPath -Force
                 }
             }
@@ -486,6 +356,7 @@ function Copy-CloudConfigs {
     $suppressionDest = Join-Path $Script:RepoPath ".scan-suppressions.yaml"
     $suppressionSrc = Join-Path $scanningConfigDir ".scan-suppressions.yaml"
     if (-not (Test-Path $suppressionDest) -and (Test-Path $suppressionSrc)) {
+        Assert-SafeWritePath $suppressionDest
         Copy-Item -Path $suppressionSrc -Destination $suppressionDest -Force
         Write-Success "Copied suppression template to .scan-suppressions.yaml"
     }
@@ -525,6 +396,7 @@ function Copy-TierTemplate {
     }
 
     if ($templateSource) {
+        Assert-SafeWritePath $preCommitConfigDest
         Copy-Item -Path $templateSource -Destination $preCommitConfigDest -Force
         Write-Success "Copied $Tier tier template to .pre-commit-config.yaml"
     } else {
@@ -717,7 +589,7 @@ function Main {
         } elseif (Test-CommandAvailable "npm") {
             Write-Info "Installing Snyk CLI via npm (optional - requires Snyk license)..."
             try {
-                npm install -g snyk 2>&1 | Out-Null
+                npm install -g snyk@1.1307.4 2>&1 | Out-Null
                 if (Test-CommandAvailable "snyk") {
                     $version = Get-ToolVersion -Command "snyk"
                     Write-Success "Snyk CLI installed (v$version) [optional]"

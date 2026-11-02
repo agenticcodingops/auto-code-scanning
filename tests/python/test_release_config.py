@@ -29,12 +29,12 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CHANGELOG_INSERT_POINT = re.compile(r"\n###? v?[0-9[]")
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 
-# A pin of this repository in a shipped template: a `uses:` of one of its workflows at a tag, or its
-# `scanning-repo-ref` / `scanning_repo_ref` input set to a tag. A pre-commit entry is two lines: the
+# A pin of this repository in a shipped template: a `uses:` of one of its workflows, or its
+# `scanning-repo-ref` / `scanning_repo_ref` input. A pre-commit entry is two lines: the
 # `repo:` and the `rev:` under it. These are the shapes docs/BUMP-THE-SCAN.md tells an adopter to grep for.
 TEMPLATE_PIN = re.compile(
-    r"auto-code-scanning/\.github/workflows/[\w.-]+\.yml@v\d"
-    r"|scanning[-_]repo[-_]ref:\s*\"?v\d"
+    r"auto-code-scanning/\.github/workflows/[\w.-]+\.yml@"
+    r"|scanning[-_]repo[-_]ref:"
 )
 TEMPLATE_REPO = re.compile(r"repo:\s*https://github\.com/[^\s/]+/auto-code-scanning\s*$")
 
@@ -106,8 +106,10 @@ def test_versions_agree(package, manifest_version):
 
 
 def _template_pins():
-    """(path, line number, line) for each line of a shipped template that pins this repository to a tag."""
-    for path in sorted((REPO_ROOT / "templates").rglob("*")):
+    """Find platform references regardless of their value, including unmarked SHAs."""
+    paths = sorted((REPO_ROOT / "templates").rglob("*"))
+    paths.append(REPO_ROOT / "scripts" / ".pre-commit-config.yaml")
+    for path in paths:
         if path.suffix not in (".yml", ".yaml"):
             continue
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -123,6 +125,45 @@ def _template_pins():
                 yield path, number + 1, following
 
 
+def _assert_release_tag(line):
+    # Inspect the executable value, never a version in an informational comment.
+    value = line.split("#", 1)[0].split(":", 1)[1].strip().strip("\"'")
+    if "@" in value:
+        value = value.rsplit("@", 1)[1]
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", value), f"expected a release tag: {line.strip()}"
+    assert "x-release-please-version" in line, f"unmanaged release tag: {line.strip()}"
+
+
+def test_platform_pins_are_executable_release_managed_tags(package, manifest_version):
+    pins = list(_template_pins())
+    assert pins, "no platform pins found"
+    for path, _, line in pins:
+        _assert_release_tag(line)
+        assert path.relative_to(REPO_ROOT).as_posix() in package["extra-files"]
+
+    for name, key in (("autonomous-fix.yml", "scanning_repo_ref"),
+                      ("reusable-scan.yml", "scanning-repo-ref")):
+        default = _workflow(name)["on"]["workflow_call"]["inputs"][key]["default"]
+        lines = (WORKFLOWS / name).read_text(encoding="utf-8").splitlines()
+        start = next(i for i, line in enumerate(lines) if line.strip() == f"{key}:")
+        line = next(line for line in lines[start + 1:] if line.strip().startswith("default:"))
+        _assert_release_tag(line)
+        assert default == "v" + manifest_version
+        assert f".github/workflows/{name}" in package["extra-files"]
+
+
+@pytest.mark.parametrize("line", [
+    'rev: ' + 'a' * 40 + ' # v2.3.6 # x-release-please-version',
+    'uses: owner/auto-code-scanning/.github/workflows/scan.yml@' + 'a' * 40 + ' # v2.3.6 # x-release-please-version',
+    'scanning-repo-ref: "' + 'a' * 40 + '" # v2.3.6 # x-release-please-version',
+    'default: "' + 'a' * 40 + '" # v2.3.6 # x-release-please-version',
+    'rev: v2.3.6',
+])
+def test_release_pin_guard_rejects_comment_only_versions_and_unmanaged_tags(line):
+    with pytest.raises(AssertionError):
+        _assert_release_tag(line)
+
+
 def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(package):
     # A template that pins a tag no release moves goes stale: the callers said v2.0.0 and the pre-commit
     # templates v1.0.0, a tag that does not exist, through v2.3.1.
@@ -136,7 +177,7 @@ def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(p
         assert rel in listed, f"{rel} has a marked pin but is not under extra-files"
     # The other direction guards the search itself: a listed template in which no pin is found means the
     # patterns no longer match its shape, and the check above would pass without looking at it.
-    listed_templates = {f for f in listed if f.startswith("templates/")}
+    listed_templates = {f for f in listed if f.startswith("templates/") or f == "scripts/.pre-commit-config.yaml"}
     assert listed_templates, "no template is listed under extra-files"
     assert listed_templates == pinned, f"listed but no pin found: {sorted(listed_templates - pinned)}"
 

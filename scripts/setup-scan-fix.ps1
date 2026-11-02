@@ -25,7 +25,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeWritePath (Get-Location).Path
+
 $PlatformRoot = (Resolve-Path "$PSScriptRoot\..").Path
+Assert-SafeWritePath $RepoPath
 $RepoPath = (Resolve-Path $RepoPath).Path
 
 function Info  { param($m) Write-Host "[INFO] $m" -ForegroundColor White }
@@ -40,6 +44,7 @@ function Find-Py {
 }
 function Copy-IfNewer {
     param($Src, $Dst)
+    Assert-SafeWritePath $Dst
     $dir = Split-Path $Dst -Parent
     if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     Copy-Item -Path $Src -Destination $Dst -Force
@@ -76,10 +81,12 @@ if ($py) {
 # ---------------------------------------------------------------------------
 Step "Vendoring shared hooks + scripts"
 if ($RepoPath -ne $PlatformRoot) {
+    Assert-SafeTree (Join-Path $RepoPath "hooks")
     Copy-Item -Path (Join-Path $PlatformRoot "hooks") -Destination $RepoPath -Recurse -Force
+    Assert-SafeTree (Join-Path $RepoPath "schemas")
     Copy-Item -Path (Join-Path $PlatformRoot "schemas") -Destination $RepoPath -Recurse -Force
     foreach ($s in @("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py", "validate-scan-config.py", "render-scan-config.py",
-                     "scan.py", "scan_policy.py", "scan_reports.py", "validate-suppressions.py", "create-baseline.ps1", "finalize_baseline.py")) {
+                     "scan.py", "safe_io.py", "scan_policy.py", "scan_reports.py", "validate-suppressions.py", "create-baseline.ps1", "finalize_baseline.py")) {
         Copy-IfNewer (Join-Path $PlatformRoot "scripts/$s") (Join-Path $RepoPath "scripts/$s")
     }
     Ok "Copied hooks/, schemas/, and shared scripts/"
@@ -130,7 +137,7 @@ Step "CI caller workflows (.github/workflows/)"
 Copy-IfNewer (Join-Path $PlatformRoot "templates/workflows/code-security-scan.yml") (Join-Path $RepoPath ".github/workflows/code-security-scan.yml")
 if ($langArg -match "terraform") { Copy-IfNewer (Join-Path $PlatformRoot "templates/workflows/terraform-scan.yml") (Join-Path $RepoPath ".github/workflows/terraform-scan.yml") }
 if ($EnableFixLoop) { Copy-IfNewer (Join-Path $PlatformRoot "templates/fix-loop/autonomous-fix.yml") (Join-Path $RepoPath ".github/workflows/autonomous-fix.yml") }
-Ok "Caller workflows copied (remember to pin @vX.Y.Z)"
+Ok "Caller workflows copied (review the immutable commit pins)"
 
 # ---------------------------------------------------------------------------
 # 6) Labels + 7) Secret verification (fix-loop only)
@@ -176,7 +183,7 @@ if (Test-Path $verify) {
 Write-Host "`n=== SETUP COMPLETE ===" -ForegroundColor Green
 Write-Host "Next:" -ForegroundColor Cyan
 Write-Host "  1. Review scan-config.yaml (enabled languages, fix_loop)" -ForegroundColor White
-Write-Host "  2. Pin the caller workflows' uses: to a release tag (never @main)" -ForegroundColor White
+Write-Host "  2. Review the caller workflows' immutable commit pins" -ForegroundColor White
 if ($HooksRunner -eq 'lefthook') { Write-Host "  3. Test: stage a file and 'git commit' (or 'lefthook run pre-commit')" -ForegroundColor White }
 else { Write-Host "  3. Test: 'pre-commit run --all-files'" -ForegroundColor White }
 if ($EnableFixLoop) { Write-Host "  4. Add the 'ai-autofix' label to a PR to opt it into the fix-loop" -ForegroundColor White }

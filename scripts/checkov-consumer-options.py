@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from safe_io import assert_safe_path, append_text, write_text
 
 
 # Built-in Terraform policy IDs in https://www.checkov.io/5.Policy%20Index/terraform.html
@@ -107,19 +108,14 @@ def prepare(config):
         raise ValueError("Checkov config must be a YAML mapping")
     effective = ",".join(merge_skip_checks(settings.get("skip-check"), consumer_checks))
     render_env = {"RENDER_EDGES_DUPLICATE_ITER_COUNT": render_count} if render_count else {}
-    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
-        # A config selector must also be safe in a single-line workflow output.
-        if "\n" in effective or "\r" in effective:
-            raise ValueError("Config skip-check cannot contain newlines")
-        stream.write(f"skip-checks={effective}\n")
-        stream.write(f"render-env={json.dumps(render_env)}\n")
+    if "\n" in effective or "\r" in effective:
+        raise ValueError("Config skip-check cannot contain newlines")
+    append_text(os.environ["GITHUB_OUTPUT"], f"skip-checks={effective}\nrender-env={json.dumps(render_env)}\n")
     render_label = render_count or "unset (Checkov default)"
     print(f"Effective Checkov skip list: {effective or '(none)'}")
     print(f"RENDER_EDGES_DUPLICATE_ITER_COUNT: {render_label}")
-    with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
-        stream.write("### Checkov consumer settings\n\n")
-        stream.write(f"- Effective skip list: `{effective or '(none)'}`\n")
-        stream.write(f"- Render setting: `{render_label}`\n")
+    append_text(os.environ["GITHUB_STEP_SUMMARY"],
+                f"### Checkov consumer settings\n\n- Effective skip list: `{effective or '(none)'}`\n- Render setting: `{render_label}`\n")
 
 
 def main():
@@ -137,7 +133,8 @@ def main():
             removed = filter_sarif(sarif)
             # Leave an unfiltered file untouched if parsing or filtering fails.
             temporary = args.sarif.with_suffix(".sarif.tmp")
-            temporary.write_text(json.dumps(sarif, indent=2), encoding="utf-8")
+            assert_safe_path(args.sarif)
+            write_text(temporary, json.dumps(sarif, indent=2))
             temporary.replace(args.sarif)
             print(f"Removed {removed} suppressed/skipped Checkov SARIF result(s)")
     except (ImportError, OSError, ValueError, KeyError, TypeError) as exc:

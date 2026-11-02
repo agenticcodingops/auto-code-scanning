@@ -35,16 +35,19 @@ for dir in "${scan_dirs[@]}"; do
     # Build tflint command as array — safe for paths with spaces/special chars
     tflint_cmd=(tflint --chdir="${dir}" --format json)
 
-    # Check for config file
-    config_file="$(resolve_config '.tflint.hcl' 2>/dev/null || true)"
-    if [[ -n "${config_file}" ]]; then
-        tflint_cmd+=(--config "${config_file}")
-    fi
-
-    # Add any extra args passed through
-    if [[ $# -gt 0 ]]; then
-        tflint_cmd+=("$@")
-    fi
+    # Configuration and plugin cache are provisioned outside the scanned checkout.
+    config_file="${SCAN_TFLINT_CONFIG:-}"
+    [[ -f "$config_file" ]] || { hook_error 'SCAN_TFLINT_CONFIG must name a trusted external config'; exit 1; }
+    assert_external_path "$config_file"
+    [[ "$config_file" == *.hcl ]] || { hook_error 'Trusted config must end in .hcl'; exit 1; }
+    config_text="$(< "$config_file")"
+    [[ "$config_text" != *plugin_dir* ]] || { hook_error 'Remove plugin_dir; use SCAN_TFLINT_PLUGIN_DIR'; exit 1; }
+    export TFLINT_PLUGIN_DIR="${SCAN_TFLINT_PLUGIN_DIR:-}"
+    [[ -n "$TFLINT_PLUGIN_DIR" ]] || { hook_error 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache'; exit 1; }
+    assert_external_path "$TFLINT_PLUGIN_DIR"
+    assert_safe_write_path "$TFLINT_PLUGIN_DIR"
+    [[ $# -eq 0 ]] || { hook_error 'TFLint extra arguments are disabled'; exit 1; }
+    tflint_cmd+=(--config "$config_file")
 
     # Initialize tflint plugins (required before scanning)
     set +e
@@ -55,7 +58,7 @@ for dir in "${scan_dirs[@]}"; do
     "${init_cmd[@]}" >/dev/null 2>&1
     init_exit=$?
     set -e
-    if [[ "$init_exit" -ne 0 ]]; then handle_exit_code 2 || exit 1; fi
+    if [[ "$init_exit" -ne 0 ]]; then hook_error "TFLint initialization failed"; exit 1; fi
 
     # Run tflint
     set +e

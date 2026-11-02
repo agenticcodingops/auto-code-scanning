@@ -174,7 +174,7 @@ jobs:
           cp .scanning-repo/configs/common/.trivyignore .scanning/configs/.trivyignore 2>/dev/null || true
           cp .scanning-repo/scripts/checkov-consumer-options.py .scanning/configs/checkov-consumer-options.py
           cp .scanning-repo/scripts/prepare_scan_policy.py .scanning/configs/prepare_scan_policy.py
-          for helper in aggregate_scan.py scan_policy.py scan_reports.py validate-suppressions.py; do
+          for helper in safe_io.py aggregate_scan.py scan_policy.py scan_reports.py validate-suppressions.py; do
             cp -- ".scanning-repo/scripts/$helper" ".scanning/configs/$helper"
           done
           echo "config-path=.scanning/configs" >> "$GITHUB_OUTPUT"
@@ -418,6 +418,8 @@ jobs:
   # TFLINT SCAN
   # ==========================================================================
   scan-tflint:
+    env:
+      TFLINT_PLUGIN_DIR: ${{ github.workspace }}/../.scan-tflint-plugins
     name: TFLint Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -884,6 +886,19 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
         with:
           script: |
+            const cell = value => Array.from(String(value ?? '').slice(0, 1000))
+              .map(c => c === '@' ? '&#64;&#8203;' : /[a-zA-Z0-9 /:.-]/.test(c) ? c : `&#${c.codePointAt(0)};`).join('');
+            const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+            const link = value => {
+              try {
+                const url = new URL(String(value));
+                const hosts = new Set(['avd.aquasec.com', 'docs.checkov.io', 'www.checkov.io', 'security.snyk.io', 'github.com']);
+                if (String(value).length > 2048 || url.protocol !== 'https:' || !hosts.has(url.hostname) || url.port || url.username || url.password) return 'N/A';
+                if (url.hostname === 'github.com' && !url.pathname.startsWith('/terraform-linters/tflint/')) return 'N/A';
+                const target = url.href.replace(/[()<>"'`\\\s]/g, c => encodeURIComponent(c).replace(/[()']/g, x => '%' + x.charCodeAt(0).toString(16)));
+                return target.length <= 4096 ? `[Link](${target})` : 'N/A';
+              } catch { return 'N/A'; }
+            };
             const fs = require('fs');
             let data = {};
             try {
@@ -893,13 +908,13 @@ jobs:
             }
 
             const sev = data.by_severity || {};
-            const critical = sev.CRITICAL || 0;
-            const high = sev.HIGH || 0;
-            const medium = sev.MEDIUM || 0;
-            const low = sev.LOW || 0;
-            const total = data.total_findings || 0;
-            const suppressed = data.suppressions_applied || 0;
-            const baselined = data.baseline_filtered || 0;
+            const critical = count(sev.CRITICAL);
+            const high = count(sev.HIGH);
+            const medium = count(sev.MEDIUM);
+            const low = count(sev.LOW);
+            const total = count(data.total_findings);
+            const suppressed = count(data.suppressions_applied);
+            const baselined = count(data.baseline_filtered);
             const complete = data.scan_complete === true;
             const passed = complete && data.scan_passed === true;
             const statusMessage = !complete ? '**Scan incomplete.** Required scanner reports are unavailable or unhealthy.'
@@ -919,8 +934,13 @@ jobs:
               findingsTable = '| File | Rule | Severity | Tool | Remediation |\n';
               findingsTable += '|------|------|----------|------|-------------|\n';
               for (const f of activeFindings) {
-                const remediation = f.remediation_url ? `[Link](${f.remediation_url})` : 'N/A';
-                findingsTable += `| ${f.file} | ${f.rule_id} | ${f.severity} | ${f.tool} | ${remediation} |\n`;
+                const remediation = link(f.remediation_url);
+                const row = `| ${cell(f.file)} | ${cell(f.rule_id)} | ${cell(f.severity)} | ${cell(f.tool)} | ${remediation} |\n`;
+                if (findingsTable.length + row.length > 48000) {
+                  findingsTable += '| Additional findings omitted | | | | |\n';
+                  break;
+                }
+                findingsTable += row;
               }
             }
 
