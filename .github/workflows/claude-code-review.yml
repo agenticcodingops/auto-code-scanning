@@ -45,6 +45,24 @@ jobs:
       - name: Clear the review summary path
         run: rm -rf -- "$GITHUB_WORKSPACE/.review-summary.md"
 
+      # The checkout is the PR's head, and the review must treat it as data. Two things in it could act as
+      # more than data while the job's tokens are in the environment, so they are removed before the review starts:
+      # - Links. A link can lead out of the checkout or into .git, and a search that walks a directory does not
+      #   pass each file it opens to the guard. The guard checks every path it is given as well.
+      # - The CLI's project configuration: every .claude directory and .mcp.json file. --setting-sources user
+      #   keeps the project settings file out, but agents, skills and commands defined there can carry hooks
+      #   and tool grants of their own, and .mcp.json starts servers. None of that may come from the PR.
+      # The review still sees these files in the diff. .git is left alone: the action needs it.
+      - name: Remove links and agent configuration from the checkout
+        run: |
+          find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o -type l -exec rm -f -- {} +
+          find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o \( -name .claude -o -name .mcp.json \) -prune -exec rm -rf -- {} +
+          left="$(find "$GITHUB_WORKSPACE" -path "$GITHUB_WORKSPACE/.git" -prune -o \( -type l -o -name .claude -o -name .mcp.json \) -print -quit)"
+          if [ -n "$left" ]; then
+            echo "::error::the checkout still holds a link or agent configuration: $left"
+            exit 1
+          fi
+
       # The plugin's frontmatter grants `Bash(gh pr comment:*)`, with any arguments, and the CLI
       # honours that grant in a non-interactive run: measured on 2.1.281, 2.1.302, 2.1.310, 2.1.314
       # and 2.1.316, with this job's --allowedTools and --disallowedTools in force, and a control
@@ -59,7 +77,11 @@ jobs:
       # the three `gh pr comment` forms claude_args names, or a single `gh pr view|diff|list`,
       # `gh issue view|list` or `gh search <kind>` call whose words contain nothing the shell
       # would expand or split, and no --jq, --template, -q or -t. A file write passes only for the
-      # summary file. Reading and searching the checkout, sub-agents, task tracking, the plugin's own
+      # summary file. A read (Read, Grep, Glob, LS) passes only if every path it names resolves, links
+      # and all, to the checkout outside .git, and its patterns hold no root, ~, .. or .git, so what
+      # the review reads, and can quote in what it posts, is the code under review and nothing of the
+      # runner's or the job's. The one exception is a Read of a long tool result
+      # the CLI saved under ~/.claude/projects/*/tool-results/. Sub-agents, task tracking, the plugin's own
       # review command (the Skill tool, by exact name: 2.1.281 needs it, 2.1.316 does not) and the
       # inline-comment tool pass; every other tool is blocked. Exit 2 blocks, and stderr tells the
       # model why. The hook command adds `|| exit 2`, so a crash or a missing node blocks every
@@ -76,6 +98,8 @@ jobs:
           cat > "$RUNNER_TEMP/review-comment-guard.js" <<'GUARD'
           if (require.main === module) setTimeout(() => finish(2, "the guard timed out."), 10000);
 
+          const fs = require("fs");
+          const os = require("os");
           const path = require("path");
 
           // A word the shell passes through as written: no quote, backslash, #, $, backtick, ; & | < > ( )
@@ -94,10 +118,15 @@ jobs:
           // Tools that run a shell command. The name a hook is given for them depends on the CLI version: a
           // Monitor call reaches a hook as "Bash" on 2.1.316 and as "Monitor" on 2.1.302, so all are listed.
           const SHELL_TOOLS = ["Bash", "Monitor", "PowerShell"];
-          // Tools that neither run a command nor write a file, and that the review needs: reading and
-          // searching the checkout, launching sub-agents, tracking tasks, and loading tool schemas.
+          // Tools that read or list files. Every path they are given must lead, after its links are resolved, to the
+          // checkout and not into .git (see readTarget). A field that is required here must be present.
+          const READ_TOOLS = { Read: ["file_path"], LS: ["path"], Grep: [], Glob: [] };
+          // Patterns that select files below the search root: Glob's pattern and Grep's glob filter.
+          const READ_PATTERNS = { Glob: ["pattern"], Grep: ["glob"] };
+          // Tools that neither run a command, read a file nor write one, and that the review needs: launching
+          // sub-agents, tracking tasks, and loading tool schemas.
           // Everything not named in this file is blocked, so a tool added to the CLI later fails closed.
-          const NO_IO = ["Read", "Grep", "Glob", "LS", "Agent", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
+          const NO_IO = ["Agent", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
             "TaskOutput", "TaskStop", "BashOutput", "KillShell", "TodoWrite", "ToolSearch"];
           // Posts one inline comment. The action fixes the repository and pull request, and the body is text.
           const INLINE = "mcp__github_inline_comment__create_inline_comment";
@@ -105,6 +134,100 @@ jobs:
           // the model runs it through the Skill tool, and blocking that makes the model improvise a review without the
           // plugin's steps. A skill's body can carry its own allowed-tools, so only this one command is allowed, by name.
           const PLUGIN_COMMANDS = ["code-review:code-review", "code-review"];
+
+          // Both separators, so a test on Windows reads a path as the runner does. \x5c is the backslash.
+          const parts = (p) => p.split(/[\x5c/]+/);
+          const inGit = (rel) => parts(rel).some((s) => s.toLowerCase() === ".git");
+          function within(child, parent) {
+            const rel = path.relative(parent, child);
+            return rel === "" || (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel));
+          }
+
+          // The real path of p: the longest leading part that exists, with every link in it resolved, followed by
+          // the rest as written. Null when a part exists but cannot be resolved, such as a loop of links.
+          function realOf(p) {
+            const rest = [];
+            for (let head = p; ; ) {
+              try {
+                return path.join(fs.realpathSync.native(head), ...rest);
+              } catch (e) {
+                if (e.code !== "ENOENT" && e.code !== "ENOTDIR") return null;
+                const parent = path.dirname(head);
+                if (parent === head) return null;
+                rest.unshift(path.basename(head));
+                head = parent;
+              }
+            }
+          }
+
+          // The CLI saves a long tool result to a file below its own directory and tells the model to read it. That
+          // output came from a tool call the guard already allowed, so a regular file there may be read; nothing else
+          // outside the checkout may.
+          function savedToolOutput(real) {
+            const base = realOf(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects"));
+            if (!real || !base || !within(real, base)) return false;
+            const segs = parts(path.relative(base, real));
+            if (segs.length < 4 || segs[segs.length - 2] !== "tool-results") return false;
+            try {
+              return fs.lstatSync(real).isFile();
+            } catch (e) {
+              return false;
+            }
+          }
+
+          // Null if a read tool may use this path, or the reason it may not. Resolving the path the way the file
+          // system will is the point: an absolute path, a .. segment, a ~ or a link in the checkout that points out
+          // of it would otherwise reach the runner's files, and .git holds the job's git credentials. A .. segment
+          // is refused outright, because the system applies it after following a link and path.resolve before.
+          function readTarget(tool, p, ctx) {
+            const refuse = "the review may read only files in the checkout, " + ctx.ws + ", and not in its .git; " +
+              JSON.stringify(p) + " is not one (use a path relative to the checkout, with no .. and no links out of it).";
+            if (typeof p !== "string" || p === "" || /[\x00-\x1f\x7f]/.test(p)) return refuse;
+            if (p.startsWith("~") || parts(p).includes("..")) return refuse;
+            const ws = path.resolve(ctx.ws);
+            const abs = path.resolve(ws, p);
+            const real = realOf(abs);
+            const realWs = realOf(ws);
+            if (real && realWs && within(abs, ws) && !inGit(path.relative(ws, abs)) &&
+                within(real, realWs) && !inGit(path.relative(realWs, real))) {
+              return null;
+            }
+            if (tool === "Read" && savedToolOutput(real)) return null;
+            return refuse;
+          }
+
+          // Null if a file pattern stays below its search root and out of .git, or the reason it does not. Braces
+          // are expanded into alternatives, so an alternative cannot start with a root, a ~ or a drive either.
+          function readPattern(p) {
+            if (p === undefined) return null;
+            const refuse = "the pattern " + JSON.stringify(p) + " must be relative, with no .., no ~ and no .git in it.";
+            if (typeof p !== "string" || /[\x00-\x1f\x7f]/.test(p)) return refuse;
+            if (p.includes("..") || /(?:^|[{,])\s*(?:[\x5c/~]|[A-Za-z]:)/.test(p)) return refuse;
+            if (/\.git(?=$|[\x5c/},)|])/i.test(p)) return refuse;
+            return null;
+          }
+
+          function decideRead(tool, input, ctx) {
+            // The named fields, and any other field whose name says it holds a path, so a field a later CLI adds
+            // is checked too.
+            const keys = new Set(READ_TOOLS[tool]);
+            for (const key of Object.keys(input)) {
+              if (/path|file|dir/i.test(key)) keys.add(key);
+            }
+            for (const key of keys) {
+              const value = input[key];
+              if (value === undefined && !READ_TOOLS[tool].includes(key)) continue;
+              for (const p of Array.isArray(value) ? value : [value]) {
+                const why = readTarget(tool, p, ctx);
+                if (why) return why;
+              }
+            }
+            for (const key of READ_PATTERNS[tool] || []) {
+              const why = readPattern(input[key]);
+              if (why) return why;
+            }
+            return null;
+          }
 
           // Returns null to let the call go on to the normal permission check, or the reason to block it.
           function decide(tool, input, ctx) {
@@ -118,6 +241,7 @@ jobs:
             if (tool === "Skill") {
               return PLUGIN_COMMANDS.includes(input.skill) ? null : "the review may not run the " + String(input.skill) + " skill.";
             }
+            if (Object.prototype.hasOwnProperty.call(READ_TOOLS, tool)) return decideRead(tool, input, ctx);
             if (NO_IO.includes(tool) || tool === INLINE) return null;
             if (!SHELL_TOOLS.includes(tool)) return "the review may not use the " + tool + " tool.";
 

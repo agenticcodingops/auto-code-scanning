@@ -9,6 +9,7 @@ a structured review comment on pull requests.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -78,12 +79,21 @@ def load_repo_config(path: str = ".gemini/config.yaml") -> tuple[str, list[str]]
     return severity_threshold, ignore_patterns
 
 
-def get_diff(base_ref: str, ignore_patterns: list[str]) -> str:
-    if not base_ref:
-        base_ref = "main"
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
-    # Ensure base ref is fetched
-    run_git_command(["fetch", "origin", base_ref])
+
+def get_diff(base_sha: str, head_sha: str, ignore_patterns: list[str]) -> str:
+    """The pull request's changes, from its commits as git objects.
+
+    The working tree is the base commit, so the helper, the styleguide and the ignore list are the base branch's.
+    The head commit is fetched and diffed, never checked out, so no file from the pull request is run or read as
+    configuration while this process holds the model key and the comment token.
+    """
+    for name, sha in (("BASE_SHA", base_sha), ("HEAD_SHA", head_sha)):
+        if not FULL_SHA.match(sha or ""):
+            raise ValueError(f"{name} must be a full commit SHA, got {sha!r}")
+
+    run_git_command(["fetch", "--no-tags", "origin", head_sha])
 
     exclude_args = []
     if ignore_patterns:
@@ -99,10 +109,10 @@ def get_diff(base_ref: str, ignore_patterns: list[str]) -> str:
 
     try:
         # Try three-dot diff first
-        diff = run_git_command(["diff", f"origin/{base_ref}...HEAD"] + exclude_args)
+        diff = run_git_command(["diff", f"{base_sha}...{head_sha}"] + exclude_args)
     except subprocess.CalledProcessError:
         # Fall back to two-dot diff
-        diff = run_git_command(["diff", f"origin/{base_ref}"] + exclude_args)
+        diff = run_git_command(["diff", base_sha, head_sha] + exclude_args)
 
     return diff
 
@@ -288,20 +298,23 @@ def main():
 
     pr_number = get_env_var("PR_NUMBER")
     base_ref = get_env_var("BASE_REF", "main")
+    base_sha = get_env_var("BASE_SHA")
+    head_sha = get_env_var("HEAD_SHA")
     repo = get_env_var("REPO_NAME")
     token = get_env_var("GITHUB_TOKEN")
     pr_title = get_env_var("PR_TITLE", "Pull Request")
     pr_body = get_env_var("PR_BODY", "")
     model = get_env_var("GEMINI_MODEL", DEFAULT_MODEL)
 
-    if not pr_number or not repo or not token:
-        print("::error::Missing required PR context (PR_NUMBER, REPO_NAME, GITHUB_TOKEN).")
+    if not pr_number or not repo or not token or not base_sha or not head_sha:
+        print("::error::Missing required PR context (PR_NUMBER, REPO_NAME, GITHUB_TOKEN, BASE_SHA, HEAD_SHA).")
         sys.exit(1)
 
+    # Read from the working tree, which is the base commit: a pull request cannot change its own review settings.
     severity_threshold, ignore_patterns = load_repo_config(".gemini/config.yaml")
 
-    print(f"Extracting git diff against origin/{base_ref} with {len(ignore_patterns)} ignore pattern(s)...")
-    diff = get_diff(base_ref, ignore_patterns)
+    print(f"Extracting git diff {base_sha[:12]}...{head_sha[:12]} with {len(ignore_patterns)} ignore pattern(s)...")
+    diff = get_diff(base_sha, head_sha, ignore_patterns)
 
     if not diff:
         print("No diff found between branches (or all changed files are ignored). Exiting.")

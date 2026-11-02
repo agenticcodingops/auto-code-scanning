@@ -113,6 +113,9 @@ def step_run_block(name):
     return textwrap.dedent("\n".join(body)) + "\n"
 
 
+# The step that removes links and the CLI's project configuration from the checkout before the review starts.
+DATA_ONLY_STEP = "Remove links and agent configuration from the checkout"
+
 # What the hook runs. The pull request number, repository and workspace are the ones of the run being reviewed.
 EXPECTED_HOOK_COMMAND = (
     "node '${{ runner.temp }}/review-comment-guard.js' ${{ github.event.pull_request.number }} "
@@ -158,15 +161,16 @@ class GuardTestCase(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def run_guard(self, tool, tool_input, context=(PR, REPO, WS)):
+    def run_guard(self, tool, tool_input, context=(PR, REPO, WS), env=None):
         event = json.dumps({"tool_name": tool, "tool_input": tool_input})
         done = subprocess.run(
-            ["node", self.guard, *context], input=event, capture_output=True, text=True, timeout=30, check=False
+            ["node", self.guard, *context], input=event, capture_output=True, text=True, timeout=30, check=False,
+            env=None if env is None else {**os.environ, **env},
         )
         return done.returncode, done.stderr
 
-    def verdict(self, tool, tool_input, context=(PR, REPO, WS)):
-        code, _ = self.run_guard(tool, tool_input, context)
+    def verdict(self, tool, tool_input, context=(PR, REPO, WS), env=None):
+        code, _ = self.run_guard(tool, tool_input, context, env)
         self.assertIn(code, (0, 2), "the guard must exit 0 (allow) or 2 (block)")
         return "allow" if code == 0 else "block"
 
@@ -236,8 +240,9 @@ class WorkflowWiringTests(unittest.TestCase):
         # The checkout can bring in a link at the summary path, so the cleanup must come after it; the guard must be
         # in place, and the cleanup done, before the review starts.
         order = [TEXT.index("- name: Checkout repository"), TEXT.index("- name: Clear the review summary path"),
+                 TEXT.index("- name: " + DATA_ONLY_STEP),
                  TEXT.index("- name: Write the review comment guard"), TEXT.index("id: claude-review")]
-        self.assertEqual(order, sorted(order), "expected checkout, cleanup, guard, then review")
+        self.assertEqual(order, sorted(order), "expected checkout, cleanups, guard, then review")
 
     def test_the_review_cannot_write_anywhere_but_the_summary(self):
         # A bare Write allows every use of the tool, and a Write(path) rule is never matched.
@@ -255,7 +260,7 @@ class WorkflowWiringTests(unittest.TestCase):
 
     def test_the_protecting_steps_cannot_be_skipped(self):
         # A step with a condition or continue-on-error can be skipped or fail without stopping the job.
-        for name in ("Clear the review summary path", "Write the review comment guard"):
+        for name in ("Clear the review summary path", DATA_ONLY_STEP, "Write the review comment guard"):
             self.assertIsNone(re.search(r"(?m)^\s+(if|continue-on-error):", step_text(name)), name + " must always run")
 
     def test_the_summary_path_is_cleared_before_the_review(self):
@@ -413,10 +418,14 @@ TOOL_CASES = (
        ["block", "Skill", {"skill": ["code-review"]}],
        ["block", "Skill", {"skill": None}],
        ["block", "Skill", {}]]
-    # tools that run nothing and write nothing go on to the normal permission check
-    + [["allow", tool, {}] for tool in ("Read", "Grep", "Glob", "LS", "Agent", "Task", "TaskCreate", "TaskGet", "TaskList",
+    # tools that run nothing, read nothing and write nothing go on to the normal permission check
+    + [["allow", tool, {}] for tool in ("Agent", "Task", "TaskCreate", "TaskGet", "TaskList",
                                        "TaskUpdate", "TaskOutput", "TaskStop", "BashOutput", "KillShell", "TodoWrite",
                                        "ToolSearch", "mcp__github_inline_comment__create_inline_comment")]
+    # a search with no path searches the working directory, which is the checkout
+    + [["allow", tool, {}] for tool in ("Grep", "Glob")]
+    # a read must name what it reads
+    + [["block", tool, {}] for tool in ("Read", "LS")]
 )
 
 
@@ -524,6 +533,213 @@ class GuardDecisionTests(GuardTestCase):
         process.stderr.close()
         self.assertEqual(process.returncode, 2)
         self.assertIn("timed out", err)
+
+
+class ReadPathTests(GuardTestCase):
+    """A read tool may reach the checkout, outside .git, and nothing else: not by an absolute path, a .. segment, a ~,
+    a case variant of .git, or a link in the checkout that points out of it. The guard resolves each path the way the
+    file system will, so these cases use a real directory tree."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        root = os.path.realpath(os.path.join(cls.tmp, "reads"))
+        cls.ws = os.path.join(root, "ws")
+        cls.outside = os.path.join(root, "outside")
+        cls.config_dir = os.path.join(root, "claude-config")
+        cls.saved = os.path.join(cls.config_dir, "projects", "-ws", "session-1", "tool-results", "result.txt")
+        for directory in (os.path.join(cls.ws, "src"), os.path.join(cls.ws, ".git"), os.path.join(cls.ws, ".github"),
+                          cls.outside, os.path.dirname(cls.saved)):
+            os.makedirs(directory, exist_ok=True)
+        for name, text in ((os.path.join(cls.ws, "src", "a.py"), "print(1)\n"),
+                           (os.path.join(cls.ws, ".gitignore"), "x\n"),
+                           (os.path.join(cls.ws, ".git", "config"), "[core]\n"),
+                           (os.path.join(cls.outside, "secret.txt"), "not-a-real-secret\n"),
+                           (cls.saved, "saved output\n"),
+                           (os.path.join(os.path.dirname(os.path.dirname(cls.saved)), "transcript.jsonl"), "{}\n")):
+            with open(name, "w", encoding="utf-8") as handle:
+                handle.write(text)
+        cls.links = True
+        try:
+            os.symlink(os.path.join(cls.outside, "secret.txt"), os.path.join(cls.ws, "link-out"))
+            os.symlink(cls.outside, os.path.join(cls.ws, "dir-out"), target_is_directory=True)
+            os.symlink(os.path.join(cls.ws, ".git", "config"), os.path.join(cls.ws, "link-git"))
+            os.symlink(os.path.join(cls.ws, ".git"), os.path.join(cls.ws, "src", "dir-git"), target_is_directory=True)
+            os.symlink(os.path.join(cls.ws, "src", "a.py"), os.path.join(cls.ws, "link-in"))
+            os.symlink(os.path.join(cls.outside, "secret.txt"), os.path.join(os.path.dirname(cls.saved), "out.txt"))
+        except (OSError, NotImplementedError):
+            cls.links = False
+
+    def ctx(self):
+        return (PR, REPO, self.ws)
+
+    def check(self, cases, env=None):
+        failures = []
+        for expected, tool, tool_input in cases:
+            if self.verdict(tool, tool_input, self.ctx(), env) != expected:
+                failures.append((expected, tool, tool_input))
+        self.assertEqual(failures, [])
+
+    def test_reads_inside_the_checkout_pass(self):
+        ws = self.ws
+        self.check([
+            ["allow", "Read", {"file_path": "src/a.py"}],
+            ["allow", "Read", {"file_path": "./src/a.py"}],
+            ["allow", "Read", {"file_path": os.path.join(ws, "src", "a.py")}],
+            ["allow", "Read", {"file_path": ws + "/./src/a.py", "offset": 1, "limit": 20}],
+            ["allow", "Read", {"file_path": ".gitignore"}],
+            ["allow", "Read", {"file_path": "src/not-there-yet.py"}],
+            ["allow", "LS", {"path": ws}],
+            ["allow", "LS", {"path": "src"}],
+            ["allow", "Grep", {"pattern": "token", "path": "src", "glob": "*.py"}],
+            ["allow", "Grep", {"pattern": "x", "path": "."}],
+            ["allow", "Glob", {"pattern": "**/*.py"}],
+            ["allow", "Glob", {"pattern": ".github/**/*.yml", "path": ws}],
+            ["allow", "Glob", {"pattern": "src/*.{py,js}"}],
+        ])
+
+    def test_reads_outside_the_checkout_are_blocked(self):
+        ws = self.ws
+        secret = os.path.join(self.outside, "secret.txt")
+        self.check([
+            ["block", "Read", {"file_path": secret}],
+            ["block", "Read", {"file_path": "/proc/self/environ"}],
+            ["block", "Read", {"file_path": "/etc/passwd"}],
+            ["block", "Read", {"file_path": "../outside/secret.txt"}],
+            ["block", "Read", {"file_path": "src/../../outside/secret.txt"}],
+            ["block", "Read", {"file_path": ws + "/src/../../outside/secret.txt"}],
+            ["block", "Read", {"file_path": "src/" + BS + ".." + BS + ".." + BS + "outside/secret.txt"}],
+            ["block", "Read", {"file_path": "~/.ssh/id_rsa"}],
+            ["block", "Read", {"file_path": "~"}],
+            ["block", "Read", {"file_path": ""}],
+            ["block", "Read", {"file_path": None}],
+            ["block", "Read", {"file_path": 5}],
+            ["block", "Read", {"file_path": "src/a.py\n/etc/passwd"}],
+            # a path field the guard does not name is checked too
+            ["block", "Read", {"file_path": "src/a.py", "paths": ["src/a.py", "/etc/passwd"]}],
+            ["block", "LS", {"path": "/"}],
+            ["block", "LS", {"path": ".."}],
+            ["block", "Grep", {"pattern": "x", "path": "/"}],
+            ["block", "Grep", {"pattern": "x", "path": self.outside}],
+            ["block", "Grep", {"pattern": "x", "path": "~"}],
+            ["block", "Glob", {"pattern": "*", "path": self.outside}],
+            ["block", "Glob", {"pattern": "/etc/*"}],
+            ["block", "Glob", {"pattern": "../**"}],
+            ["block", "Glob", {"pattern": "src/../../**"}],
+            ["block", "Glob", {"pattern": "~/.ssh/*"}],
+            ["block", "Glob", {"pattern": "{/etc,src}/*"}],
+            ["block", "Glob", {"pattern": "{src,~}/*"}],
+            ["block", "Glob", {"pattern": "C:/Windows/*"}],
+            ["block", "Glob", {"pattern": BS + "etc" + BS + "*"}],
+            ["block", "Grep", {"pattern": "x", "glob": "../**"}],
+            ["block", "Grep", {"pattern": "x", "glob": "/etc/*"}],
+        ])
+
+    def test_reads_of_git_metadata_are_blocked(self):
+        ws = self.ws
+        self.check([
+            ["block", "Read", {"file_path": ".git/config"}],
+            ["block", "Read", {"file_path": "./.git/config"}],
+            ["block", "Read", {"file_path": ".GIT/config"}],
+            ["block", "Read", {"file_path": ".Git/config"}],
+            ["block", "Read", {"file_path": ws + "/.git/config"}],
+            ["block", "Read", {"file_path": ws + "//.git//config"}],
+            ["block", "Read", {"file_path": "src/../.git/config"}],
+            ["block", "LS", {"path": ".git"}],
+            ["block", "Grep", {"pattern": "x", "path": ".git"}],
+            ["block", "Grep", {"pattern": "x", "path": ws + "/.git/config"}],
+            ["block", "Glob", {"pattern": ".git/**"}],
+            ["block", "Glob", {"pattern": "**/.git/config"}],
+            ["block", "Glob", {"pattern": "{.git,src}/*"}],
+            ["block", "Glob", {"pattern": "*", "path": ".git"}],
+            ["block", "Grep", {"pattern": "x", "glob": ".git/*"}],
+        ])
+
+    def test_links_that_leave_the_checkout_are_blocked(self):
+        if not self.links:
+            self.skipTest("this machine cannot create symbolic links")
+        self.check([
+            ["block", "Read", {"file_path": "link-out"}],
+            ["block", "Read", {"file_path": "dir-out/secret.txt"}],
+            ["block", "Read", {"file_path": "dir-out/not-there.txt"}],
+            ["block", "Read", {"file_path": "link-git"}],
+            ["block", "Read", {"file_path": "src/dir-git/config"}],
+            ["block", "LS", {"path": "dir-out"}],
+            ["block", "Grep", {"pattern": "x", "path": "dir-out"}],
+            ["block", "Grep", {"pattern": "x", "path": "link-out"}],
+            ["block", "Glob", {"pattern": "*", "path": "dir-out"}],
+            ["block", "Glob", {"pattern": "*", "path": "src/dir-git"}],
+            # a link that stays in the checkout, outside .git, is only another name for a file there
+            ["allow", "Read", {"file_path": "link-in"}],
+        ])
+
+    def test_the_saved_output_of_a_tool_can_be_read(self):
+        # The CLI saves a long result, such as a big diff, to a file of its own and tells the model to read it. Only a
+        # regular file in a tool-results directory under the CLI's projects directory qualifies, and only for Read.
+        env = {"CLAUDE_CONFIG_DIR": self.config_dir}
+        transcript = os.path.join(os.path.dirname(os.path.dirname(self.saved)), "transcript.jsonl")
+        cases = [
+            ["allow", "Read", {"file_path": self.saved}],
+            ["block", "Read", {"file_path": transcript}],
+            ["block", "Read", {"file_path": os.path.dirname(self.saved)}],
+            ["block", "Read", {"file_path": os.path.join(self.config_dir, "settings.json")}],
+            ["block", "Grep", {"pattern": "x", "path": self.saved}],
+            ["block", "LS", {"path": os.path.dirname(self.saved)}],
+        ]
+        if self.links:
+            cases.append(["block", "Read", {"file_path": os.path.join(os.path.dirname(self.saved), "out.txt")}])
+        self.check(cases, env)
+        # without that directory configured, the same file is outside the checkout like any other
+        self.assertEqual(self.verdict("Read", {"file_path": self.saved}, self.ctx(),
+                                      {"CLAUDE_CONFIG_DIR": self.outside}), "block")
+
+
+class DataOnlyCheckoutTests(unittest.TestCase):
+    """The step that runs before the review removes every link and the CLI's project configuration from the checkout,
+    and leaves the rest of it, and .git, alone."""
+
+    def test_links_and_project_configuration_are_removed(self):
+        bash = shutil.which("bash")
+        if bash is None or shutil.which("find") is None:
+            if IS_LINUX:
+                raise AssertionError("bash and find are required")
+            self.skipTest("needs bash and find")
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = os.path.join(os.path.realpath(tmp), "ws")
+            outside = os.path.join(os.path.realpath(tmp), "outside.txt")
+            keep = ["src/a.py", ".git/config", ".git/hooks/sample", "templates/claude/settings.json", ".github/x.yml",
+                    "CLAUDE.md"]
+            remove = [".claude/settings.json", ".claude/agents/reviewer.md", "sub/.claude/skills/s/SKILL.md",
+                      ".mcp.json", "sub/deeper/.mcp.json"]
+            for rel in keep + remove + [os.path.relpath(outside, ws)]:
+                full = os.path.normpath(os.path.join(ws, rel))
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as handle:
+                    handle.write("x\n")
+            links = ["link-out", "src/link-git", "src/link-in", "dangling"]
+            try:
+                os.symlink(outside, os.path.join(ws, "link-out"))
+                os.symlink(os.path.join(ws, ".git", "config"), os.path.join(ws, "src", "link-git"))
+                os.symlink(os.path.join(ws, "src", "a.py"), os.path.join(ws, "src", "link-in"))
+                os.symlink(os.path.join(ws, "nowhere"), os.path.join(ws, "dangling"))
+            except (OSError, NotImplementedError):
+                if IS_LINUX:
+                    raise
+                links = []
+            script = os.path.join(tmp, "step.sh")
+            with open(script, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(step_run_block(DATA_ONLY_STEP))
+            done = subprocess.run([bash, "--noprofile", "--norc", "-eo", "pipefail", script],
+                                  env={**os.environ, "GITHUB_WORKSPACE": Path(ws).as_posix()},
+                                  capture_output=True, text=True, timeout=60, check=False)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            survivors = [rel for rel in remove + links if os.path.lexists(os.path.join(ws, rel))]
+            self.assertEqual(survivors, [], "the step left these in the checkout")
+            self.assertFalse(os.path.lexists(os.path.join(ws, ".claude")))
+            self.assertFalse(os.path.lexists(os.path.join(ws, "sub", ".claude")))
+            missing = [rel for rel in keep if not os.path.isfile(os.path.join(ws, rel))]
+            self.assertEqual(missing, [], "the step removed files it must keep")
+            self.assertTrue(os.path.isfile(outside), "the step must remove a link, not what it points at")
 
 
 STUB = r"""set +H
