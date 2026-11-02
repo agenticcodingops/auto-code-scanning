@@ -7,7 +7,7 @@ import sys
 import pytest
 import yaml
 
-from tests.python.test_validation_targets import (
+from .test_validation_targets import (
     ZERO, consumer, git, isolate_inherited_git_environment, load_push_runner, package, scanner,
 )
 
@@ -39,6 +39,8 @@ def test_runner_configuration_rejects_incomplete_template(package, source):
 def test_saved_runner_alternate_config_runs_adapted_and_other_hooks(consumer, package, scanner, default, shell):
     if not shutil.which('pre-commit'):
         pytest.skip('pre-commit unavailable')
+    if shell == 'ps1' and not (shutil.which('pwsh') or shutil.which('powershell')):
+        pytest.skip('PowerShell unavailable')
     shutil.copytree(package / 'hooks', consumer / 'hooks')
     if default == 'empty':
         (consumer / '.pre-commit-config.yaml').write_text('repos: []\n')
