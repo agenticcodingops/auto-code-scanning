@@ -655,6 +655,46 @@ class ReadPathTests(GuardTestCase):
             ["block", "Grep", {"pattern": "x", "glob": ".git/*"}],
         ])
 
+    def test_patterns_are_checked_as_the_glob_engine_reads_them(self):
+        # A pattern can name .git or .. without spelling it: through a character class, an extglob, a brace
+        # alternative or a wildcard. The guard expands braces, refuses classes and extglobs, and for a Grep glob,
+        # whose matches are returned as content, refuses anything that could match .git under any wildcard reading.
+        many = "".join("{a,b}" for _ in range(9))  # 512 alternatives, more than the guard will check
+        self.check([
+            ["block", "Grep", {"pattern": "x", "glob": ".g[i]t/config"}],
+            ["block", "Grep", {"pattern": "x", "glob": ".gi?/config"}],
+            ["block", "Grep", {"pattern": "x", "glob": ".g*"}],
+            ["block", "Grep", {"pattern": "x", "glob": "?git"}],
+            ["block", "Grep", {"pattern": "x", "glob": "*"}],
+            ["block", "Grep", {"pattern": "x", "glob": "**"}],
+            ["block", "Grep", {"pattern": "x", "glob": "**/*"}],
+            ["block", "Grep", {"pattern": "x", "glob": "*/config"}],
+            ["block", "Grep", {"pattern": "x", "glob": ".GIT"}],
+            ["block", "Grep", {"pattern": "x", "glob": "{.git,src}"}],
+            ["block", "Grep", {"pattern": "x", "glob": "@(.git)/*"}],
+            ["block", "Grep", {"pattern": "x", "glob": "!(src)/*"}],
+            ["block", "Glob", {"pattern": "{.,.}./outside/*"}],
+            ["block", "Glob", {"pattern": "src/{.,x}./*"}],
+            ["block", "Glob", {"pattern": ".?/outside/*"}],
+            ["block", "Glob", {"pattern": ".*/outside/*"}],
+            ["block", "Glob", {"pattern": "[.][.]/outside/*"}],
+            ["block", "Glob", {"pattern": ".g[i]t/*"}],
+            ["block", "Glob", {"pattern": "{a,b"}],
+            ["block", "Glob", {"pattern": "a}b"}],
+            ["block", "Glob", {"pattern": many}],
+            ["block", "Grep", {"pattern": "x", "glob": "!../**"}],
+            # ordinary patterns keep working
+            ["allow", "Grep", {"pattern": "x", "glob": "*.py"}],
+            ["allow", "Grep", {"pattern": "x", "glob": "**/*.{ts,tsx}"}],
+            ["allow", "Grep", {"pattern": "x", "glob": "src/**"}],
+            ["allow", "Grep", {"pattern": "x", "glob": ".github/**/*.yml"}],
+            ["allow", "Grep", {"pattern": "x", "glob": "!*.lock"}],
+            ["allow", "Glob", {"pattern": "*"}],
+            ["allow", "Glob", {"pattern": "**/*"}],
+            ["allow", "Glob", {"pattern": "**/.gitignore"}],
+            ["allow", "Glob", {"pattern": "src/{a,b}/*.py"}],
+        ])
+
     def test_links_that_leave_the_checkout_are_blocked(self):
         if not self.links:
             self.skipTest("this machine cannot create symbolic links")

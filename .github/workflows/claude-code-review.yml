@@ -196,14 +196,75 @@ jobs:
             return refuse;
           }
 
-          // Null if a file pattern stays below its search root and out of .git, or the reason it does not. Braces
-          // are expanded into alternatives, so an alternative cannot start with a root, a ~ or a drive either.
-          function readPattern(p) {
+          // The brace alternatives of a pattern, expanded the way a glob engine expands them (innermost group first),
+          // or null if a brace is unbalanced or there are too many alternatives to check.
+          function alternatives(p) {
+            const todo = [p];
+            const done = [];
+            while (todo.length) {
+              const s = todo.pop();
+              const close = s.indexOf("}");
+              const open = close < 0 ? -1 : s.lastIndexOf("{", close);
+              if (close < 0 && !s.includes("{")) {
+                done.push(s);
+              } else if (open < 0) {
+                return null;
+              } else {
+                for (const alt of s.slice(open + 1, close).split(",")) todo.push(s.slice(0, open) + alt + s.slice(close + 1));
+              }
+              if (todo.length + done.length > 256) return null;
+            }
+            return done;
+          }
+
+          // A brace-free pattern as a regular expression, case-insensitive, with the widest reading of each wildcard:
+          // * and ? match any name character, including a leading dot, and ** matches across directories.
+          function globRegex(alt) {
+            let re = "";
+            for (let i = 0; i < alt.length; i++) {
+              const c = alt[i];
+              if (c === "*" && alt[i + 1] === "*") {
+                re += ".*";
+                i++;
+              } else if (c === "*") {
+                re += "[^/]*";
+              } else if (c === "?") {
+                re += "[^/]";
+              } else {
+                re += /[A-Za-z0-9_/-]/.test(c) ? c : "\x5c" + c;
+              }
+            }
+            return new RegExp("^" + re + "$", "i");
+          }
+
+          // What a content search must never reach: the .git directory and the file in it that holds git credentials.
+          const GIT_PATHS = [".git", ".git/config"];
+
+          // Null if a file pattern stays below its search root and out of .git, or the reason it does not. The
+          // pattern is checked as the glob engine will read it, not as written: every brace alternative must be
+          // relative and free of .. (a literal "." then a wildcard counts, since it can match ".."). Character
+          // classes, extglobs and backslashes are refused outright, so no spelling hides a name from these checks.
+          // A Grep glob selects files whose content is returned, so it must not be able to match .git or
+          // .git/config under any reading of its wildcards. A Glob pattern returns names only, and a later Read of
+          // a listed file is checked by its resolved path, so for Glob a literal .git segment is what is refused.
+          // A Grep glob that starts with ! only excludes files, so only its form is checked.
+          function readPattern(tool, p) {
             if (p === undefined) return null;
-            const refuse = "the pattern " + JSON.stringify(p) + " must be relative, with no .., no ~ and no .git in it.";
-            if (typeof p !== "string" || /[\x00-\x1f\x7f]/.test(p)) return refuse;
-            if (p.includes("..") || /(?:^|[{,])\s*(?:[\x5c/~]|[A-Za-z]:)/.test(p)) return refuse;
-            if (/\.git(?=$|[\x5c/},)|])/i.test(p)) return refuse;
+            const refuse = "the pattern " + JSON.stringify(p) + " must be relative and stay out of .git: no root, ~, " +
+              "drive or .. in any brace alternative, and no character class, extglob or backslash" +
+              (tool === "Grep" ? "; a Grep glob also may not match .git under any reading of its wildcards." : ".");
+            if (typeof p !== "string" || /[\x00-\x1f\x7f\x5b\x5d\x5c()]/.test(p)) return refuse;
+            const negated = tool === "Grep" && p.startsWith("!");
+            const alts = alternatives(negated ? p.slice(1) : p);
+            if (!alts) return refuse;
+            for (const alt of alts) {
+              if (/^(?:[/~]|[A-Za-z]:)/.test(alt)) return refuse;
+              const segs = alt.split("/");
+              if (segs.some((s) => s.toLowerCase() === ".git" || (s.startsWith(".") && globRegex(s).test("..")))) {
+                return refuse;
+              }
+              if (tool === "Grep" && !negated && GIT_PATHS.some((g) => globRegex(alt).test(g))) return refuse;
+            }
             return null;
           }
 
@@ -223,7 +284,7 @@ jobs:
               }
             }
             for (const key of READ_PATTERNS[tool] || []) {
-              const why = readPattern(input[key]);
+              const why = readPattern(tool, input[key]);
               if (why) return why;
             }
             return null;
