@@ -8,6 +8,26 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.6...v3.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **hooks:** validate pushed objects and staged consumer configuration ([#59](https://github.com/agenticcodingops/auto-code-scanning/issues/59))
+* **scan:** require trusted policy and exact occurrence approvals ([#56](https://github.com/agenticcodingops/auto-code-scanning/issues/56))
+* **hooks:** preserve scan paths and block incomplete tool runs ([#55](https://github.com/agenticcodingops/auto-code-scanning/issues/55))
+
+### Bug Fixes
+
+* **fix-loop:** align caller permissions with reusable jobs ([#61](https://github.com/agenticcodingops/auto-code-scanning/issues/61)) ([0a8338d](https://github.com/agenticcodingops/auto-code-scanning/commit/0a8338db13578d9fdbbd72e555f4379c702a70cd))
+* **hooks:** align report documentation and local switch schema ([#65](https://github.com/agenticcodingops/auto-code-scanning/issues/65)) ([25eca65](https://github.com/agenticcodingops/auto-code-scanning/commit/25eca6521f00d77a0945842c436fc18514a6b695))
+* **hooks:** enforce consumer tool boundary and Python requirements ([#67](https://github.com/agenticcodingops/auto-code-scanning/issues/67)) ([82f86fd](https://github.com/agenticcodingops/auto-code-scanning/commit/82f86fd65852314b0faa4066cac97a6239c6fc19))
+* **hooks:** honor saved push runner configuration ([#66](https://github.com/agenticcodingops/auto-code-scanning/issues/66)) ([7627fd1](https://github.com/agenticcodingops/auto-code-scanning/commit/7627fd1e2f22d64cb639c8052abb60a9031436e2))
+* **hooks:** preserve scan paths and block incomplete tool runs ([#55](https://github.com/agenticcodingops/auto-code-scanning/issues/55)) ([2842351](https://github.com/agenticcodingops/auto-code-scanning/commit/2842351f5b29411a4c845319a6d7d834a1b36332))
+* **hooks:** validate pushed objects and staged consumer configuration ([#59](https://github.com/agenticcodingops/auto-code-scanning/issues/59)) ([5fd64ab](https://github.com/agenticcodingops/auto-code-scanning/commit/5fd64ab5d3e73a6fbf9c318e27ad19447585ca05))
+* **scan:** require trusted policy and exact occurrence approvals ([#56](https://github.com/agenticcodingops/auto-code-scanning/issues/56)) ([3e1c9f7](https://github.com/agenticcodingops/auto-code-scanning/commit/3e1c9f7ffa4aca8f5f887b13329e193b0fafd924))
+* **security:** harden executable inputs and report outputs ([#60](https://github.com/agenticcodingops/auto-code-scanning/issues/60)) ([9a1a258](https://github.com/agenticcodingops/auto-code-scanning/commit/9a1a258b2e994837f6247a745869f6948733e764))
+
 ## [2.3.6](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.5...v2.3.6) (2026-11-02)
 
 
