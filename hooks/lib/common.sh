@@ -68,20 +68,62 @@ handle_exit_code() {
 # ---------------------------------------------------------------------------
 
 # Ensure the .scanning directory exists
-ensure_scanning_dir() {
-    local scan_dir=".scanning"
-    if [[ ! -d "${scan_dir}" ]]; then
-        mkdir -p "${scan_dir}"
-    fi
+# Check every component without resolving away symlinks or Windows junctions.
+assert_safe_write_path() {
+    local py
+    py="$(find_python)" || { hook_error "Python required for safe writes"; exit 1; }
+    "$py" -I - "$1" <<'PYSAFE' || exit 1
+import os, pathlib, stat, sys
+p = pathlib.Path(os.path.abspath(sys.argv[1]))
+for part in (*reversed(p.parents), p):
+    try: info = part.lstat()
+    except FileNotFoundError: continue
+    if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+        sys.exit("Refusing a symlink or reparse point in output path")
+PYSAFE
 }
 
-# Write scan results as JSON to .scanning/last-scan.json
-# Usage: write_scan_json "$json_content"
+ensure_scanning_dir() {
+    assert_safe_write_path .scanning/last-scan.json
+    mkdir -p .scanning
+}
+
 write_scan_json() {
-    local json_content="${1:?JSON content required}"
+    local json_content="${1:?JSON content required}" temporary
     ensure_scanning_dir
-    echo "${json_content}" > ".scanning/last-scan.json"
-    hook_verbose "Wrote scan results to .scanning/last-scan.json"
+    temporary="$(mktemp .scanning/.scan-write-XXXXXX)" || exit 1
+    printf '%s\n' "$json_content" > "$temporary"
+    assert_safe_write_path .scanning/last-scan.json
+    mv -f -- "$temporary" .scanning/last-scan.json
+}
+
+assert_external_path() {
+    local py
+    py="$(find_python)" || exit 1
+    local external_path="$1"
+    if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
+    "$py" -I - "$external_path" <<'PYEXTERNAL'  || exit 1
+import pathlib, subprocess, sys
+try:
+    root = pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+except subprocess.CalledProcessError:
+    root = pathlib.Path.cwd().resolve()
+p = pathlib.Path(sys.argv[1])
+if not p.is_absolute() or p.resolve().is_relative_to(root):
+    sys.exit("Trusted path must be absolute and outside the scanned checkout")
+PYEXTERNAL
+}
+
+# Trusted tools/configuration live outside the scanned checkout. The explicit
+# opt-in is for developer-owned projects whose executable configuration is trusted.
+require_trusted_app_tool() {
+    local tool="$1" bin_var="SCAN_${1^^}_BIN" config_var="SCAN_${1^^}_CONFIG" py
+    runner=("${!bin_var:-}")
+    trusted_config="${!config_var:-}"
+    [[ -n "${runner[0]}" && -n "$trusted_config" ]] || { hook_error "Set $bin_var and $config_var to external trusted paths"; exit 1; }
+    [[ -f "${runner[0]}" && -f "$trusted_config" ]] || { hook_error 'Trusted tool/config missing'; exit 1; }
+    assert_external_path "${runner[0]}"
+    assert_external_path "$trusted_config"
 }
 
 # Build a minimal last-scan.json for a passing scan
@@ -301,7 +343,7 @@ read_scan_config() {
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
     py="$(find_python)" || { echo "${default}"; return 0; }
-    "${py}" - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
+    "${py}" -I - "${key}" "${default}" "${cfg}" <<'PYEOF' 2>/dev/null || echo "${default}"
 import sys
 key, default, cfg = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
@@ -358,7 +400,7 @@ count_semgrep_severities() {
     local py result
     py="$(find_python 2>/dev/null)" || py=""
     if [[ -n "${py}" ]]; then
-        result="$("${py}" -c "${_SEMGREP_COUNT_PY}" "${json}" 2>/dev/null)"
+        result="$("${py}" -I -c "${_SEMGREP_COUNT_PY}" "${json}" 2>/dev/null)"
         if [[ $? -eq 0 && -n "${result}" ]]; then
             echo "${result}"
             return 0
@@ -373,7 +415,7 @@ print_semgrep_findings() {
     [[ -f "${json}" ]] || return 0
     local py out
     py="$(find_python 2>/dev/null)" || return 0
-    out="$("${py}" -c "${_SEMGREP_PRINT_PY}" "${json}" 2>/dev/null)" || return 0
+    out="$("${py}" -I -c "${_SEMGREP_PRINT_PY}" "${json}" 2>/dev/null)" || return 0
     [[ -n "${out}" ]] && printf '%s\n' "${out}"
 }
 
@@ -463,6 +505,9 @@ require_tool() {
         hook_warn "${tool} unavailable; explicit local fail-open opt-in"
         return 2
     fi
+    local executable
+    executable="$(command -v "$tool")"
+    if [[ "$(type -t "$tool")" != function ]]; then assert_external_path "$executable"; fi
     return 0
 }
 

@@ -370,6 +370,49 @@ the pins from step 4 and the boundary from step 5, then approves. The Operator m
 4. If the restored inline workflows had required status checks, add them back. The labels
    can stay.
 
+## Trusted execution and output migration
+
+Re-vendor hooks and scripts together. Output paths now reject symbolic links and
+Windows reparse points, including links in parent directories. Replace linked
+report/configuration destinations with real directories before running setup or
+scans. This also applies to explicit output paths and workflow output files.
+
+ESLint and Prettier default to externally provisioned tooling. Set
+`SCAN_ESLINT_BIN` / `SCAN_ESLINT_CONFIG` and
+`SCAN_PRETTIER_BIN` / `SCAN_PRETTIER_CONFIG` to absolute, trusted files outside the
+scanned checkout. Use ESLint 9 or newer: its config lookup is disabled and the
+explicit external config determines parsers and plugins. Prettier also receives
+only the explicit external config. Install the tools and their plugins outside
+the scanned repository; review the configuration as executable code. Missing
+trusted inputs block the hook. Extra hook arguments are rejected in this mode.
+For developer-owned repositories only, `SCAN_TRUST_REPO_CODE=1` explicitly restores
+repository-local binaries, package resolution and executable configuration. Do not
+set this option when reviewing an untrusted checkout.
+
+TFLint requires `SCAN_TFLINT_CONFIG` to name an absolute, reviewed configuration
+outside the checkout and `SCAN_TFLINT_PLUGIN_DIR` to name an external plugin cache.
+Review plugin sources, exact versions and any `plugin_dir` override in that config.
+Both initialization and scanning use that exact config; a missing config or failed
+initialization blocks the hook, and extra hook arguments cannot override it.
+The pre-commit templates use the platform's TFLint hook instead of a separate
+wrapper. Copy the selected cloud config to the trusted location as an operator
+provisioning step. Keep that location and its cache outside contributor control.
+
+Setup requires Python and Git to be provisioned through your managed package
+source. It no longer bootstraps a package manager from downloaded script text.
+Scanner binaries are selected from `scripts/scanner-downloads.json`, verified
+against its committed SHA-256 values before archive parsing, and installed under
+`~/.local-scanning-tools/bin`. Add that directory to PATH for later sessions.
+Direct Python and optional package installs use exact versions. YAML validation
+uses the default safe loader; custom YAML tags may now need a dedicated validator.
+
+Executable template references and the default helper checkout use immutable
+commits. Release-version comments are informational; release automation must not
+replace commit pins with tags. Review and bump the executable commit and re-vendor
+together when upgrading. Scheduled dependency refreshes remain tracked in issue
+#38. The review workflow uses its own review instructions without dynamically
+installing a plugin marketplace.
+
 ## References
 
 - [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md): inputs, secrets and permissions.

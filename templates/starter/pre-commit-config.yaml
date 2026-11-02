@@ -7,7 +7,7 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: c4a0b883114b00d8d76b479c820ce7950211c99b  # v4.5.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -15,12 +15,12 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.88.0
+    rev: 4bf25029a7a45d7d69592250dd3c327a74d77631  # v1.88.0
     hooks:
       - id: terraform_fmt
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v2.3.6  # x-release-please-version
+    rev: 3e1c9f7ffa4aca8f5f887b13329e193b0fafd924  # v2.3.6 # x-release-please-version
     hooks:
       - id: trivy-secrets
         stages: [pre-commit]

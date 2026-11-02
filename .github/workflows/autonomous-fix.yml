@@ -140,7 +140,7 @@ jobs:
           # A virtual environment outside the checkout: writable whatever the system
           # Python allows, and -I keeps the working directory off sys.path.
           python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
-          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check PyYAML==6.0.3
 
       - name: Parse fix_loop (from trusted base config)
         id: cfg
@@ -276,7 +276,7 @@ jobs:
           # A virtual environment outside the checkout: writable whatever the system
           # Python allows, and -I keeps the working directory off sys.path.
           python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
-          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check PyYAML==6.0.3
 
       - name: Iteration-cap pre-check (.fix-attempts)
         id: precheck
@@ -576,7 +576,7 @@ jobs:
           # A virtual environment outside the checkout: writable whatever the system
           # Python allows, and -I keeps the working directory off sys.path.
           python3 -I -m venv "${RUNNER_TEMP}/autofix-py"
-          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check pyyaml
+          "${RUNNER_TEMP}/autofix-py/bin/python" -I -m pip install --quiet --disable-pip-version-check PyYAML==6.0.3
 
       - name: Build the vetted tree (PR head + patch, private index)
         id: tree

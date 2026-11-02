@@ -15,6 +15,21 @@ Releases after `v2.1.0` are cut by release-please (see "Release Process" in
 summaries record the exact scanner and ruleset versions it installs. `version.txt` at the
 root of each release holds its version.
 
+## Immutable execution references
+
+Use a full 40-character commit for every executable workflow and pre-commit
+reference. Version labels below describe releases; they are not executable pins.
+The templates keep the release version in a comment beside an independently
+reviewed commit. Release automation updates that comment only. Move the commit
+and the `scanning-repo-ref` together after reviewing an upgrade. Scheduled pin
+updates are tracked in #38.
+
+Direct scanner downloads are locked in `scripts/scanner-downloads.json` with an
+exact release URL and a committed SHA-256 checksum for each supported platform.
+The installer validates the digest before reading the archive, and copies only
+the expected executable. Verify new hashes against the publisher's checksum
+source before updating this lock.
+
 ## Pin to a Release Tag — Never `@main`
 
 > **MANDATORY.** Consumers **MUST** pin every reference to this repo to a release

@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v2.3.6  # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@3e1c9f7ffa4aca8f5f887b13329e193b0fafd924  # v2.3.6 # x-release-please-version
     with:
       # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
       # languages: "csharp,typescript"

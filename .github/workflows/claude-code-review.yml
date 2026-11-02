@@ -407,17 +407,11 @@ jobs:
           # default; the review never pushes, so ask for read and a leaked token cannot push code.
           additional_permissions: |
             contents: read
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          # Without --comment the plugin reviews and then posts nothing, by design.
-          # The POSTING RULES reach the plugin as arguments. Without them the model reaches for
-          # `gh api`, shell reads of saved output and heredoc bodies, which the allow-list denies,
-          # so nothing gets posted. A redirect such as `gh pr diff <N> > file` is denied too,
-          # because its target is checked as a file write: on one review elsewhere it was 22 of
-          # 23 denials. The agents the plugin launches read the diff, so they get that rule too.
-          # Folded (>-) into one line, which is how the plugin receives arguments.
+          # The review is defined here; no remote marketplace code is installed.
+          # Keep the posting instructions aligned with the command guard above.
           prompt: >-
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
+            Review the diff of ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
+            Check correctness, security, regressions and test coverage; post actionable findings with evidence.
             POSTING RULES (follow exactly):
             get the full head commit SHA with `gh pr view ${{ github.event.pull_request.number }} --json headRefOid`, never with gh api.
             Read saved tool output with the Read tool, never with shell commands.

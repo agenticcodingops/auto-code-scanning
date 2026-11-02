@@ -69,6 +69,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeTree $OutputDir
+
 # Create output directory
 if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -287,6 +290,7 @@ $sourceRoot = git rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
 $pending = New-TemporaryFile
 try {
+    Assert-SafeWritePath $pending
     $baseline | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $pending -Encoding UTF8
     & $python "$PSScriptRoot/finalize_baseline.py" $pending $metadataFile $sourceRoot
     if ($LASTEXITCODE -ne 0) { throw 'Baseline identity validation failed' }

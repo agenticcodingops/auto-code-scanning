@@ -1,3 +1,4 @@
+from safe_io import write_text, append_text
 import json
 import os
 import hashlib
@@ -190,16 +191,9 @@ output = {
     "baseline_filtered": baseline_filtered,
     "findings": findings
 }
-os.makedirs(".scan-results", exist_ok=True)
-with open(".scan-results/aggregated.json", "w") as f:
-    json.dump(output, f, indent=2)
-
-# Write outputs
-with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-    f.write(f"findings-count={total}\n")
-    f.write(f"critical-count={critical}\n")
-    f.write(f"high-count={high}\n")
-    f.write(f"scan-passed={passed}\n")
+write_text('.scan-results/aggregated.json', json.dumps(output, indent=2))
+append_text(os.environ['GITHUB_OUTPUT'],
+            f"findings-count={total}\ncritical-count={critical}\nhigh-count={high}\nscan-passed={passed}\n")
 
 print(f"Total active findings: {total}")
 print(f"  CRITICAL: {critical}")

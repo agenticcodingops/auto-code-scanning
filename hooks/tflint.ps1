@@ -27,8 +27,16 @@ $totalLow = 0
 foreach ($dir in $scanDirs) {
     if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
 
-    # Check for config file
-    $configFile = Resolve-ScanConfig -Filename '.tflint.hcl'
+    # Configuration and plugin cache are provisioned outside the scanned checkout.
+    $configFile = $env:SCAN_TFLINT_CONFIG
+    if (-not $configFile -or -not (Test-Path -LiteralPath $configFile -PathType Leaf)) {
+        throw 'SCAN_TFLINT_CONFIG must name a trusted external config'
+    }
+    Assert-ExternalPath $configFile
+    $env:TFLINT_PLUGIN_DIR = $env:SCAN_TFLINT_PLUGIN_DIR
+    if (-not $env:TFLINT_PLUGIN_DIR) { throw 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache' }
+    Assert-ExternalPath $env:TFLINT_PLUGIN_DIR
+    if ($ExtraArgs) { throw 'TFLint extra arguments are disabled' }
 
     # Initialize tflint plugins
     $initArgs = @('--chdir', $dir, '--init')
@@ -40,7 +48,7 @@ foreach ($dir in $scanDirs) {
         & tflint @initArgs 2>$null | Out-Null
         $initExit = $LASTEXITCODE
     } catch { $initExit = 2 }
-    if ($initExit -ne 0) { $null = Get-HookExitCode -ToolExitCode 2 }
+    if ($initExit -ne 0) { throw 'TFLint initialization failed' }
 
     # Build tflint arguments
     $tflintArgs = @('--chdir', $dir, '--format', 'json')

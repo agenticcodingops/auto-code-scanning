@@ -62,7 +62,7 @@ jobs:
         )
       )
     # PIN to a release tag (or SHA) — NEVER @main. Bump deliberately.
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v2.3.6  # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@3e1c9f7ffa4aca8f5f887b13329e193b0fafd924  # v2.3.6 # x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml

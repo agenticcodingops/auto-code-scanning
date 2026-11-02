@@ -114,7 +114,7 @@ def _template_pins():
         for number, line in enumerate(lines, start=1):
             if line.lstrip().startswith("#"):
                 continue
-            if TEMPLATE_PIN.search(line):
+            if TEMPLATE_PIN.search(line) or re.search(r"uses: agenticcodingops/auto-code-scanning/.*@[0-9a-f]{40}", line):
                 yield path, number, line
             elif TEMPLATE_REPO.search(line.strip()):
                 assert number < len(lines), f"{path}:{number}: expected a rev: line after this repository pin"

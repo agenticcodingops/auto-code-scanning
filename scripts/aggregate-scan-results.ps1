@@ -57,6 +57,9 @@ param(
     [switch]$RunScans
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+Assert-SafeTree $OutputPath
+
 # Ensure output directory exists
 if (-not (Test-Path $OutputPath)) {
     New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
@@ -578,10 +581,12 @@ $unifiedResults.duration_ms = [int]($scanEndTime - $scanStartTime).TotalMillisec
 
 # Save unified results
 $unifiedOutputPath = Join-Path $OutputPath "unified-results-$dateStamp.json"
+Assert-SafeWritePath $unifiedOutputPath
 $unifiedResults | ConvertTo-Json -Depth 10 | Set-Content $unifiedOutputPath -Encoding UTF8
 
 # Also save as latest
 $latestPath = Join-Path $OutputPath "unified-results-latest.json"
+Assert-SafeWritePath $latestPath
 $unifiedResults | ConvertTo-Json -Depth 10 | Set-Content $latestPath -Encoding UTF8
 
 # Display summary

@@ -32,6 +32,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from safe_io import write_text
 from scan_policy import apply_exceptions, occurrence_fingerprint, suppression_file, load_suppression_entries, baseline_keys, scanner_path
 from scan_reports import validate_report
 
@@ -627,9 +628,8 @@ def main():
 
     # Write output file
     output_path = Path(args.output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        write_text(output_path, json.dumps(report, indent=2))
     except OSError as e:
         print(f"  [WARN] Could not write output file: {e}", file=sys.stderr)
         had_error = True
