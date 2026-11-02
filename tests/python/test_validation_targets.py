@@ -1041,3 +1041,173 @@ def test_git_helper_ignores_inherited_repository_selection(consumer, tmp_path, m
     monkeypatch.setenv('GIT_INDEX_FILE', str(elsewhere / 'index'))
     monkeypatch.setenv('GIT_WORK_TREE', str(elsewhere))
     assert Path(git(consumer, 'rev-parse', '--show-toplevel')).resolve() == consumer.resolve()
+
+
+def directory_link(link, target):
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        if os.name != 'nt':
+            pytest.skip('directory symlink unavailable')
+        result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)], capture_output=True)
+        if result.returncode:
+            pytest.skip('directory junction unavailable')
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_push_scans_and_exports_report_with_linked_temp_base(consumer, package, scanner, tmp_path, shell):
+    actual = tmp_path / 'actual-temp'
+    actual.mkdir()
+    linked = tmp_path / 'linked-temp'
+    directory_link(linked, actual)
+    nested = linked / 'nested'
+    nested.mkdir()
+    env, trace = scanner
+    env.update(TMPDIR=str(nested), TMP=str(nested), TEMP=str(nested))
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'ref {oid} ref {ZERO}\n', text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(trace.read_text()) == {'App.cs': 'pushed bytes\n'}
+    assert json.loads((consumer / '.scanning/last-scan.json').read_text())['summary']['total_findings'] == 0
+    assert list(actual.iterdir()) == [actual / 'nested']
+    assert not list(nested.iterdir())
+
+
+def test_push_refuses_link_created_inside_canonical_snapshot(consumer, package, tmp_path, monkeypatch):
+    runner = load_push_runner(package)
+    outside = tmp_path / 'outside-report'
+    outside.mkdir()
+    sentinel = outside / 'last-scan.json'
+    sentinel.write_text('untouched')
+    materialize = runner.materialize
+
+    def linked_report(oid, snapshot):
+        names = materialize(oid, snapshot)
+        directory_link(snapshot / '.scanning', outside)
+        return names
+
+    monkeypatch.chdir(consumer)
+    monkeypatch.setattr(runner, 'materialize', linked_report)
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    with pytest.raises(OSError, match='symlink or reparse point'):
+        runner.scan(f'ref {oid} ref {ZERO}\n', [('dotnet-build', [])], 'auto')
+    assert sentinel.read_text() == 'untouched'
+
+
+def helper_without_git(package, tmp_path, shell, command, manifest, **settings):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    env = dict(clean_env(), SCAN_PUSH_SNAPSHOT='1', SCAN_ALLOW_TOOL_ERRORS='1',
+               SCAN_PUSH_FILES=str(manifest) if manifest else '')
+    env.update(settings)
+    if shell == 'sh':
+        # Keep only the file utilities needed by the helpers; Git truly cannot
+        # be resolved, and this works with Git Bash as well as POSIX shells.
+        prefix = (f'set -euo pipefail; source "{common}"; '
+                  'CAT=$(command -v cat); MKTEMP=$(command -v mktemp); '
+                  'RM=$(command -v rm); SORT=$(command -v sort); '
+                  'cat() { "$CAT" "$@"; }; mktemp() { "$MKTEMP" "$@"; }; '
+                  'rm() { "$RM" "$@"; }; sort() { "$SORT" "$@"; }; '
+                  'export PATH=""; ! command -v git; ')
+        args = [executable, '-c', prefix + command]
+    else:
+        prefix = f". '{common}'; $env:PATH=''; if (Get-Command git -ErrorAction SilentlyContinue) {{ throw 'git still available' }}; "
+        args = [executable, '-NoProfile', '-Command', prefix + command]
+    return subprocess.run(args, cwd=tmp_path, env=env, capture_output=True, text=True, encoding='utf-8')
+
+
+SELECTION_HELPERS = [
+    ('sh', '_changed_files_for_detect'), ('sh', 'detect_changed_dirs'),
+    ('sh', 'detect_all_changed_dirs'), ('sh', 'get_staged_files'),
+    ('ps1', 'Get-ChangedFilesForDetect'), ('ps1', 'Get-ChangedDirs'),
+    ('ps1', 'Get-AllChangedDirs'), ('ps1', 'Get-StagedFiles'),
+]
+
+
+@pytest.mark.parametrize('shell,helper', SELECTION_HELPERS)
+@pytest.mark.parametrize('contents', [b'', b'module space/main.tf\0App.cs\0'])
+def test_push_manifest_selection_without_git(package, tmp_path, shell, helper, contents):
+    manifest = tmp_path / 'paths'
+    manifest.write_bytes(contents)
+    result = helper_without_git(package, tmp_path, shell, helper, manifest)
+    assert result.returncode == 0, result.stdout + result.stderr
+    actual = result.stdout.replace('\\', '/').replace('\0', '\n').splitlines()
+    if not contents:
+        assert actual == []
+    elif 'Dirs' in helper or 'dirs' in helper:
+        expected = ['module space'] if helper in ('Get-ChangedDirs', 'detect_changed_dirs') else ['.', 'module space']
+        assert actual == expected
+    else:
+        assert actual == ['module space/main.tf', 'App.cs']
+
+
+@pytest.mark.parametrize('shell,helper', SELECTION_HELPERS)
+def test_push_unreadable_manifest_blocks_without_git(package, tmp_path, shell, helper):
+    result = helper_without_git(package, tmp_path, shell, helper, tmp_path / 'missing-paths')
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not result.stdout.strip()
+    assert result.stderr.strip()
+
+
+@pytest.mark.parametrize('shell,helper', SELECTION_HELPERS + [
+    ('sh', 'export_staged_to_tmp App.cs'), ('ps1', 'Export-StagedFilesToTempDir -Files App.cs'),
+    ('ps1', "Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z')"),
+])
+@pytest.mark.parametrize('snapshot', ['0', '1'])
+def test_push_git_required_without_manifest_blocks_even_with_opt_in(package, tmp_path, shell, helper, snapshot):
+    result = helper_without_git(package, tmp_path, shell, helper, None,
+                                SCAN_PUSH_SNAPSHOT=snapshot, SCAN_LEGACY_PUSH_STATE='1')
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'git is required' in result.stderr
+    assert 'scan incomplete' in result.stderr
+
+
+@pytest.mark.parametrize('shell,helper', [
+    ('sh', 'export_staged_to_tmp missing.cs'),
+    ('ps1', 'Export-StagedFilesToTempDir -Files missing.cs'),
+])
+def test_staged_export_failure_blocks(consumer, package, shell, helper):
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    args = ([executable, '-c', f'set -euo pipefail; source "{common}"; {helper}'] if shell == 'sh' else
+            [executable, '-NoProfile', '-Command', f". '{common}'; {helper}"])
+    result = subprocess.run(args, cwd=consumer, env=clean_env(), capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'scan incomplete' in result.stderr
+
+
+@pytest.mark.parametrize('name', (ROOT / 'hooks/lib/push-hook-ids.txt').read_text().split())
+@pytest.mark.parametrize('scanner_exit', [0, 1])
+def test_powershell_push_scanners_run_manifest_without_git(
+        package, scanner, tmp_path, name, scanner_exit):
+    pwsh = shutil.which('pwsh')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    snapshot = tmp_path / 'snapshot'
+    snapshot.mkdir()
+    (snapshot / 'main.tf').write_text('# pushed Terraform\n')
+    (snapshot / 'App.cs').write_text('pushed C#\n')
+    (snapshot / 'App.sln').write_text('fixture')
+    manifest = tmp_path / 'paths'
+    manifest.write_bytes(b'main.tf\0App.cs\0App.sln\0')
+    env, trace = scanner
+    if os.name != 'nt':
+        # The fixture's POSIX scanner shims need these interpreters, while Git
+        # must remain absent from the child process's executable search path.
+        (tmp_path / 'bin/bash').symlink_to(shutil.which('bash'))
+        (tmp_path / 'bin/python').symlink_to(sys.executable)
+    env.update(PATH=str(tmp_path / 'bin'), SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
+               SCANNER_EXIT=str(scanner_exit), SNYK_TOKEN='fixture')
+    command = ("if (Get-Command git -ErrorAction SilentlyContinue) { throw 'git still available' }; "
+               f"& '{(package / f'hooks/{name}.ps1').as_posix()}'; exit $LASTEXITCODE")
+    result = subprocess.run([pwsh, '-NoProfile', '-Command', command], cwd=snapshot,
+                            env=env, capture_output=True, text=True, encoding='utf-8')
+    assert result.returncode == scanner_exit, result.stdout + result.stderr
+    assert trace.is_file(), result.stdout + result.stderr
+    assert 'No Terraform files' not in result.stdout
+    assert 'No C# files' not in result.stdout

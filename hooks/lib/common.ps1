@@ -132,7 +132,10 @@ function Assert-ExternalPath {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path)) { throw 'Trusted path must be absolute' }
     Assert-SafeWritePath $Path
-    $root = (& git rev-parse --show-toplevel 2>$null)
+    $root = if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { (Get-Location).Path } else {
+        Assert-GitAvailable
+        & git rev-parse --show-toplevel 2>$null
+    }
     if (-not $root) { $root = (Get-Location).Path }
     $root = [IO.Path]::GetFullPath($root).TrimEnd('/', '\')
     $full = [IO.Path]::GetFullPath($Path)
@@ -260,8 +263,15 @@ function Build-FindingsJson {
 # scanned. Best-effort — CI is the authoritative backstop.
 # Read the native stdout stream intact before splitting on NUL. PowerShell's
 # native command pipeline otherwise splits newline-containing pathnames.
+function Assert-GitAvailable {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw 'git is required to read scan inputs; scan incomplete'
+    }
+}
+
 function Invoke-GitPaths {
     param([string[]]$Arguments)
+    Assert-GitAvailable
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = 'git'
     $info.Arguments = $Arguments -join ' '
@@ -313,14 +323,13 @@ function Get-OrdinalUniquePaths {
 
 function Get-ChangedDirs {
     try {
-        $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
-        if (-not $gitAvailable) {
-            return @()
-        }
-
         if (-not $env:SCAN_PUSH_FILES) {
+            Assert-GitAvailable
             $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-            if ($LASTEXITCODE -ne 0) { return @() }
+            if ($LASTEXITCODE -ne 0) {
+                if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { throw 'Could not enumerate push scan inputs; scan incomplete' }
+                return @()
+            }
         }
 
         $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf$' }
@@ -351,11 +360,14 @@ function Get-ChangedDirs {
 # Returns empty array when no files are staged
 function Get-AllChangedDirs {
     try {
-        $gitAvailable = Get-Command git -ErrorAction SilentlyContinue
-        if (-not $gitAvailable) { return @() }
-
-        $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
-        if ($LASTEXITCODE -ne 0) { return @() }
+        if (-not $env:SCAN_PUSH_FILES) {
+            Assert-GitAvailable
+            $isGitRepo = git rev-parse --is-inside-work-tree 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { throw 'Could not enumerate push scan inputs; scan incomplete' }
+                return @()
+            }
+        }
 
         $changedFiles = Get-ChangedFilesForDetect
 
@@ -405,8 +417,8 @@ function Get-StagedFiles {
     param([string[]]$Extensions = @())
 
     try {
-        if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
         $files = if ($env:SCAN_PUSH_FILES) { @(Get-ChangedFilesForDetect) } else {
+            Assert-GitAvailable
             @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
         }
         if (-not $files) { return @() }
@@ -423,6 +435,7 @@ function Get-StagedFiles {
 function Export-StagedFilesToTempDir {
     param([string[]]$Files)
 
+    Assert-GitAvailable
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "scan-staged-$(Get-Random)"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     foreach ($file in @($Files)) {
@@ -440,9 +453,8 @@ function Export-StagedFilesToTempDir {
             if ($LASTEXITCODE -ne 0) { throw "git show exit $LASTEXITCODE" }
             $content | Set-Content -LiteralPath $targetFile -Encoding UTF8
         } catch {
-            # WARN, never stay silent: a dropped staged file makes secret/IaC hooks
-            # scan missing content and report a false CLEAN. Surface the gap.
-            Write-HookWarn "could not export staged '$file' to temp dir (skipped from scan)"
+            Remove-Item -LiteralPath $tmpDir -Recurse -Force
+            throw "Could not export staged '$file'; scan incomplete"
         }
     }
     return $tmpDir

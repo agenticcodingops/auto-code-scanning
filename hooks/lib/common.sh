@@ -124,7 +124,12 @@ assert_external_path() {
         case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
         [[ "$external_path" == /* && ! -L "$external_path" ]] || { hook_error 'Trusted path must be absolute and unlinked'; exit 1; }
         local root parent canonical
-        root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
+            root="$PWD"
+        else
+            require_scan_git
+            root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
+        fi
         root="$(cd "$root" && pwd -P)"
         parent="$(cd "$(dirname -- "$external_path")" && pwd -P)" || exit 1
         canonical="$parent/${external_path##*/}"
@@ -132,10 +137,12 @@ assert_external_path() {
         return 0
     fi
     if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
+    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]] || require_scan_git
     "$py" -I - "$external_path" <<'PYEXTERNAL'  || exit 1
-import pathlib, subprocess, sys
+import os, pathlib, subprocess, sys
 try:
-    root = pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+    root = (pathlib.Path.cwd() if os.environ.get('SCAN_PUSH_SNAPSHOT') == '1' else
+            pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())).resolve()
 except subprocess.CalledProcessError:
     root = pathlib.Path.cwd().resolve()
 p = pathlib.Path(sys.argv[1])
@@ -255,11 +262,16 @@ read_nul_paths() {
     rm -f -- "$listing"
 }
 
+require_scan_git() {
+    command -v git >/dev/null 2>&1 || { hook_error 'git is required to read scan inputs; scan incomplete'; exit 1; }
+}
+
 _changed_files_for_detect() {
     if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
         cat -- "$SCAN_PUSH_FILES"
         return
     fi
+    require_scan_git
     local listing reference
     listing="$(mktemp)" || return 1
     git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
@@ -281,9 +293,16 @@ _changed_files_for_detect() {
 # Usage: mapfile -t scan_dirs < <(detect_changed_dirs)
 # Output: Newline-separated list of directories, or empty if none
 detect_changed_dirs() {
-    if [[ -z "${SCAN_PUSH_FILES:-}" ]] && { ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; }; then
-        # Not a git repo — return empty so hooks skip rather than scan everything
-        return 0
+    if [[ -z "${SCAN_PUSH_FILES:-}" ]]; then
+        require_scan_git
+        if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
+                hook_error 'Could not enumerate push scan inputs; scan incomplete'
+                return 1
+            fi
+            # A local caller outside a repository has no selected inputs.
+            return 0
+        fi
     fi
 
     _changed_files_for_detect | while IFS= read -r -d '' path; do
@@ -329,6 +348,7 @@ get_staged_files() {
     if [[ -n "${SCAN_PUSH_FILES:-}" ]]; then
         cat -- "$SCAN_PUSH_FILES" > "$listing" || { rm -f -- "$listing"; return 1; }
     else
+        require_scan_git
         git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
     fi
     while IFS= read -r -d '' path; do
@@ -345,14 +365,19 @@ get_staged_files() {
 # rm -rf it (and should set a trap).
 # Usage: tmpdir="$(export_staged_to_tmp "${files[@]}")"; trap 'rm -rf "$tmpdir"' EXIT
 export_staged_to_tmp() {
+    require_scan_git
     local tmpdir
-    tmpdir="$(mktemp -d)"
+    tmpdir="$(mktemp -d)" || return 1
     local file file_dir
     for file in "$@"; do
         [[ -z "${file}" ]] && continue
         file_dir="."; [[ "$file" == */* ]] && file_dir="${file%/*}"
         [[ "${file_dir}" != "." ]] && mkdir -p "${tmpdir}/${file_dir}"
-        git show ":${file}" -- > "${tmpdir}/${file}" 2>/dev/null || true
+        git show ":${file}" -- > "${tmpdir}/${file}" 2>/dev/null || {
+            rm -rf -- "$tmpdir"
+            hook_error "Could not export staged '$file'; scan incomplete"
+            return 1
+        }
     done
     echo "${tmpdir}"
 }

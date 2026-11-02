@@ -56,13 +56,12 @@ def select_shell(requested: str, *, windows: bool | None = None) -> tuple[str, s
     return 'sh', bash()
 
 
-def policy_directory() -> str:
+def policy_directory(root: Path) -> str:
     configured = os.environ.get('SCAN_CONFIG_DIR', '.scanning/configs')
     path = Path(configured)
     if path.is_absolute():
-        root = Path(os.fsdecode(git('rev-parse', '--show-toplevel')).strip())
         try:
-            path = path.relative_to(root)
+            path = path.resolve().relative_to(root)
         except ValueError as exc:
             raise ValueError('Push policies must be tracked inside the repository') from exc
     portable = PurePosixPath(path.as_posix().replace('\\', '/'))
@@ -182,7 +181,7 @@ def export_report(source: Path, destination: Path) -> None:
 
 
 def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_git: bool = False) -> int:
-    root = Path(os.fsdecode(git('rev-parse', '--show-toplevel')).strip())
+    root = Path(os.fsdecode(git('rev-parse', '--show-toplevel')).strip()).resolve()
     report = root / '.scanning/last-scan.json'
     # No report from an earlier transaction may survive a skipped or failed run.
     clear_report(report)
@@ -193,11 +192,15 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
         return 0
     status = 0
     implementation, executable = select_shell(shell)
-    policy_dir = policy_directory()
+    policy_dir = policy_directory(root)
     for oid in objects:
         clear_report(report)
         with tempfile.TemporaryDirectory(prefix='scan-push-') as temporary:
-            snapshot = Path(temporary) / 'tree'
+            # The system temp base is trusted and may have linked ancestors
+            # (for example /var on macOS). Resolve it before adding tree paths;
+            # links created inside the snapshot must still be rejected.
+            temporary = Path(temporary).resolve(strict=True)
+            snapshot = temporary / 'tree'
             snapshot.mkdir()
             names = materialize(oid, snapshot)
             config = {}
@@ -207,7 +210,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                 if enabled is False:
                     print(f'[pre-push] local scanning explicitly disabled in object {oid}', flush=True)
                     continue
-            manifest = Path(temporary) / 'paths'
+            manifest = temporary / 'paths'
             manifest.write_bytes(b''.join(os.fsencode(p) + b'\0' for p in names))
             env = dict(os.environ, SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
                        SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR=policy_dir)
@@ -232,7 +235,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                         if not trusted.is_absolute():
                             raise ValueError(f'{setting} must be an external absolute path')
                         try:
-                            trusted.resolve().relative_to(root.resolve())
+                            trusted.resolve().relative_to(root)
                         except ValueError:
                             pass
                         else:
@@ -385,7 +388,7 @@ def main() -> int:
             raise ValueError('Original runner template is unrecognized')
         source = source.replace('# end templated', '# end templated\nARGS+=(--config "$SCAN_PUSH_FILTERED_CONFIG")', 1)
         with tempfile.TemporaryDirectory(prefix='scan-push-config-') as directory:
-            path = Path(directory) / 'pre-commit-config.yaml'
+            path = Path(directory).resolve(strict=True) / 'pre-commit-config.yaml'
             with path.open('w', encoding='utf-8', newline='\n') as output:
                 yaml.safe_dump(forwarded, output)
             env = dict(os.environ, SCAN_PUSH_FILTERED_CONFIG=str(path))
