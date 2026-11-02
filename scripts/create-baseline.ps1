@@ -203,11 +203,19 @@ function New-TflintBaseline {
         return @()
     }
 
+    if (-not $env:SCAN_TFLINT_CONFIG -or -not (Test-Path -LiteralPath $env:SCAN_TFLINT_CONFIG -PathType Leaf)) {
+        throw 'SCAN_TFLINT_CONFIG must name a trusted external config'
+    }
+    Assert-ExternalPath $env:SCAN_TFLINT_CONFIG
+    if (-not $env:SCAN_TFLINT_PLUGIN_DIR) { throw 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache' }
+    Assert-ExternalPath $env:SCAN_TFLINT_PLUGIN_DIR
+    $env:TFLINT_PLUGIN_DIR = $env:SCAN_TFLINT_PLUGIN_DIR
+
     $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $tflintJson = tflint --chdir=$dir --format json 2>$null
+        $tflintJson = tflint --config=$env:SCAN_TFLINT_CONFIG --chdir=$dir --format json 2>$null
         if ($tflintJson) {
             try {
                 $tflintResults = $tflintJson | ConvertFrom-Json

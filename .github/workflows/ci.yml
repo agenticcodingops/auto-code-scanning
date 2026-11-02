@@ -130,6 +130,9 @@ jobs:
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
         with:
           tflint_version: v0.64.0
+          checksums: |
+            cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
+            560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb
 
       - name: Initialize TFLint
         # Authenticate plugin downloads with GITHUB_TOKEN (lifts the anonymous GitHub

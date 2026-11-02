@@ -148,7 +148,7 @@ echo "--- Standard Tier Hooks ---"
 STANDARD_CONFIG="$TEMPLATES_DIR/standard/pre-commit-config.yaml"
 if [ -f "$STANDARD_CONFIG" ]; then
     # Standard includes all starter hooks plus: check-json, terraform_validate,
-    #   terraform_tflint, trivy-iac-critical
+    #   tflint, trivy-iac-critical
     standard_required_hooks=(
         "trailing-whitespace"
         "end-of-file-fixer"
@@ -157,7 +157,7 @@ if [ -f "$STANDARD_CONFIG" ]; then
         "detect-private-key"
         "terraform_fmt"
         "terraform_validate"
-        "terraform_tflint"
+        "tflint"
         "trivy-secrets"
         "trivy-iac-critical"
     )
@@ -209,7 +209,7 @@ if [ -f "$STRICT_CONFIG" ]; then
         "terraform_fmt"
         "terraform_validate"
         "terraform_docs"
-        "terraform_tflint"
+        "tflint"
         "trivy-secrets"
         "trivy-iac-critical"
         "trivy-iac-full"

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import stat
+import sysconfig
 import tarfile
 import tempfile
 import urllib.request
@@ -35,7 +36,12 @@ def verified_binary(payload, expected, executable, zipped):
 
 def install(tool, destination):
     system = platform.system().lower()
-    machine = {'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(platform.machine().lower())
+    architecture = platform.machine().lower()
+    if not architecture and system == 'windows':
+        architecture = sysconfig.get_platform().removeprefix('win-')
+    machine = {'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(architecture)
+    if machine is None:
+        raise ValueError('Unsupported scanner platform architecture')
     settings = json.loads(LOCK.read_text())[tool]['platforms'][f'{system}-{machine}']
     name = tool + ('.exe' if system == 'windows' else '')
     destination = assert_safe_path(Path(destination) / name)

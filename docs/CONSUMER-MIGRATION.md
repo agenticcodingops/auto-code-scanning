@@ -398,7 +398,7 @@ The pre-commit templates use the platform's TFLint hook instead of a separate
 wrapper. Copy the selected cloud config to the trusted location as an operator
 provisioning step. Keep that location and its cache outside contributor control.
 
-Setup requires Python and Git to be provisioned through your managed package
+Setup and hook path checks require Python 3.11 or newer. Setup also requires Git to be provisioned through your managed package
 source. It no longer bootstraps a package manager from downloaded script text.
 Scanner binaries are selected from `scripts/scanner-downloads.json`, verified
 against its committed SHA-256 values before archive parsing, and installed under

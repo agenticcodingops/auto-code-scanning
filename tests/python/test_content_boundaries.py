@@ -22,6 +22,9 @@ def test_templates_use_immutable_refs_and_safe_yaml():
         for job in data.get('jobs', {}).values():
             if 'uses' in job and not job['uses'].startswith('./'):
                 assert re.search('@[0-9a-f]{40}$', job['uses']), path
+            for key in ('scanning-repo-ref', 'scanning_repo_ref'):
+                if key in job.get('with', {}):
+                    assert re.fullmatch('[0-9a-f]{40}', job['with'][key]), path
 
 
 def test_templates_use_safe_yaml_validation():
@@ -121,6 +124,7 @@ def test_comment_escapes_all_scanner_text(tmp_path):
     assert 'javascript:' not in body
     assert '<b>' not in body
     assert '@someone' not in body
+    assert '&#64;&#8203;someone' in body
     assert '<b>count</b>' not in body
 
 def test_archive_digest_is_checked_before_opening():
@@ -201,3 +205,18 @@ def test_tflint_init_requires_external_config(tmp_path,shell,config):
     else:
         assert result.returncode != 0
         assert not calls.exists()
+
+
+def test_installer_handles_empty_windows_machine(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location('install_scanner', ROOT / 'scripts/install-scanner.py')
+    installer = importlib.util.module_from_spec(spec); spec.loader.exec_module(installer)
+    monkeypatch.setattr(installer.platform, 'system', lambda: 'Windows')
+    monkeypatch.setattr(installer.platform, 'machine', lambda: '')
+    monkeypatch.setattr(installer.sysconfig, 'get_platform', lambda: 'win-amd64')
+    class Download:
+        def read(self): return b'archive'
+    monkeypatch.setattr(installer.urllib.request, 'urlopen', lambda *a, **kw: Download())
+    monkeypatch.setattr(installer, 'verified_binary', lambda *a: b'binary')
+    result = installer.install('tflint', tmp_path)
+    assert result.name == 'tflint.exe'
+    assert result.read_bytes() == b'binary'

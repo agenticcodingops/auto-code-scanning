@@ -888,7 +888,7 @@ jobs:
         with:
           script: |
             const cell = value => Array.from(String(value ?? '').slice(0, 1000))
-              .map(c => /[a-zA-Z0-9 /:.-]/.test(c) ? c : `&#${c.codePointAt(0)};`).join('');
+              .map(c => c === '@' ? '&#64;&#8203;' : /[a-zA-Z0-9 /:.-]/.test(c) ? c : `&#${c.codePointAt(0)};`).join('');
             const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
             const link = value => {
               try {

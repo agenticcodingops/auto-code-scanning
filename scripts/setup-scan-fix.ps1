@@ -181,7 +181,7 @@ if (Test-Path $verify) {
 Write-Host "`n=== SETUP COMPLETE ===" -ForegroundColor Green
 Write-Host "Next:" -ForegroundColor Cyan
 Write-Host "  1. Review scan-config.yaml (enabled languages, fix_loop)" -ForegroundColor White
-Write-Host "  2. Pin the caller workflows' uses: to a release tag (never @main)" -ForegroundColor White
+Write-Host "  2. Review the caller workflows' immutable commit pins" -ForegroundColor White
 if ($HooksRunner -eq 'lefthook') { Write-Host "  3. Test: stage a file and 'git commit' (or 'lefthook run pre-commit')" -ForegroundColor White }
 else { Write-Host "  3. Test: 'pre-commit run --all-files'" -ForegroundColor White }
 if ($EnableFixLoop) { Write-Host "  4. Add the 'ai-autofix' label to a PR to opt it into the fix-loop" -ForegroundColor White }
