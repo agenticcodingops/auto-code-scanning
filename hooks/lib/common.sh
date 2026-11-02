@@ -123,7 +123,7 @@ assert_external_path() {
     if ! py="$(find_python)"; then
         case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
         [[ "$external_path" == /* && ! -L "$external_path" ]] || { hook_error 'Trusted path must be absolute and unlinked'; exit 1; }
-        local root parent canonical
+        local root parent canonical consumer_root
         if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
             root="$PWD"
         else
@@ -134,6 +134,10 @@ assert_external_path() {
         parent="$(cd "$(dirname -- "$external_path")" && pwd -P)" || exit 1
         canonical="$parent/${external_path##*/}"
         case "$canonical/" in "$root/"*) hook_error 'Trusted path must be outside the scanned checkout'; exit 1 ;; esac
+        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 && -n "${SCAN_CONSUMER_ROOT:-}" ]]; then
+            consumer_root="$(cd "$SCAN_CONSUMER_ROOT" && pwd -P)" || exit 1
+            case "$canonical/" in "$consumer_root/"*) hook_error 'Trusted path must be outside the consumer checkout'; exit 1 ;; esac
+        fi
         return 0
     fi
     if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
@@ -146,8 +150,17 @@ try:
 except subprocess.CalledProcessError:
     root = pathlib.Path.cwd().resolve()
 p = pathlib.Path(sys.argv[1])
-if not p.is_absolute() or p.resolve().is_relative_to(root):
+roots = [root]
+if os.environ.get('SCAN_PUSH_SNAPSHOT') == '1' and os.environ.get('SCAN_CONSUMER_ROOT'):
+    roots.append(pathlib.Path(os.environ['SCAN_CONSUMER_ROOT']).resolve())
+if not p.is_absolute():
     sys.exit("Trusted path must be absolute and outside the scanned checkout")
+for boundary in roots:
+    try:
+        p.resolve().relative_to(boundary)
+    except ValueError:
+        continue
+    sys.exit("Trusted path must be outside the scanned and consumer checkouts")
 PYEXTERNAL
 }
 
@@ -405,7 +418,7 @@ read_scan_config() {
     [[ -f "${cfg}" ]] || { echo "${default}"; return 0; }
     local py
     py="$(find_python)" || { hook_error 'Python is required to read scan-config.yaml'; return 1; }
-    "${py}" -E -P "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
+    "${py}" -I "$(dirname -- "${BASH_SOURCE[0]}")/scan_config.py" "${key}" "${cfg}" "${default}"
 }
 
 # Python helper source (single-quoted -c arg avoids fragile heredocs-in-$()).

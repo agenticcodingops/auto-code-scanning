@@ -366,13 +366,13 @@ def test_powershell_repository_script_is_not_a_trusted_tool(tmp_path):
     assert result.returncode!=0
 
 
-def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
+def test_windows_yaml_reader_excludes_user_packages(tmp_path):
     if os.name!='nt': pytest.skip('Windows user-level setup regression')
     bash=shutil.which('bash')
     if not bash: pytest.skip('bash unavailable')
     base_python=getattr(sys,'_base_executable',sys.executable)
     env=dict(os.environ,APPDATA=str(tmp_path/'user-data'))
-    user_site=subprocess.check_output([base_python,'-E','-P','-c','import site; print(site.getusersitepackages())'],env=env,text=True).strip()
+    user_site=subprocess.check_output([base_python,'-I','-c','import site; print(site.getusersitepackages())'],env=env,text=True).strip()
     package=Path(user_site)/'yaml'; package.mkdir(parents=True)
     (package/'__init__.py').write_text("def safe_load(stream): return {'setting':'trusted-user-setting'}\n")
     repo=tmp_path/'repo'; repo.mkdir()
@@ -385,7 +385,9 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path):
     env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
     result=subprocess.run([bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing'],cwd=repo,env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stderr
-    assert result.stdout.strip()=='trusted-user-setting'
+    # Isolated mode also excludes user-site packages; dependencies must come
+    # from the selected interpreter environment rather than a user override.
+    assert result.stdout.strip()=='from-config-file'
 
 
 def test_setup_path_refresh_preserves_verified_tools(tmp_path):

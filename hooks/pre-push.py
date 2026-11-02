@@ -213,7 +213,8 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
             manifest = temporary / 'paths'
             manifest.write_bytes(b''.join(os.fsencode(p) + b'\0' for p in names))
             env = dict(os.environ, SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
-                       SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR=policy_dir)
+                       SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR=policy_dir,
+                       SCAN_CONSUMER_ROOT=str(root))
             for key in tuple(env):
                 if key.startswith('GIT_'):
                     del env[key]

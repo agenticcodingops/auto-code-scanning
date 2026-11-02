@@ -137,10 +137,16 @@ function Assert-ExternalPath {
         & git rev-parse --show-toplevel 2>$null
     }
     if (-not $root) { $root = (Get-Location).Path }
-    $root = [IO.Path]::GetFullPath($root).TrimEnd('/', '\')
+    $roots = @($root)
+    if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -and $env:SCAN_CONSUMER_ROOT) {
+        $roots += $env:SCAN_CONSUMER_ROOT
+    }
     $full = [IO.Path]::GetFullPath($Path)
-    if ($full -eq $root -or $full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Trusted path must be outside the scanned checkout'
+    foreach ($boundary in $roots) {
+        $boundary = [IO.Path]::GetFullPath($boundary).TrimEnd('/', '\')
+        if ($full -eq $boundary -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Trusted path must be outside the scanned and consumer checkouts'
+        }
     }
 }
 
@@ -489,7 +495,7 @@ function Read-ScanConfigValue {
         [Console]::Error.WriteLine('[scan-config] ERROR: Python is required to read scan-config.yaml')
         exit 1
     }
-    & $py -E -P "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
+    & $py -I "$PSScriptRoot/scan_config.py" $Key $cfg $Default |
         ForEach-Object { $_.ToString().Trim() }
     if ($LASTEXITCODE -ne 0) { exit 1 }
 }
