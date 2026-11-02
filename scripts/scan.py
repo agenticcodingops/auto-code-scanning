@@ -181,6 +181,7 @@ def run_trivy(scan_dir, severity_filter=None):
         "trivy", "config",
         "--format", "json",
         "--skip-check-update",
+        "--include-non-failures",
         "--exit-code", "0",
     ]
 
@@ -207,9 +208,11 @@ def run_trivy(scan_dir, severity_filter=None):
         target = result.get("Target", "")
         misconfigs = result.get("Misconfigurations", [])
         for mc in misconfigs:
+            if mc.get("Status") == "PASS":
+                continue
             raw_severity = mc.get("Severity", "UNKNOWN")
             normalized = map_trivy_severity(raw_severity)
-            rule_id = mc.get("AVDID", mc.get("ID", ""))
+            rule_id = mc.get("AVDID") or mc.get("ID", "")
 
             line_val = mc.get("CauseMetadata", {}).get("StartLine", 0)
             finding = {
@@ -349,19 +352,22 @@ def run_snyk(scan_dir, severity_filter=None):
         return findings, True
 
     # Parse Snyk JSON output
-    issues = [issue for doc in (data if isinstance(data, list) else [data]) for issue in doc["infrastructureAsCodeIssues"]]
+    issues = [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetFile", ""))
+              for doc in (data if isinstance(data, list) else [data])
+              for issue in doc["infrastructureAsCodeIssues"]]
     for issue in issues:
         raw_severity = issue.get("severity", "medium")
         normalized = map_snyk_severity(raw_severity)
-        rule_id = issue.get("publicId", issue.get("id", ""))
+        rule_id = issue.get("id") or issue.get("publicId", "")
 
         line_val = issue.get("lineNumber", 0)
         finding = {
             "rule_id": rule_id,
             "tool": "snyk",
             "severity": normalized,
-            "file": issue.get("filePath", issue.get("targetFile", "")).replace("\\", "/"),
+            "file": scanner_path(issue.get("filePath", issue.get("targetFile", "")), "snyk", policy_root(scan_dir), scan_dir),
             "message": issue.get("title", issue.get("iacDescription", {}).get("issue", "")),
+            "resource": issue.get("resolve", ""),
             "remediation_url": generate_remediation_url("snyk", rule_id),
             "fixable": False,
             "fixed": False,

@@ -76,6 +76,31 @@ def test_baseline_consumes_only_one_exact_occurrence(tmp_path):
     assert [f["baseline"] for f in findings] == [True, False, False]
 
 
+def test_scoped_baseline_uses_each_scanner_directory(tmp_path):
+    from finalize_baseline import finalize
+    (tmp_path / 'main.tf').write_text('# root\n')
+    entries = []
+    for name in ['network', 'storage']:
+        directory = tmp_path / 'terraform' / name
+        directory.mkdir(parents=True)
+        (directory / 'main.tf').write_text('# module\n')
+        entries.append(dict(file='/main.tf', tool='checkov', rule_id='CKV_AWS_19',
+                            line=1, resource='sample.one', scan_directory=f'terraform/{name}'))
+    data = finalize(dict(scan_directory='.', entries=entries), tmp_path)
+    assert [e['file'] for e in data['entries']] == ['terraform/network/main.tf', 'terraform/storage/main.tf']
+    assert len({e['fingerprint'] for e in data['entries']}) == 2
+
+
+def test_relative_scanner_paths_use_selected_module(tmp_path):
+    from scan_policy import scanner_path
+    (tmp_path / 'main.tf').write_text('# root\n')
+    folder = tmp_path / 'module'
+    folder.mkdir()
+    (folder / 'main.tf').write_text('# module\n')
+    assert scanner_path('main.tf', 'trivy', tmp_path, 'module') == 'module/main.tf'
+    assert scanner_path('module/main.tf', 'trivy', tmp_path, 'module') == 'module/main.tf'
+
+
 @pytest.mark.parametrize('changes', [dict(expires_date=str(date.today()-timedelta(days=1))),
                                     dict(approved_by=''), dict(severity=None), dict(fingerprint='invalid')])
 def test_registry_rejects_incomplete_or_inactive_approval(tmp_path, changes):
@@ -105,6 +130,19 @@ def test_report_health_is_required(tool, document):
         validate_report(document, tool)
 
 
+def test_checkov_empty_input_summary_is_a_valid_report():
+    from scan_reports import validate_report
+    data = dict(passed=0, failed=0, skipped=0, parsing_errors=0, resource_count=0, checkov_version='3.3.19')
+    assert validate_report(data, 'checkov')['results']['failed_checks'] == []
+
+
+def test_checkov_nonempty_summary_without_findings_is_incomplete():
+    from scan_reports import validate_report
+    data = dict(passed=0, failed=1, skipped=0, parsing_errors=0, resource_count=1, checkov_version='3.3.19')
+    with pytest.raises(ValueError):
+        validate_report(data, 'checkov')
+
+
 def test_inline_skips_remain_visible_by_default():
     import checkov_consumer_options as options
     data = {'runs': [{'results': [{'ruleId': 'CKV_AWS_19', 'suppressions': [{'kind': 'inSource'}]}]}]}
@@ -127,6 +165,65 @@ def test_source_policy_is_materialized_from_base(tmp_path, monkeypatch):
     prepare_scan_policy.prepare(base)
     assert (tmp_path / '.semgrepignore').read_text() == 'approved/\n'
     assert not (tmp_path / 'trivy.yaml').exists()
+
+
+def test_secret_configuration_is_trusted_policy():
+    from prepare_scan_policy import POLICY_NAMES
+    assert 'trivy-secret.yaml' in POLICY_NAMES
+
+
+def test_actual_severity_rejects_blank_approver(tmp_path):
+    from scan_policy import apply_exceptions, occurrence_fingerprint
+    (tmp_path / 'main.tf').write_text('# fixture\n')
+    finding = dict(tool='checkov', rule_id='CKV_AWS_19', file='main.tf', line=1, severity='HIGH')
+    write_registry(tmp_path, registry(entry=dict(severity='MEDIUM', approved_by=' ', fingerprint=occurrence_fingerprint(finding, tmp_path))))
+    apply_exceptions([finding], tmp_path, tmp_path, baseline=False)
+    assert not finding['suppressed']
+
+
+def test_null_registry_section_is_empty(tmp_path):
+    from scan_policy import load_suppression_entries
+    path = write_registry(tmp_path, dict(schema_version='2.0', trivy_suppressions=None))
+    assert load_suppression_entries(path) == []
+
+
+def test_completed_optional_scanner_report_can_have_findings_status():
+    from scan_reports import validate_report
+    data = {'ok': False, 'targetFile': 'main.tf', 'infrastructureAsCodeIssues': []}
+    assert validate_report(data, 'snyk') is data
+
+
+def test_optional_scanner_document_path_survives_normalization(tmp_path, monkeypatch):
+    folder = tmp_path / 'module'
+    folder.mkdir()
+    (folder / 'main.tf').write_text('# fixture\n')
+    (tmp_path / 'scan-config.yaml').write_text('{}')
+    monkeypatch.setenv('SNYK_TOKEN', 'fixture')
+    monkeypatch.setattr(scan.shutil, 'which', lambda name: name)
+    document = dict(ok=False, targetFile='main.tf', infrastructureAsCodeIssues=[
+        dict(id='SNYK-CC-0001', publicId='SNYK-CC-ALIAS', severity='high', lineNumber=1, resolve='sample.one')])
+    monkeypatch.setattr(scan, 'run_cmd', lambda *args, **kwargs: (1, json.dumps(document), ''))
+    findings, error = scan.run_snyk(folder)
+    assert not error
+    assert findings[0]['file'] == 'module/main.tf'
+    assert findings[0]['resource'] == 'sample.one'
+    assert findings[0]['rule_id'] == 'SNYK-CC-0001'
+
+
+def test_secret_rule_can_receive_exact_approval(tmp_path):
+    data = registry()
+    entry = data.pop('checkov_suppressions')[0]
+    entry.update(tool='trivy', rule_id='aws-access-key-id')
+    data['trivy_suppressions'] = [entry]
+    assert not validator.validate_file(write_registry(tmp_path, data)).has_errors
+
+
+def test_custom_expiry_warning_window_is_preserved(tmp_path):
+    data = registry(entry=dict(ticket='SEC-123', expires_date=str(date.today()+timedelta(days=45))),
+                    settings=dict(max_expiry_days=180, require_security_approval=['CRITICAL','HIGH'], review_frequency_days=90))
+    path = write_registry(tmp_path, data)
+    assert not validator.validate_file(path, strict=True, ci_mode=True, warning_days=30).has_errors
+    assert validator.validate_file(path, strict=True, ci_mode=True, warning_days=60).has_errors
 
 
 def test_aggregate_requires_healthy_reports(tmp_path):

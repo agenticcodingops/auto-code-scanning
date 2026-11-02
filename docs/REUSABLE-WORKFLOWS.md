@@ -34,7 +34,7 @@ sequenceDiagram
     autonumber
     participant Caller as Caller workflow
     participant Setup as Setup Scanning Tools job
-    participant Cfg as OWNER/auto-code-scanning at scanning-repo-ref
+    participant Cfg as scanning-repository at scanning-repo-ref
     participant Scan as Trivy, Checkov, TFLint and Snyk jobs
     participant Agg as Aggregate Results job
     participant Sarif as Upload SARIF job
@@ -59,8 +59,8 @@ sequenceDiagram
 
 Sources: setup job `reusable-scan.yml:123-179`; scan jobs `184-539`; Aggregate
 `545-833`; Upload SARIF `839-970`; PR Comment `976-1063`; workflow outputs `90-105`.
-`OWNER` is the owner of the calling repository (see
-[Configs come from your owner's copy](#configs-come-from-your-owners-copy)).
+The config repository defaults to the published platform. Select a reviewed mirror
+explicitly with `scanning-repository`.
 
 ## Before you call any of them
 
@@ -114,7 +114,8 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | `terraform-directory` | string | no | `.` | Directory to scan. Trivy's misconfiguration scan and Snyk scan it. Checkov scans it too, but skips any path that contains `examples` or `tests` (`skip-path` in `configs/<cloud>/.checkov.yaml`). TFLint runs once in every directory under it that holds a `.tf` file. | `reusable-scan.yml:26-30`, `204`, `233`, `301`, `425-439`, `513`, `524`; `configs/azure/.checkov.yaml:52-58` |
 | `cloud-provider` | string | yes | none | `aws`, `azure` or `gcp`. Selects `configs/<cloud>/` for Checkov, TFLint and the policy overlay, and names the metrics artifact. Any other value fails the setup job: there is no `configs/<value>/.checkov.yaml` to copy. | `reusable-scan.yml:31-34`, `142`, `154-156`, `1140` |
 | `severity` | string | no | `CRITICAL,HIGH` | Severity filter for Trivy's misconfiguration scan only. The Trivy secret scan always uses `HIGH,CRITICAL`. Checkov and TFLint do not read it. The gate counts CRITICAL and HIGH whatever you set. | `reusable-scan.yml:35-39`, `205`, `234`, `247`, `260`, `808-812` |
-| `scanning-repo-ref` | string | no | the pinned revision's own release tag | Tag, branch or SHA of `OWNER/auto-code-scanning` to read the configs and helper from. The default lives inside the workflow revision that `uses:` pins: release-please sets it to that release's tag, so an unset input reads the configs of the same release as the workflow. Releases before the one that carries this change default to `v1.0.0`, which is not a tag, so callers pinned to them must set it. Set it explicitly whenever it must differ from `uses:`. | `reusable-scan.yml:40-44`, `135-143` |
+| `scanning-repository` | string | no | `agenticcodingops/auto-code-scanning` | Published platform repository; set explicitly for a reviewed mirror. | `reusable-scan.yml` |
+| `scanning-repo-ref` | string | no | the pinned revision's own release tag | Tag, branch or SHA of `scanning-repository` (the published platform repository by default) to read the configs and helper from. The default lives inside the workflow revision that `uses:` pins: release-please sets it to that release's tag, so an unset input reads the configs of the same release as the workflow. Releases before the one that carries this change default to `v1.0.0`, which is not a tag, so callers pinned to them must set it. Set it explicitly whenever it must differ from `uses:`. | `reusable-scan.yml:40-44`, `135-143` |
 | `fail-on-findings` | boolean | no | `true` | When `true`, the Aggregate Results job fails if a CRITICAL or HIGH finding remains after suppressions and the baseline. When `false`, findings never fail it. | `reusable-scan.yml:45-49`, `572`, `807-812`, `841-842` |
 | `upload-sarif` | boolean | no | `true` | Runs the Upload SARIF job. | `reusable-scan.yml:50-54`, `865` |
 | `post-pr-comment` | boolean | no | `true` | Runs the PR Comment job. It runs only on `pull_request` events and posts a new comment on every run. | `reusable-scan.yml:55-59`, `1002`, `1076-1081` |
@@ -198,18 +199,14 @@ Grant all three even when you turn the SARIF or comment job off
 
 ### Behaviour to know
 
-#### Configs come from your owner's copy
+#### Configs come from the reviewed platform revision
 
-The setup job checks out `${{ github.repository_owner }}/auto-code-scanning`
-(`reusable-scan.yml:138`). That is a repository named `auto-code-scanning` under the
-owner of the **calling** repository, not the repository in your `uses:` line. Your owner
-needs a copy with that name, and the copy must hold the ref you pass as
-`scanning-repo-ref`.
-
-The checkout passes no token, so `actions/checkout` uses its default,
-`${{ github.token }}`: the caller run's `GITHUB_TOKEN` (`reusable-scan.yml:135-143`). That token can only read the repository that runs the
-workflow ([GitHub Docs: GITHUB_TOKEN][gh-token]). A public copy works. A private copy
-does not. Whether an internal copy works is UNKNOWN.
+The setup job fetches `scanning-repository`, defaulting to the published platform
+repository, at `scanning-repo-ref`. Set `scanning-repository` explicitly for a
+reviewed mirror. Keep its ref aligned with the workflow revision. Setup packages
+helpers and configuration into one artifact, so aggregation uses the same helper
+revision as the scanner jobs. The caller token must be able to read any selected
+mirror; public platform access needs no additional credentials.
 
 #### The gate counts CRITICAL and HIGH only
 
@@ -248,6 +245,10 @@ counts. Registry validation is mandatory; invalid entries fail the gate as a uni
 for the approval floor, expiry checks and migration options.
 
 ## `code-security-scan.yml`
+
+The app-code workflow also accepts `scanning-repository` (the published platform
+repository by default) and `scanning-repo-ref` (its own release tag by default).
+Set the latter to the workflow's reviewed commit when testing an unreleased change.
 
 Application-code scan. Called through `workflow_call` (`code-security-scan.yml:23-24`).
 For the scan-config side, see [APP-CODE-SCANNING.md](APP-CODE-SCANNING.md).

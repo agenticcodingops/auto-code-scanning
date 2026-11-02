@@ -123,11 +123,13 @@ function New-TrivyBaseline {
                 $trivyResults = $trivyJson | ConvertFrom-Json
                 foreach ($result in $trivyResults.Results) {
                     foreach ($misconfig in $result.Misconfigurations) {
+                        if ($misconfig.Status -eq 'PASS') { continue }
                         $ruleId = $misconfig.AVDID ?? $misconfig.ID
                         $filePath = $result.Target
                         $entries += @{
                             rule_id = $ruleId
                             file = $filePath
+                            scan_directory = $dir
                             line = $misconfig.CauseMetadata.StartLine
                             end_line = $misconfig.CauseMetadata.EndLine
                             resource = $misconfig.CauseMetadata.Resource
@@ -170,6 +172,7 @@ function New-CheckovBaseline {
                     $entries += @{
                         rule_id = $ruleId
                         file = $filePath
+                        scan_directory = $dir
                         line = $check.file_line_range[0]
                         end_line = $check.file_line_range[-1]
                         resource = $check.resource
@@ -211,6 +214,7 @@ function New-TflintBaseline {
                     $entries += @{
                         rule_id = $ruleId
                         file = $filePath
+                        scan_directory = $dir
                         line = $issue.range.start.line
                         end_line = $issue.range.end.line
                         resource = ""

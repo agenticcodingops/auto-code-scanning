@@ -6,7 +6,7 @@ import subprocess
 
 POLICY_NAMES = {"scan-config.yaml", "trivy.yaml", "trivy.yml", ".trivyignore", ".trivyignore.yaml",
                 ".checkov.yaml", ".checkov.yml", ".tflint.hcl", ".snyk", ".semgrepignore",
-                ".semgrepignore2", ".gitignore", ".gitleaks.toml"}
+                ".semgrepignore2", ".gitignore", ".gitleaks.toml", "trivy-secret.yaml", "trivy-secret.yml"}
 
 
 def git(*arguments):

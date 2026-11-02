@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../hooks/lib/common.ps1"
 $python = Find-WorkingPython
 if (-not $python) { throw 'Suppression validation requires Python and PyYAML' }
-$arguments = @("$PSScriptRoot/validate-suppressions.py", '--ci')
+$arguments = @("$PSScriptRoot/validate-suppressions.py", '--ci', '--warning-days', [string]$WarningDays)
 if ($Strict) { $arguments += '--strict' }
 if ($AllowLegacyExceptions) { $arguments += '--allow-legacy-exceptions' }
 $arguments += @('--', $SuppressionFile)

@@ -37,6 +37,11 @@ on:
         type: string
         required: false
         default: "CRITICAL,HIGH"
+      scanning-repository:
+        description: "Reviewed platform repository or an explicit trusted mirror"
+        type: string
+        required: false
+        default: "agenticcodingops/auto-code-scanning"
       scanning-repo-ref:
         description: "Git ref for the scanning repo checkout (tag, branch, or SHA)"
         type: string
@@ -139,13 +144,10 @@ jobs:
       checkov-skip-checks: ${{ steps.checkov-options.outputs.skip-checks }}
       checkov-render-env: ${{ steps.checkov-options.outputs.render-env }}
     steps:
-      - name: Checkout calling repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
       - name: Checkout scanning repo configs
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          repository: ${{ github.repository_owner }}/auto-code-scanning
+          repository: ${{ inputs.scanning-repository }}
           ref: ${{ inputs.scanning-repo-ref }}
           path: .scanning-repo
           sparse-checkout: |
@@ -167,10 +169,13 @@ jobs:
           cp .scanning-repo/configs/common/.trivyignore .scanning/configs/.trivyignore 2>/dev/null || true
           cp .scanning-repo/scripts/checkov-consumer-options.py .scanning/configs/checkov-consumer-options.py
           cp .scanning-repo/scripts/prepare_scan_policy.py .scanning/configs/prepare_scan_policy.py
+          for helper in aggregate_scan.py scan_policy.py scan_reports.py validate-suppressions.py; do
+            cp -- ".scanning-repo/scripts/$helper" ".scanning/configs/$helper"
+          done
           echo "config-path=.scanning/configs" >> "$GITHUB_OUTPUT"
 
       - name: Install YAML reader
-        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+        run: python3 -I -m pip install --disable-pip-version-check PyYAML==6.0.3
 
       - name: Validate Checkov consumer settings
         id: checkov-options
@@ -203,16 +208,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare tooling directory
+        run: |
+          rm -rf -- .scan-tooling
+          mkdir -- .scan-tooling
+
       - name: Download configs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: scanning-configs
-          path: .scanning/configs/
+          path: .scan-tooling/
+
+      - name: Clear previous report paths
+        run: rm -f -- trivy-iac-results.json trivy-secrets-results.json checkov-results.json snyk-iac-results.json tflint-results.json tflint-dir-*.json
 
       - name: Apply trusted scanner policy
         env:
           TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
-        run: python3 .scanning/configs/prepare_scan_policy.py
+        run: python3 "${GITHUB_WORKSPACE}/.scan-tooling/prepare_scan_policy.py"
 
       - name: Run Trivy IaC scanner
         env:
@@ -226,7 +239,7 @@ jobs:
           exit-code: "0"
           format: json
           output: trivy-iac-results.json
-          trivyignores: .scanning/configs/.trivyignore
+          trivyignores: .scan-tooling/.trivyignore
           skip-dirs: ".terraform,node_modules,.git"
 
       - name: Show Trivy version
@@ -254,7 +267,7 @@ jobs:
           exit-code: "0"
           format: sarif
           output: trivy-iac-results.sarif
-          trivyignores: .scanning/configs/.trivyignore
+          trivyignores: .scan-tooling/.trivyignore
           skip-dirs: ".terraform,node_modules,.git"
 
       - name: Run Trivy secret scanner
@@ -306,16 +319,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare tooling directory
+        run: |
+          rm -rf -- .scan-tooling
+          mkdir -- .scan-tooling
+
       - name: Download configs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: scanning-configs
-          path: .scanning/configs/
+          path: .scan-tooling/
+
+      - name: Clear previous report paths
+        run: rm -f -- trivy-iac-results.json trivy-secrets-results.json checkov-results.json snyk-iac-results.json tflint-results.json tflint-dir-*.json
 
       - name: Apply trusted scanner policy
         env:
           TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
-        run: python3 .scanning/configs/prepare_scan_policy.py
+        run: python3 "${GITHUB_WORKSPACE}/.scan-tooling/prepare_scan_policy.py"
 
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
@@ -324,7 +345,7 @@ jobs:
         env: ${{ fromJSON(needs.setup.outputs.checkov-render-env) }}
         with:
           directory: ${{ inputs.terraform-directory }}
-          config_file: .scanning/configs/.checkov.yaml
+          config_file: .scan-tooling/.checkov.yaml
           skip_check: ${{ needs.setup.outputs.checkov-skip-checks }}
           framework: terraform
           output_format: cli,json,sarif
@@ -370,7 +391,7 @@ jobs:
         if: always()
         run: |
           if [ -f checkov-results.sarif ]; then
-            python3 .scanning/configs/checkov-consumer-options.py filter-sarif checkov-results.sarif
+            python3 "${GITHUB_WORKSPACE}/.scan-tooling/checkov-consumer-options.py" filter-sarif checkov-results.sarif
           fi
 
       - name: Upload Checkov results
@@ -397,16 +418,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare tooling directory
+        run: |
+          rm -rf -- .scan-tooling
+          mkdir -- .scan-tooling
+
       - name: Download configs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: scanning-configs
-          path: .scanning/configs/
+          path: .scan-tooling/
+
+      - name: Clear previous report paths
+        run: rm -f -- trivy-iac-results.json trivy-secrets-results.json checkov-results.json snyk-iac-results.json tflint-results.json tflint-dir-*.json
 
       - name: Apply trusted scanner policy
         env:
           TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
-        run: python3 .scanning/configs/prepare_scan_policy.py
+        run: python3 "${GITHUB_WORKSPACE}/.scan-tooling/prepare_scan_policy.py"
 
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
@@ -426,7 +455,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           for attempt in 1 2 3; do
-            if tflint --init --config=.scanning/configs/.tflint.hcl; then
+            if tflint --init --config="${GITHUB_WORKSPACE}/.scan-tooling/.tflint.hcl"; then
               break
             fi
             if [ "$attempt" -eq 3 ]; then
@@ -441,7 +470,7 @@ jobs:
         # Prints the TFLint version and the version of each ruleset the config installed,
         # in the log and in the job summary.
         run: |
-          tflint --version --config=.scanning/configs/.tflint.hcl > "${RUNNER_TEMP}/tflint-version.txt"
+          tflint --version --config="${GITHUB_WORKSPACE}/.scan-tooling/.tflint.hcl" > "${RUNNER_TEMP}/tflint-version.txt"
           cat "${RUNNER_TEMP}/tflint-version.txt"
           {
             echo "### TFLint and its rulesets"
@@ -464,13 +493,14 @@ jobs:
           directories="$(mktemp)"
           find "$SCAN_DIR" -name "*.tf" -type f -printf '%h\0' | sort -zu > "$directories"
           # tflint resolves a relative --config against --chdir, so pass an absolute path.
-          TFLINT_CONFIG="${GITHUB_WORKSPACE}/.scanning/configs/.tflint.hcl"
+          TFLINT_CONFIG="${GITHUB_WORKSPACE}/.scan-tooling/.tflint.hcl"
 
           while IFS= read -r -d '' dir; do
             echo "::group::Scanning $dir"
             report="$(mktemp tflint-dir-XXXXXX.json)"
             status=0
             tflint --config="$TFLINT_CONFIG" --chdir="$dir" --format=json > "$report" || status=$?
+            printf '%s' "$dir" > "$report.directory"
             if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then EXIT_CODE=1; fi
             echo "::endgroup::"
           done < "$directories"
@@ -503,6 +533,14 @@ jobs:
                       first_line = ''
                   data = {'errors': [{'message': 'no JSON report: ' + (first_line or 'empty output'), 'severity': 'error'}]}
               all_issues.extend(data.get('issues') or [])
+              # TFLint paths are relative to the directory selected by --chdir.
+              with open(f + '.directory') as directory_file:
+                  directory = directory_file.read()
+              for issue in data.get('issues') or []:
+                  location = issue.get('range') or {}
+                  filename = location.get('filename', '')
+                  if filename and not os.path.isabs(filename):
+                      location['filename'] = os.path.join(directory, filename)
               # Keep TFLint's own errors (e.g. a config it could not load) visible.
               for err in data.get('errors') or []:
                   all_errors.append(err)
@@ -538,16 +576,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare tooling directory
+        run: |
+          rm -rf -- .scan-tooling
+          mkdir -- .scan-tooling
+
       - name: Download configs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: scanning-configs
-          path: .scanning/configs/
+          path: .scan-tooling/
+
+      - name: Clear previous report paths
+        run: rm -f -- trivy-iac-results.json trivy-secrets-results.json checkov-results.json snyk-iac-results.json tflint-results.json tflint-dir-*.json
 
       - name: Apply trusted scanner policy
         env:
           TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
-        run: python3 .scanning/configs/prepare_scan_policy.py
+        run: python3 "${GITHUB_WORKSPACE}/.scan-tooling/prepare_scan_policy.py"
 
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e  # v4.3.0
@@ -563,10 +609,12 @@ jobs:
           TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
           status=0
+          policy=()
+          if [ -f "$GITHUB_WORKSPACE/.snyk" ]; then policy+=(--policy-path="$GITHUB_WORKSPACE"); fi
+          cd -- "$TERRAFORM_DIRECTORY"
           snyk iac test --json \
-            --json-file-output=snyk-iac-results.json \
-            --severity-threshold=low \
-            -- "$TERRAFORM_DIRECTORY" || status=$?
+            --json-file-output="$GITHUB_WORKSPACE/snyk-iac-results.json" \
+            --severity-threshold=low "${policy[@]}" || status=$?
           test "$status" -le 1
 
       - name: Generate Snyk SARIF
@@ -575,10 +623,12 @@ jobs:
           TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
           status=0
+          policy=()
+          if [ -f "$GITHUB_WORKSPACE/.snyk" ]; then policy+=(--policy-path="$GITHUB_WORKSPACE"); fi
+          cd -- "$TERRAFORM_DIRECTORY"
           snyk iac test \
-            --sarif-file-output=snyk-iac-results.sarif \
-            --severity-threshold=low \
-            -- "$TERRAFORM_DIRECTORY" || status=$?
+            --sarif-file-output="$GITHUB_WORKSPACE/snyk-iac-results.sarif" \
+            --severity-threshold=low "${policy[@]}" || status=$?
           test "$status" -le 1
 
       - name: Upload Snyk results
@@ -619,22 +669,13 @@ jobs:
           path: .scan-policy
           persist-credentials: false
 
-      - name: Checkout trusted scanning helpers
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-        with:
-          repository: ${{ github.repository_owner }}/auto-code-scanning
-          ref: ${{ inputs.scanning-repo-ref }}
-          path: .scanning-repo
-          persist-credentials: false
-          sparse-checkout: scripts
-
       - name: Install policy reader
-        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+        run: python3 -I -m pip install --disable-pip-version-check PyYAML==6.0.3
 
       - name: Download all results
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
-          path: scan-artifacts/
+          path: ${{ runner.temp }}/scan-artifacts/
 
       - name: Aggregate and filter results
         id: aggregate
@@ -649,9 +690,10 @@ jobs:
           ALLOW_LEGACY_EXCEPTIONS: ${{ inputs.allow-legacy-exceptions }}
           ALLOW_INLINE_CHECKOV_SKIPS: ${{ inputs.allow-inline-checkov-skips }}
           POLICY_ROOT: .scan-policy
+          ARTIFACT_ROOT: ${{ runner.temp }}/scan-artifacts
           TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         run: |
-          python3 .scanning-repo/scripts/aggregate_scan.py
+          python3 "${RUNNER_TEMP}/scan-artifacts/scanning-configs/aggregate_scan.py"
 
       - name: Upload aggregated results
         if: always()

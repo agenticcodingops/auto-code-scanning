@@ -74,7 +74,9 @@ def main(argv) -> int:
         shutil.copytree(PLATFORM_ROOT / "hooks", repo / "hooks", dirs_exist_ok=True)
         shutil.copytree(PLATFORM_ROOT / "schemas", repo / "schemas", dirs_exist_ok=True)
         for s in ("scan-and-fix.ps1", "scan-and-fix.sh", "check-fix-allowlist.py",
-                  "validate-scan-config.py", "render-scan-config.py"):
+                  "validate-scan-config.py", "render-scan-config.py", "scan.py",
+                  "scan_policy.py", "scan_reports.py", "validate-suppressions.py",
+                  "create-baseline.ps1", "finalize_baseline.py"):
             copy(PLATFORM_ROOT / "scripts" / s, repo / "scripts" / s)
         ok("Copied hooks/, schemas/, and shared scripts/")
     else:

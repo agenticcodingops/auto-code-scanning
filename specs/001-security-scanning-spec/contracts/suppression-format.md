@@ -38,6 +38,11 @@ Required entry fields: `rule_id`, `tool`, `fingerprint`, `severity`, `reason`
 floor. A lower declared severity cannot approve a HIGH/CRITICAL occurrence
 without an approver. `file_pattern` and `ticket` are optional.
 
+Trivy entries accept IaC `AVD-*` rule IDs and built-in lowercase secret rule IDs
+such as `aws-access-key-id`; both require the same exact fingerprint. Null tool
+sections are empty registries. The standalone validator supports `--warning-days`
+and the PowerShell wrapper preserves its `WarningDays` parameter.
+
 Dates must be ISO dates. Approval cannot be in the future, expiry cannot precede
 approval, and lifetime cannot exceed 180 days (or a stricter configured limit).
 The expiry date itself remains valid through that UTC date. CI rejects expired
@@ -87,7 +92,9 @@ identity implementation; consumers must not recompute a rule/path-only key.
 Pull-request scans use policy from the exact base commit. Language selection,
 scanner configuration and ignore files, the configured suppression registry, and
 `.scan-baseline/baseline.json` become effective after their policy change reaches
-the protected base. Push scans use the pushed commit. Pin reusable workflows and
+the protected base. Push scans use the pushed commit. Scanner helpers default to
+the published platform repository. Set `scanning-repository` explicitly only for
+a reviewed mirror, and align `scanning-repo-ref` with the workflow revision. Pin reusable workflows and
 `scanning-repo-ref` to the same reviewed release or commit, and protect caller
 workflows and their inputs through repository review rules.
 
@@ -126,9 +133,7 @@ HIGH so missing metadata cannot weaken the gate.
 Enabled scanner job failures, missing or invalid reports, parser errors and
 report-write failures block completion independently of findings.
 `fail-on-findings: false` only relaxes the findings threshold; it never permits
-incomplete scans. Hooks also block tool errors by default; the local-only
-`SCAN_ALLOW_TOOL_ERRORS=1` explicitly restores warning-only infrastructure errors.
-This environment setting does not relax the CI aggregate.
+incomplete scans. Local compatibility settings do not relax the CI aggregate.
 
 Hooks validate `suppressions.file` from `scan-config.yaml`, defaulting to the
 repository-root `.scan-suppressions.yaml`, exactly as CI does. Downloaded setup

@@ -63,7 +63,7 @@ ALLOWED_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
 
 # Rule ID patterns by tool
 RULE_ID_PATTERNS = {
-    "trivy": re.compile(r"^AVD-[A-Z]+-\d+$"),
+    "trivy": re.compile(r"^(?:AVD-[A-Z]+-\d+|[a-z][a-z0-9_-]+)$"),
     "checkov": re.compile(r"^CKV2?_[A-Z0-9]+_\d+$"),
     "snyk": re.compile(r"^SNYK-[A-Z0-9-]+$"),
     "tflint": re.compile(r"^[a-z][a-z0-9_-]+$"),
@@ -126,7 +126,7 @@ class ValidationResult:
         }
 
 
-def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mode=False, check_expiry=False):
+def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mode=False, check_expiry=False, warning_days=30):
     """Validate a single suppression entry."""
     if not isinstance(entry, dict):
         result.error("V-001", f"{section_key}[{index}] must be a mapping")
@@ -216,7 +216,7 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
                 result.error("V-006", f"{prefix} EXPIRED on {expires_date} ({abs(days_until_expiry)} days ago)")
             else:
                 result.warning("W-001", f"{prefix} EXPIRED on {expires_date} ({abs(days_until_expiry)} days ago)")
-        elif days_until_expiry <= 30:
+        elif days_until_expiry <= warning_days:
             result.warning("W-001", f"{prefix} expires in {days_until_expiry} days ({expires_date})")
 
     # W-002: Missing ticket
@@ -234,7 +234,7 @@ def validate_entry(entry, index, section_key, tool_name, settings, result, ci_mo
         )
 
 
-def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False, allow_legacy=False):
+def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False, allow_legacy=False, warning_days=30):
     """Validate a suppression file. Returns a ValidationResult."""
     # CI mode implies check_expiry
     if ci_mode:
@@ -308,7 +308,7 @@ def validate_file(file_path, strict=False, check_expiry=False, ci_mode=False, al
         for i, entry in enumerate(entries):
             result.entry_count += 1
 
-            validate_entry(entry, i, section_key, tool_name, settings, result, ci_mode=ci_mode, check_expiry=check_expiry)
+            validate_entry(entry, i, section_key, tool_name, settings, result, ci_mode=ci_mode, check_expiry=check_expiry, warning_days=warning_days)
 
             # V-008: No duplicate (rule_id, tool) pairs
             if isinstance(entry, dict):
@@ -401,7 +401,10 @@ def main():
 
     parser.add_argument("--allow-legacy-exceptions", action="store_true",
                         help="Explicitly accept schema 1.0 exceptions during migration")
+    parser.add_argument("--warning-days", type=int, default=30, help="Upcoming-expiry warning window")
     args = parser.parse_args()
+    if args.warning_days < 1:
+        parser.error("--warning-days must be positive")
 
     file_path = Path(args.file)
     if not file_path.exists():
@@ -415,7 +418,7 @@ def main():
     check_expiry = args.check_expiry or args.ci
 
     result = validate_file(file_path, strict=args.strict, check_expiry=check_expiry, ci_mode=args.ci,
-                           allow_legacy=args.allow_legacy_exceptions)
+                           allow_legacy=args.allow_legacy_exceptions, warning_days=args.warning_days)
 
     if args.format == "json":
         print(format_json(result, file_path))

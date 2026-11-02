@@ -9,7 +9,8 @@ def finalize(data, root):
     data["schema_version"] = "2.0"
     # Keep repeated records: each entry authorizes one occurrence only.
     for entry in data["entries"]:
-        entry["file"] = scanner_path(entry["file"], entry["tool"], root, data.get("scan_directory", "."))
+        entry["file"] = scanner_path(entry["file"], entry["tool"], root,
+                                     entry.pop("scan_directory", data.get("scan_directory", ".")))
         entry["fingerprint"] = occurrence_fingerprint(entry, root)
         if not entry["fingerprint"]:
             raise ValueError("Baseline entry needs a readable source file and exact location")

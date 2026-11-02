@@ -16,7 +16,7 @@ def validate_report(data, tool):
     for doc in documents:
         if not isinstance(doc, dict):
             raise ValueError(f"{tool} report must be an object")
-        if doc.get("errors") or doc.get("error") or doc.get("errorCode") or doc.get("ok") is False:
+        if doc.get("errors") or doc.get("error") or doc.get("errorCode") or (tool != "snyk" and doc.get("ok") is False):
             raise ValueError(f"{tool} reported errors")
         if tool == "trivy":
             # Trivy legitimately omits Results when no supported input exists.
@@ -31,6 +31,13 @@ def validate_report(data, tool):
                             raise ValueError("Invalid Trivy finding")
         elif tool == "checkov":
             results = doc.get("results")
+            if results is None and all(type(doc.get(key)) is int and doc[key] == 0
+                                       for key in ("passed", "failed", "skipped", "parsing_errors", "resource_count")) and isinstance(doc.get("checkov_version"), str):
+                # With no supported inputs Checkov emits its summary directly.
+                summary = dict(doc)
+                doc.clear()
+                doc.update(summary=summary, results={"failed_checks": [], "skipped_checks": []})
+                results = doc["results"]
             if not isinstance(results, dict) or "failed_checks" not in results:
                 raise ValueError("Checkov failed_checks missing")
             if results.get("parsing_errors") or (doc.get("summary") or {}).get("parsing_errors", 0):
@@ -44,7 +51,9 @@ def validate_report(data, tool):
                 if not isinstance(finding.get("rule"), dict) or not finding["rule"].get("name") or not isinstance(finding.get("range"), dict):
                     raise ValueError("Invalid TFLint finding")
         elif tool == "snyk":
-            object_list(doc.get("infrastructureAsCodeIssues"), "infrastructureAsCodeIssues")
+            for issue in object_list(doc.get("infrastructureAsCodeIssues"), "infrastructureAsCodeIssues"):
+                if not (issue.get("id") or issue.get("publicId")) or issue.get("severity") not in ("critical", "high", "medium", "low") or not (issue.get("targetFile") or doc.get("targetFile")):
+                    raise ValueError("Invalid optional scanner finding")
     return data
 
 

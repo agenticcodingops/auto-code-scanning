@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timezone
 from scan_policy import apply_exceptions, scanner_path
 from scan_reports import load_report
+from pathlib import Path
 
 findings = []
 health_errors = []
@@ -18,7 +19,8 @@ if enable_snyk and statuses.get("scan-snyk", {}).get("result") != "success":
 
 def report(path, tool):
     try:
-        return load_report(path, tool)
+        artifact_root = Path(os.environ.get("ARTIFACT_ROOT", "scan-artifacts"))
+        return load_report(artifact_root / Path(path).relative_to("scan-artifacts"), tool)
     except (ValueError, OSError, TypeError) as exc:
         health_errors.append(f"{tool}: {exc}")
         return {"results": {}} if tool == "checkov" else {}
@@ -37,11 +39,11 @@ for result in trivy_results:
             continue
         findings.append({
             "tool": "trivy",
-            "rule_id": vuln.get("AVDID", vuln.get("ID", "")),
+            "rule_id": vuln.get("AVDID") or vuln.get("ID", ""),
             "severity": vuln.get("Severity", "UNKNOWN").upper(),
             "title": vuln.get("Title", ""),
             "message": vuln.get("Message", ""),
-            "file": result.get("Target", ""),
+            "file": scanner_path(result.get("Target", ""), "trivy", ".", os.environ.get("TERRAFORM_DIRECTORY", ".")),
             "line": vuln.get("CauseMetadata", {}).get("StartLine", 0),
             "end_line": vuln.get("CauseMetadata", {}).get("EndLine", 0),
             "resource": vuln.get("CauseMetadata", {}).get("Resource", ""),
@@ -109,10 +111,12 @@ for issue in tflint_data.get("issues", []):
 
 # Parse Snyk IaC findings
 snyk_severity_map = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
-for issue in [issue for doc in (snyk_data if isinstance(snyk_data, list) else [snyk_data]) for issue in doc.get("infrastructureAsCodeIssues", [])]:
+for issue in [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetFile", ""))
+              for doc in (snyk_data if isinstance(snyk_data, list) else [snyk_data])
+              for issue in doc.get("infrastructureAsCodeIssues", [])]:
     snyk_sev = issue.get("severity", "medium").lower()
-    target_file = issue.get("targetFile", "")
-    issue_id = issue.get("id", issue.get("publicId", ""))
+    target_file = scanner_path(issue.get("targetFile", ""), "snyk", ".", os.environ.get("TERRAFORM_DIRECTORY", "."))
+    issue_id = issue.get("id") or issue.get("publicId", "")
     findings.append({
         "tool": "snyk",
         "rule_id": issue_id,

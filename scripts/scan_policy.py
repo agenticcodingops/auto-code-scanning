@@ -20,11 +20,14 @@ def scanner_path(raw, tool, source_root=".", scan_directory="."):
     value = str(raw).replace("\\", "/")
     if value.startswith("/github/workspace/"):
         value = value[len("/github/workspace/"):]
+    context = (root / scan_directory).resolve()
     candidate = root / value
     if tool == "checkov" and value.startswith("/") and not candidate.is_file():
-        candidate = root / scan_directory / value.lstrip("/")
-    elif not candidate.is_file() and not Path(value).is_absolute():
-        candidate = root / scan_directory / value
+        candidate = context / value.lstrip("/")
+    elif not Path(value).is_absolute():
+        context_relative = context.relative_to(root).as_posix()
+        if context_relative != "." and not value.startswith(context_relative + "/"):
+            candidate = context / value
     try:
         return candidate.resolve().relative_to(root).as_posix()
     except ValueError:
@@ -94,7 +97,7 @@ def load_suppression_entries(path, allow_legacy=False):
     if result.has_errors:
         raise ValueError("Invalid suppression registry: " + "; ".join(e["message"] for e in result.errors))
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return [entry for section in validator.TOOL_SECTIONS.values() for entry in data.get(section, [])]
+    return [entry for section in validator.TOOL_SECTIONS.values() for entry in (data.get(section) or [])]
 
 
 def baseline_keys(path, allow_legacy=False):
@@ -129,7 +132,7 @@ def apply_exceptions(findings, source_root, policy_root, suppressions=True, base
             if entry["rule_id"] != finding["rule_id"] or entry["tool"] != finding["tool"]:
                 continue
             # Approval must cover the actual severity as well as the declared severity.
-            if finding.get("severity") in ("HIGH", "CRITICAL") and not entry.get("approved_by"):
+            if finding.get("severity") in ("HIGH", "CRITICAL") and not str(entry.get("approved_by") or "").strip():
                 continue
             if entry.get("file_pattern"):
                 try:
