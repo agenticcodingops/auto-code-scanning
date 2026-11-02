@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -138,7 +139,47 @@ def materialize(oid: str, destination: Path) -> list[str]:
     return names
 
 
+def assert_report_path(path: Path) -> None:
+    """Keep report cleanup and publication inside unlinked filesystem paths."""
+    for part in (*reversed(path.parents), path):
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+            raise OSError('Refusing a symlink or reparse point in report path')
+
+
+def clear_report(path: Path) -> None:
+    assert_report_path(path)
+    path.unlink(missing_ok=True)
+
+
+def export_report(source: Path, destination: Path) -> None:
+    """Publish before snapshot cleanup, without exposing a partially copied report."""
+    assert_report_path(source)
+    assert_report_path(destination)
+    if not source.is_file():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    prepared = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.scan-report-', dir=destination.parent, delete=False) as output:
+            prepared = Path(output.name)
+            with source.open('rb') as report:
+                shutil.copyfileobj(report, output)
+        assert_report_path(destination)
+        prepared.replace(destination)
+    finally:
+        if prepared is not None and prepared.exists():
+            prepared.unlink()
+
+
 def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_git: bool = False) -> int:
+    root = Path(os.fsdecode(git('rev-parse', '--show-toplevel')).strip())
+    report = root / '.scanning/last-scan.json'
+    # No report from an earlier transaction may survive a skipped or failed run.
+    clear_report(report)
     objects = tips(records)
     if not records.strip() and not from_git:
         raise ValueError('Missing Git pre-push records; use the transaction-aware runner')
@@ -148,6 +189,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
     implementation, executable = select_shell(shell)
     policy_dir = policy_directory()
     for oid in objects:
+        clear_report(report)
         with tempfile.TemporaryDirectory(prefix='scan-push-') as temporary:
             snapshot = Path(temporary) / 'tree'
             snapshot.mkdir()
@@ -173,8 +215,25 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                 extensions = ('.cs', '.csproj') if hook == 'dotnet-build' else ('.tf',)
                 if not any(name.lower().endswith(extensions) for name in names):
                     continue
-                policy = { 'checkov': '.checkov.yaml', 'checkov-strict': '.checkov.yaml',
-                           'tflint': '.tflint.hcl' }.get(hook)
+                clear_report(report)
+                snapshot_report = snapshot / '.scanning/last-scan.json'
+                # A tracked report or a previous scanner's output is not this run's output.
+                clear_report(snapshot_report)
+                if hook == 'tflint':
+                    # Changing cwd must not make consumer-owned executable inputs
+                    # look external merely because the scan runs in a snapshot.
+                    for setting in ('SCAN_TFLINT_CONFIG', 'SCAN_TFLINT_PLUGIN_DIR'):
+                        trusted = Path(env.get(setting, ''))
+                        if not trusted.is_absolute():
+                            raise ValueError(f'{setting} must be an external absolute path')
+                        try:
+                            trusted.resolve().relative_to(root.resolve())
+                        except ValueError:
+                            pass
+                        else:
+                            raise ValueError(f'{setting} must remain outside the consumer repository')
+                # Executable linter configuration remains externally provisioned.
+                policy = {'checkov': '.checkov.yaml', 'checkov-strict': '.checkov.yaml'}.get(hook)
                 if policy and not (snapshot / policy_dir / policy).is_file():
                     raise ValueError(f'{hook} requires tracked {policy_dir}/{policy}; no fallback policy is allowed')
                 if hook == 'dotnet-build':
@@ -188,7 +247,10 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                 script = str(HERE / f'{hook}.{implementation}')
                 command = ([executable, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script] if implementation == 'ps1'
                            else [executable, script])
-                result = subprocess.run(command + extra, cwd=snapshot, env=env)
+                try:
+                    result = subprocess.run(command + extra, cwd=snapshot, env=env)
+                finally:
+                    export_report(snapshot_report, report)
                 status = max(status, int(result.returncode != 0))
     return status
 

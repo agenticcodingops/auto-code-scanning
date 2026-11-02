@@ -9,18 +9,23 @@ and non-HEAD/multiple refs. Deletions have no local tree and are skipped. Each t
 whole tree is scanned, rather than guessing a range from the current index or
 tracking branch. Uncommitted files, checkout filters and archive attributes cannot
 replace the scanned bytes. This can expose existing findings and take longer.
-The temporary copy is deleted after scanning; the checkout and index are untouched.
+The temporary copy is deleted after scanning; source files and the index are
+untouched. Reports are exported to the consumer's `.scanning/last-scan.json` before
+cleanup, and earlier reports are cleared when the next attempt produces no report.
 Unavailable/non-tree objects, symlinks, submodules and filesystem path collisions
 block the push because a complete isolated scan cannot be guaranteed.
 
 **Track scanner policy before upgrading.** Push scans require the policy scanner's
-`.checkov.yaml` and the linter's `.tflint.hcl` in the pushed tree under
+`.checkov.yaml` in the pushed tree under
 `.scanning/configs`, or under a tracked repository-relative `SCAN_CONFIG_DIR`.
 The setup guide ignores `.scanning/`, so either force-add the required policy files
 or commit them under another directory and configure `SCAN_CONFIG_DIR` accordingly.
 An absolute override must resolve inside the consumer repository. Missing required
 policies or an external policy directory blocks the push; the runner never silently
 falls back to different rules. Config files and source bytes come from the same tip.
+The linter instead requires an external trusted `SCAN_TFLINT_CONFIG` and
+`SCAN_TFLINT_PLUGIN_DIR`, as described in the
+[trusted-input migration](#trusted-execution-and-output-migration).
 Individual legacy wrappers remain available only through the opt-in below.
 
 - **Lefthook:** replace the `pre-push` block with the current

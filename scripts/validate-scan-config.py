@@ -31,21 +31,21 @@ def main(argv: list[str]) -> int:
     if len(argv) > 1 and argv[1] == '--staged':
         # Package-owned validator and schema, consumer-owned index bytes.
         try:
-            root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).decode().strip()
+            root = subprocess.check_output(['git', '--no-replace-objects', 'rev-parse', '--show-toplevel']).decode().strip()
             changed = subprocess.check_output([
-                'git', '-C', root, 'diff', '--cached', '--name-only', '-z',
+                'git', '--no-replace-objects', '-C', root, 'diff', '--cached', '--name-only', '-z',
                 '--diff-filter=ACMRTU', '--', 'scan-config.yaml'])
             if b'scan-config.yaml' not in changed.split(b'\0'):
                 print('[validate-scan-config] PASS: scan-config.yaml not staged')
                 return 0
             entries = subprocess.check_output([
-                'git', '-C', root, 'ls-files', '--stage', '-z', '--', 'scan-config.yaml']).split(b'\0')
+                'git', '--no-replace-objects', '-C', root, 'ls-files', '--stage', '-z', '--', 'scan-config.yaml']).split(b'\0')
             metadata = [entry.split(b'\t', 1)[0].split() for entry in entries if entry]
             if (len(metadata) != 1 or len(metadata[0]) != 3 or
                     metadata[0][0] not in (b'100644', b'100755') or metadata[0][2] != b'0'):
                 print('[validate-scan-config] ERROR: staged config must be one regular file')
                 return 1
-            content = subprocess.check_output(['git', '-C', root, 'show', ':scan-config.yaml'])
+            content = subprocess.check_output(['git', '--no-replace-objects', '-C', root, 'show', ':scan-config.yaml'])
             with tempfile.TemporaryDirectory(prefix='scan-config-') as directory:
                 path = Path(directory) / 'scan-config.yaml'
                 path.write_bytes(content)

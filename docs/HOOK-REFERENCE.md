@@ -48,6 +48,11 @@ All hooks follow the fail-open error handling model:
 
 Every hook writes a JSON report to `.scanning/last-scan.json` (overwritten by each hook; last hook wins). The output conforms to `schemas/last-scan.schema.json`.
 
+Push scanners export their reports from the isolated snapshot to this location in
+the consumer repository before snapshot cleanup, including on scan failure. Earlier
+reports are cleared before a new transaction, object or scanner attempt; if that
+attempt produces no report, the earlier report is absent.
+
 ## Environment Variables
 
 The dispatcher sets these environment variables for hook scripts:
@@ -144,7 +149,9 @@ The dispatcher sets these environment variables for hook scripts:
 - **Stage**: pre-push
 - **Tool**: tflint
 - **Target**: <15 seconds
-- **Config**: Uses `.scanning/configs/.tflint.hcl` (cloud-specific ruleset and rules)
+- **Config**: Requires external trusted `SCAN_TFLINT_CONFIG` (an HCL file) and
+  `SCAN_TFLINT_PLUGIN_DIR` (plugin cache); executable config is not loaded from the
+  pushed tree. See [the migration guide](CONSUMER-MIGRATION.md#trusted-execution-and-output-migration).
 - **Monorepo**: Runs per detected Terraform directory
 
 #### snyk-iac (Optional)

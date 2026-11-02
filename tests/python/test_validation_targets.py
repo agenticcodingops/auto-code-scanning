@@ -82,13 +82,19 @@ def scanner(tmp_path):
                     'if "POLICY_TRACE" in os.environ:\n'
                     ' policies=[sys.argv[i+1] for i,a in enumerate(sys.argv[:-1]) if a in ("--config","--config-file")]\n'
                     ' pathlib.Path(os.environ["POLICY_TRACE"]).write_text(pathlib.Path(policies[0]).read_text() if policies else "missing")\n'
-                    'print(\'{"results":{"failed_checks":[]},"issues":[],"infrastructureAsCodeIssues":[]}\')\n')
+                    'print(\'{"results":{"failed_checks":[]},"issues":[],"infrastructureAsCodeIssues":[]}\')\n'
+                    'sys.exit(int(os.environ.get("SCANNER_EXIT", "0")))\n')
     for name in ('dotnet', 'checkov', 'tflint', 'trivy', 'snyk'):
         target = bin_dir / name
         target.write_text(f'#!/usr/bin/env bash\nexec python "{mock.as_posix()}" "$@"\n', newline='\n')
         target.chmod(0o755)
         (bin_dir / f'{name}.cmd').write_text(f'@"{sys.executable}" "{mock}" %*\n')
-    return dict(clean_env(), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], TRACE=str(trace)), trace
+    trusted = tmp_path / 'trusted.tflint.hcl'
+    trusted.write_text('# external trusted rules\n')
+    plugins = tmp_path / 'trusted-plugins'
+    plugins.mkdir()
+    return dict(clean_env(), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'], TRACE=str(trace),
+                SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(plugins)), trace
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
@@ -146,6 +152,85 @@ def test_config_validates_consumer_index_not_package_or_worktree(consumer, packa
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('staged_valid', [False, True])
+def test_staged_config_ignores_blob_replacement(consumer, package, shell, staged_valid):
+    valid = (ROOT / 'templates/scan-config/starter.yaml').read_text()
+    invalid = 'languages: []\n'
+    config = consumer / 'scan-config.yaml'
+    config.write_text(valid if staged_valid else invalid)
+    git(consumer, 'add', 'scan-config.yaml')
+    original = git(consumer, 'rev-parse', ':scan-config.yaml')
+    config.write_text(invalid if staged_valid else valid)
+    replacement = git(consumer, 'hash-object', '-w', 'scan-config.yaml')
+    git(consumer, 'replace', original, replacement)
+    assert subprocess.check_output(['git', 'show', ':scan-config.yaml'], cwd=consumer,
+                                   env=clean_env()) == config.read_bytes()
+    result = subprocess.run(hook(package, shell, 'validate-scan-config'), cwd=consumer,
+                            capture_output=True, text=True)
+    assert result.returncode == (0 if staged_valid else 1), result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('kind', ['commit', 'tree'])
+def test_staged_config_change_detection_ignores_replacements(consumer, package, shell, kind):
+    config = consumer / 'scan-config.yaml'
+    config.write_text((ROOT / 'templates/scan-config/starter.yaml').read_text())
+    git(consumer, 'add', 'scan-config.yaml')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'valid config')
+    original = git(consumer, 'rev-parse', 'HEAD' if kind == 'commit' else 'HEAD^{tree}')
+    config.write_text('languages: []\n')
+    git(consumer, 'add', 'scan-config.yaml')
+    replacement = git(consumer, 'write-tree')
+    if kind == 'commit':
+        replacement = git(consumer, 'commit-tree', replacement, '-m', 'replacement')
+    git(consumer, 'replace', original, replacement)
+    assert git(consumer, 'diff', '--cached', '--name-only') == ''
+    result = subprocess.run(hook(package, shell, 'validate-scan-config'), cwd=consumer,
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'INVALID' in result.stdout
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('exit_code', [0, 1])
+def test_push_exports_current_report_even_on_failure(consumer, package, scanner, shell, exit_code):
+    report = consumer / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"stale":true}')
+    # A committed old report must not be mistaken for scanner output either.
+    git(consumer, 'add', '.scanning/last-scan.json')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'old report')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    env, _ = scanner
+    env['SCANNER_EXIT'] = str(exit_code)
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == exit_code, result.stdout + result.stderr
+    current = json.loads(report.read_text(encoding='utf-8-sig'))
+    assert current['tools_executed'] == ['dotnet-build']
+    assert current['summary']['total_findings'] == exit_code
+    assert (consumer / 'App.cs').read_text() == 'pushed bytes\n'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_push_without_report_removes_earlier_and_tracked_reports(consumer, package, scanner, shell):
+    git(consumer, 'rm', 'App.sln')
+    report = consumer / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"stale":true}')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'missing solution and old report')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    env, _ = scanner
+    result = subprocess.run(hook(package, shell, 'dotnet-build'), cwd=consumer, env=env,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not report.exists()
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
 def test_push_missing_or_invalid_transaction_blocks(consumer, package, scanner, shell):
     env, trace = scanner
     for records in ('', 'invalid record\n', f'ref {"f"*40} ref {ZERO}\n'):
@@ -161,7 +246,6 @@ def test_iac_hooks_read_object_bytes(consumer, package, scanner, shell, name):
     (consumer / 'main.tf').write_text('# pushed IaC\n')
     policies = consumer / '.scanning/configs'
     policies.mkdir(parents=True)
-    (policies / '.tflint.hcl').write_text('# tracked policy\n')
     (policies / '.checkov.yaml').write_text('quiet: true\n')
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'iac')
@@ -169,6 +253,8 @@ def test_iac_hooks_read_object_bytes(consumer, package, scanner, shell, name):
     (consumer / 'main.tf').write_text('# live worktree\n')
     env, trace = scanner
     env['SNYK_TOKEN'] = 'fixture'
+    if name == 'tflint':
+        env['POLICY_TRACE'] = str(consumer.parent / 'linter-policy-trace')
     result = subprocess.run(hook(package, shell, name), cwd=consumer, env=env,
                             input=f'refs/heads/target {oid} refs/heads/other {ZERO}\n',
                             text=True, capture_output=True)
@@ -176,6 +262,10 @@ def test_iac_hooks_read_object_bytes(consumer, package, scanner, shell, name):
     assert trace.exists(), result.stdout + result.stderr
     assert any(json.loads(line).get('main.tf') == '# pushed IaC\n' for line in trace.read_text().splitlines())
     assert '# live worktree' in (consumer / 'main.tf').read_text()
+    report = json.loads((consumer / '.scanning/last-scan.json').read_text(encoding='utf-8-sig'))
+    assert report['summary']['total_findings'] == 0
+    if name == 'tflint':
+        assert Path(env['POLICY_TRACE']).read_text() == '# external trusted rules\n'
 
 
 @pytest.mark.parametrize('skip', ['', 'other-hook,dotnet-build,checkov'])
@@ -324,6 +414,111 @@ def load_push_runner(package):
     return module
 
 
+@pytest.mark.parametrize('last_writes_report', [False, True])
+def test_push_exports_each_report_and_clears_between_scanners_and_objects(
+        consumer, package, monkeypatch, last_writes_report):
+    (consumer / 'main.tf').write_text('# first tip\n')
+    report = consumer / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"stale":true}')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'first tip')
+    first = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'main.tf').write_text('# second tip\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'second tip')
+    second = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    monkeypatch.setattr(runner, 'select_shell', lambda shell: ('sh', 'fixture'))
+    calls, exports, snapshots = [], [], []
+    publish = runner.export_report
+    real_run = subprocess.run
+
+    def run(command, *args, **kwargs):
+        if command[0] != 'fixture':
+            return real_run(command, *args, **kwargs)
+        cwd, env = kwargs['cwd'], kwargs['env']
+        snapshots.append(cwd)
+        assert not report.exists()
+        snapshot_report = cwd / '.scanning/last-scan.json'
+        assert not snapshot_report.exists()
+        assert env['SCAN_PUSH_SNAPSHOT'] == '1'
+        calls.append(Path(command[1]).stem)
+        if len(calls) < 4 or last_writes_report:
+            snapshot_report.write_text(json.dumps({'scan': len(calls)}))
+        return subprocess.CompletedProcess(command, 1 if len(calls) == 4 else 0)
+
+    def export(source, destination):
+        publish(source, destination)
+        exports.append(json.loads(destination.read_text()) if destination.exists() else None)
+
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    monkeypatch.setattr(runner, 'export_report', export)
+    records = f'refs/heads/one {first} refs/heads/one {ZERO}\nrefs/heads/two {second} refs/heads/two {ZERO}\n'
+    assert runner.scan(records, [('dotnet-build', []), ('trivy-iac-full', [])], 'sh') == 1
+    assert calls == ['dotnet-build', 'trivy-iac-full'] * 2
+    assert exports == [{'scan': 1}, {'scan': 2}, {'scan': 3}, {'scan': 4} if last_writes_report else None]
+    assert report.exists() == last_writes_report
+    assert all(not snapshot.exists() for snapshot in snapshots)
+
+
+@pytest.mark.parametrize('transaction', ['empty', 'deletion', 'invalid', 'skipped', 'disabled'])
+def test_push_without_scan_clears_previous_report(consumer, package, monkeypatch, transaction):
+    if transaction == 'disabled':
+        (consumer / 'scan-config.yaml').write_text('global: {local_hooks_enabled: false}\n')
+        git(consumer, 'add', 'scan-config.yaml')
+        git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'disabled hooks')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    records = f'refs/heads/main {oid} refs/heads/main {ZERO}\n'
+    if transaction == 'empty':
+        records = ''
+    elif transaction == 'deletion':
+        records = f'(delete) {ZERO} refs/heads/main {oid}\n'
+    elif transaction == 'invalid':
+        records = 'invalid record\n'
+    report = consumer / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"stale":true}')
+    monkeypatch.chdir(consumer)
+    runner = load_push_runner(package)
+    if transaction == 'invalid':
+        with pytest.raises(ValueError, match='Malformed'):
+            runner.scan(records, [('dotnet-build', [])], 'auto', from_git=True)
+    else:
+        hooks = [] if transaction == 'skipped' else [('dotnet-build', [])]
+        assert runner.scan(records, hooks, 'auto', from_git=True) == 0
+    assert not report.exists()
+
+
+@pytest.mark.parametrize('operation', ['scan', 'export'])
+def test_push_report_refuses_linked_consumer_output(consumer, package, tmp_path, monkeypatch, operation):
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    sentinel = outside / 'last-scan.json'
+    sentinel.write_text('original')
+    link = consumer / '.scanning'
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        if os.name != 'nt':
+            pytest.skip('directory link unavailable')
+        result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(outside)], capture_output=True)
+        if result.returncode:
+            pytest.skip('junction unavailable')
+    source = tmp_path / 'current-report.json'
+    source.write_text('current')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    with pytest.raises(OSError, match='symlink or reparse point'):
+        if operation == 'scan':
+            runner.scan('', [], 'auto', from_git=True)
+        else:
+            runner.export_report(source, link / 'last-scan.json')
+    assert sentinel.read_text() == 'original'
+    assert list(outside.iterdir()) == [sentinel]
+
+
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('kind', ['commit', 'tree', 'blob', 'tag'])
 def test_push_ignores_replacement_objects(consumer, package, scanner, shell, kind):
@@ -383,10 +578,10 @@ def test_untracked_policy_blocks_instead_of_silently_changing_rules(consumer, pa
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'ignored policies')
     policies = consumer / '.scanning/configs'
     policies.mkdir(parents=True)
-    (policies / '.tflint.hcl').write_text('# required cloud rules\n')
+    (policies / '.checkov.yaml').write_text('# required cloud rules\n')
     oid = git(consumer, 'rev-parse', 'HEAD')
     env, trace = scanner
-    result = subprocess.run(hook(package, shell, 'tflint'), cwd=consumer, env=env,
+    result = subprocess.run(hook(package, shell, 'checkov'), cwd=consumer, env=env,
                             input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
                             text=True, capture_output=True)
     assert result.returncode == 1, result.stdout + result.stderr
@@ -411,6 +606,24 @@ def test_tracked_custom_policy_directory_is_honored(consumer, package, scanner, 
                             text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert policy_trace.read_text() == content
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('setting', ['SCAN_TFLINT_CONFIG', 'SCAN_TFLINT_PLUGIN_DIR'])
+def test_push_linter_rejects_consumer_owned_executable_inputs(consumer, package, scanner, shell, setting):
+    (consumer / 'main.tf').write_text('# pushed source\n')
+    (consumer / '.tflint.hcl').write_text('# untrusted repository config\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'linter inputs')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    env, trace = scanner
+    env[setting] = str(consumer / ('.tflint.hcl' if setting == 'SCAN_TFLINT_CONFIG' else 'plugins'))
+    result = subprocess.run(hook(package, shell, 'tflint'), cwd=consumer, env=env,
+                            input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
+                            text=True, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'outside the consumer repository' in result.stderr
+    assert not trace.exists()
 
 
 @pytest.mark.parametrize('stages,expected', [(None, True), (['pre-commit'], False), (['pre-push'], True), (['push'], True)])

@@ -187,6 +187,8 @@ def test_tflint_init_requires_external_config(tmp_path,shell,config):
     trusted = tmp_path / 'trusted.hcl'; trusted.write_text('config { plugin_dir = \"./plugins\" }\n' if config == 'override' else '# trusted config\n')
     env = {k:v for k,v in os.environ.items() if not k.startswith('SCAN_')}
     env['PATH'] = str(tools) + os.pathsep + env['PATH']
+    # This fixture tests the wrapper's input boundary, without a push transaction.
+    env['SCAN_LEGACY_PUSH_STATE'] = '1'
     env['SCAN_TFLINT_PLUGIN_DIR'] = str(tmp_path / 'plugins')
     if config != 'missing': env['SCAN_TFLINT_CONFIG'] = str(trusted if config in ('external','override') else repo / '.tflint.hcl')
     suffix='sh' if shell=='bash' else 'ps1'
