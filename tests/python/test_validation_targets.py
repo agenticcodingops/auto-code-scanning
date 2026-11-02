@@ -652,7 +652,38 @@ def test_push_stage_defaults_match_the_platform_manifest(package):
     import yaml
     module = load_push_runner(package)
     manifest = {h['id']: h for h in yaml.safe_load((ROOT / '.pre-commit-hooks.yaml').read_text())}
+    push_ids = {name for name, hook in manifest.items() if 'pre-push' in hook['stages']}
+    assert len(module.HOOKS) == len(set(module.HOOKS))
+    assert set(module.HOOKS) == push_ids
     assert all(module.MANIFEST_STAGES[name] == manifest[name]['stages'] for name in module.HOOKS)
+
+
+@pytest.mark.parametrize('ostype', ['linux-gnu', 'msys'])
+@pytest.mark.parametrize('hook_id', (ROOT / 'hooks/lib/push-hook-ids.txt').read_text().split()
+                         + ['validate-scan-config', 'trivy-iac-critical'])
+def test_dispatcher_live_kill_switch_exempts_every_push_scanner(package, consumer, ostype, hook_id):
+    # Stub only the downstream scanner: the real dispatcher must reach it, pass
+    # arguments through and preserve its failure instead of returning a skip.
+    (package / 'scan-config.yaml').write_text('local_hooks_enabled: false\n')
+    (package / 'hooks' / f'{hook_id}.sh').write_text(
+        '#!/usr/bin/env bash\nprintf "dispatched:%s:%s\\n" "$SCAN_HOOK_ID" "$1"\nexit 23\n',
+        newline='\n')
+    (package / 'hooks' / f'{hook_id}.sh').chmod(0o755)
+    (package / 'hooks' / f'{hook_id}.ps1').write_text(
+        'Write-Output "dispatched:$($env:SCAN_HOOK_ID):$($args[0])"\nexit 23\n')
+    env = dict(clean_env(), OSTYPE=ostype)
+    env.pop('SCAN_CONFIG_FILE', None)
+    result = subprocess.run(hook(package, 'sh', 'dispatcher') + [hook_id, 'argument'],
+                            cwd=consumer, env=env, text=True, capture_output=True)
+    output = result.stdout + result.stderr
+    if hook_id == 'trivy-iac-critical':
+        assert result.returncode == 0, output
+        assert 'local scanning disabled' in output
+        assert 'dispatched:' not in output
+    else:
+        assert result.returncode == 23, output
+        assert f'dispatched:{hook_id}:argument' in output
+        assert 'local scanning disabled' not in output
 
 
 def test_unrelated_colliding_ids_and_aliases_are_preserved(consumer, package, monkeypatch):

@@ -35,7 +35,11 @@ fi
 # the toggle works regardless of the hook's current working directory.
 # ---------------------------------------------------------------------------
 SCAN_CONFIG_FILE="${SCAN_CONFIG_FILE:-${REPO_ROOT}/scan-config.yaml}"
-if [[ "$HOOK_ID" != validate-scan-config && ! "$HOOK_ID" =~ ^(trivy-iac-full|checkov|checkov-strict|tflint|snyk-iac|dotnet-build)$ ]] && [ -f "${SCAN_CONFIG_FILE}" ] && \
+# Share the push scanner IDs with the transaction adapter. The manifest parity
+# test requires this list to match every pre-push hook in .pre-commit-hooks.yaml.
+if [[ "$HOOK_ID" != validate-scan-config ]] && \
+   ! grep -Fxq -- "$HOOK_ID" "${SCRIPT_DIR}/lib/push-hook-ids.txt" && \
+   [ -f "${SCAN_CONFIG_FILE}" ] && \
    grep -qE '^[[:space:]]*local_hooks_enabled:[[:space:]]*false([[:space:]]|#|$)' "${SCAN_CONFIG_FILE}" 2>/dev/null; then
     echo "[${HOOK_ID}] local scanning disabled (scan-config.yaml: local_hooks_enabled: false) — skipping"
     exit 0

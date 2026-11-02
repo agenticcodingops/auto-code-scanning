@@ -14,11 +14,11 @@ import subprocess
 import sys
 import tempfile
 
-HOOKS = ('trivy-iac-full', 'checkov', 'checkov-strict', 'tflint', 'snyk-iac', 'dotnet-build')
+HERE = Path(__file__).resolve().parent
+HOOKS = tuple((HERE / 'lib/push-hook-ids.txt').read_text().split())
 # Every supported push hook explicitly declares this stage in the manifest.
 # Config-wide default_stages only applies when a manifest has no stages.
 MANIFEST_STAGES = {hook: ['pre-push'] for hook in HOOKS}
-HERE = Path(__file__).resolve().parent
 PLATFORM_REPOSITORY = 'https://github.com/agenticcodingops/auto-code-scanning'
 
 
