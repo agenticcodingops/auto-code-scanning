@@ -290,8 +290,8 @@ function Get-TfFileCount {
 
     $count = 0
     foreach ($dir in $Directories) {
-        if (Test-Path $dir -PathType Container) {
-            $count += (Get-ChildItem -Path $dir -Filter '*.tf' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+        if (Test-Path -LiteralPath $dir -PathType Container) {
+            $count += (Get-ChildItem -LiteralPath $dir -Filter '*.tf' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
                 Where-Object { $_.FullName -notmatch '[\\/]\.terraform[\\/]' }).Count
         }
     }
@@ -491,10 +491,13 @@ function Invoke-TrivyWithRetry {
             $output = & trivy @ArgumentList 2> $diagnostics
             $exitCode = $LASTEXITCODE
             $stderr = [System.IO.File]::ReadAllText($diagnostics)
-            if ($exitCode -gt 1 -and $stderr -match 'database.*locked' -and $attempt -eq 1) {
-                Write-HookWarn 'Trivy database locked; retrying'
-                Start-Sleep -Seconds 2
-                continue
+            if ($exitCode -ne 0 -and $stderr -match 'database.*locked|cache may be in use by another process') {
+                if ($attempt -eq 1) {
+                    Write-HookWarn 'Trivy database locked; retrying'
+                    Start-Sleep -Seconds 2
+                    continue
+                }
+                $exitCode = 2
             }
             return @{ Output = ($output -join "`n"); Stderr = $stderr; ExitCode = $exitCode }
         }

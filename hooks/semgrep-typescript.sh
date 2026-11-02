@@ -35,7 +35,7 @@ set -e
 
 duration_ms="$(stop_timer)"
 
-if [[ ${sg_exit} -ne 0 ]]; then
+if [[ ${sg_exit} -gt 1 ]]; then
     handle_exit_code ${sg_exit} || exit 1
     hook_log "PASS: scanner error, allowing commit (fail-open)"
     write_scan_json "$(build_pass_json "semgrep-typescript" "." "${duration_ms}")"

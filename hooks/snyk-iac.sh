@@ -82,7 +82,7 @@ for dir in "${scan_dirs[@]}"; do
 
     # Check for .snyk policy file in repo root
     if [[ -f ".snyk" ]]; then
-        snyk_cmd+=(--policy-path=.)
+        snyk_cmd+=(--policy-path="$(pwd)")
     fi
 
     # Add any extra args passed through
@@ -90,11 +90,9 @@ for dir in "${scan_dirs[@]}"; do
         snyk_cmd+=("$@")
     fi
 
-    snyk_cmd+=(-- "${dir}")
-
     # Run Snyk
     set +e
-    output="$("${snyk_cmd[@]}" 2>&1)"
+    output="$(cd -- "${dir}" && "${snyk_cmd[@]}" 2>&1)"
     exit_code=$?
     set -e
 

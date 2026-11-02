@@ -40,14 +40,14 @@ $totalMedium = 0
 $totalLow = 0
 
 foreach ($dir in $scanDirs) {
-    if (-not (Test-Path $dir -PathType Container)) { continue }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
 
     # Build Snyk arguments
     $snykArgs = @('iac', 'test', '--json')
 
     # Check for .snyk policy file
     if (Test-Path '.snyk') {
-        $snykArgs += @('--policy-path=.')
+        $snykArgs += @('--policy-path', (Get-Location).Path)
     }
 
     # Add extra args
@@ -55,11 +55,12 @@ foreach ($dir in $scanDirs) {
         $snykArgs += $ExtraArgs
     }
 
-    $snykArgs += @('--', $dir)
-
     # Run Snyk
-    $output = & snyk @snykArgs 2>&1
-    $exitCode = $LASTEXITCODE
+    Push-Location -LiteralPath $dir
+    try {
+        $output = & snyk @snykArgs 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally { Pop-Location }
 
     if ($exitCode -eq 1) {
         # Parse findings

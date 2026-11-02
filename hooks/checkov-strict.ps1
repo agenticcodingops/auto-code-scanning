@@ -26,7 +26,7 @@ $totalMedium = 0
 $totalLow = 0
 
 foreach ($dir in $scanDirs) {
-    if (-not (Test-Path $dir -PathType Container)) { continue }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
 
     # Build Checkov arguments with hard-fail
     $checkovArgs = @('-d', $dir, '--framework', 'terraform', '--output', 'json', '--compact', '--quiet', '--hard-fail-on', 'CRITICAL,HIGH')

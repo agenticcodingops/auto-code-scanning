@@ -25,7 +25,7 @@ $totalMedium = 0
 $totalLow = 0
 
 foreach ($dir in $scanDirs) {
-    if (-not (Test-Path $dir -PathType Container)) { continue }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
 
     # Check for config file
     $configFile = Resolve-ScanConfig -Filename '.tflint.hcl'
@@ -35,15 +35,12 @@ foreach ($dir in $scanDirs) {
     if ($configFile) {
         $initArgs += @('--config', $configFile)
     }
+    $initExit = 2
     try {
         & tflint @initArgs 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-HookWarn "tflint --init failed (exit $LASTEXITCODE) in '$dir' - continuing (fail-open)"
-        }
-    } catch {
-        # Don't silently swallow init failures — log and continue fail-open.
-        Write-HookWarn "tflint --init threw in '$dir': $($_.Exception.Message) - continuing (fail-open)"
-    }
+        $initExit = $LASTEXITCODE
+    } catch { $initExit = 2 }
+    if ($initExit -ne 0) { $null = Get-HookExitCode -ToolExitCode 2 }
 
     # Build tflint arguments
     $tflintArgs = @('--chdir', $dir, '--format', 'json')
@@ -80,10 +77,10 @@ foreach ($dir in $scanDirs) {
         $overallExit = 1
     } elseif ($exitCode -ge 3) {
         # Runtime error — fail-open
-        $null = Get-HookExitCode -ToolExitCode $exitCode
+        $null = Get-HookExitCode -ToolExitCode 2
     } elseif ($exitCode -eq 1) {
         # Config errors — fail-open
-        $null = Get-HookExitCode -ToolExitCode $exitCode
+        $null = Get-HookExitCode -ToolExitCode 2
     }
 }
 

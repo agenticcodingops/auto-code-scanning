@@ -191,7 +191,7 @@ _changed_files_for_detect() {
         for reference in '@{push}' '@{upstream}'; do
             if git rev-parse --verify "$reference" >/dev/null 2>&1; then
                 git diff --name-only -z --diff-filter=ACMR "$reference" HEAD -- > "$listing" || { rm -f -- "$listing"; return 1; }
-                break
+                [[ -s "$listing" ]] && break
             fi
         done
     fi
@@ -230,7 +230,9 @@ count_tf_files() {
     for dir in "$@"; do
         if [[ -d "${dir}" ]]; then
             local dir_count
-            dir_count="$(find "${dir}" -maxdepth 3 -name '*.tf' -not -path '*/.terraform/*' 2>/dev/null | wc -l)"
+            local search_dir="${dir}"
+            [[ "$search_dir" == /* ]] || search_dir="./$search_dir"
+            dir_count="$(find -- "${search_dir}" -maxdepth 3 -name '*.tf' -not -path '*/.terraform/*' -print0 2>/dev/null | tr -cd '\0' | wc -c)"
             count=$((count + dir_count))
         fi
     done
@@ -397,8 +399,8 @@ resolve_config() {
     local fallback="${3:-}"
 
     # Priority 1: Consuming repo's downloaded configs
-    if [[ -f "${SCAN_CONFIG_DIR}/${filename}" ]]; then
-        echo "${SCAN_CONFIG_DIR}/${filename}"
+    if [[ -f "${SCAN_CONFIG_DIR:-.scanning/configs}/${filename}" ]]; then
+        echo "${SCAN_CONFIG_DIR:-.scanning/configs}/${filename}"
         return 0
     fi
 
@@ -425,8 +427,9 @@ run_trivy_with_retry() {
     diagnostics="$(mktemp)" || return 2
     for attempt in 1 2; do
         output="$("$@" 2>"$diagnostics")" && exit_code=0 || exit_code=$?
-        if [[ "$exit_code" -gt 1 ]] && grep -qi 'database.*locked' -- "$diagnostics"; then
+        if [[ "$exit_code" -ne 0 ]] && grep -qiE 'database.*locked|cache may be in use by another process' -- "$diagnostics"; then
             [[ "$attempt" == 1 ]] && { hook_warn "Trivy database locked; retrying"; sleep 2; continue; }
+            exit_code=2
         fi
         cat -- "$diagnostics" >&2
         rm -f -- "$diagnostics"
