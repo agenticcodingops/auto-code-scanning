@@ -28,25 +28,35 @@ on:
         type: string
 
 # Keep the caller's own token read-only; the reusable workflow manages write via
-# the AUTOFIX_TOKEN secret you pass with `secrets: inherit`.
+# the AUTOFIX_TOKEN secret you pass below.
 permissions:
   contents: read
 
 jobs:
   fix:
     # PRIVILEGE BOUNDARY — only run when ALL hold:
-    #   * manual dispatch (inherently maintainer-gated), OR
+    #   * manual dispatch by a person or a specific GitHub App, OR
     #   * non-fork PR head in THIS repo, AND
     #   * the PR carries the `ai-autofix` label, AND
-    #   * the trigger came from a trusted bot OR an OWNER/MEMBER/COLLABORATOR.
+    #   * the trigger came from a trusted GitHub App OR an OWNER/MEMBER/COLLABORATOR.
+    #
+    # Trusted bots are GitHub App accounts: an `<app>[bot]` login belongs to one App.
+    # Never add github-actions[bot]: every workflow's GITHUB_TOKEN acts as that login,
+    # so it names no particular workflow (the reusable workflow refuses it too). To let
+    # your own review workflow start the loop, have it post with its own GitHub App's
+    # token and add that App's `<app>[bot]` login to both lists below.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.actor != 'github-actions[bot]' &&
+        github.triggering_actor != 'github-actions[bot]'
+      ) ||
       (
         github.event.pull_request.head.repo.full_name == github.repository &&
         contains(github.event.pull_request.labels.*.name, 'ai-autofix') &&
         (
-          contains(fromJSON('["coderabbitai[bot]","sonarqubecloud[bot]","sonarcloud[bot]","github-actions[bot]"]'), github.event.review.user.login) ||
-          contains(fromJSON('["coderabbitai[bot]","sonarqubecloud[bot]","sonarcloud[bot]","github-actions[bot]"]'), github.event.comment.user.login) ||
+          contains(fromJSON('["coderabbitai[bot]","sonarqubecloud[bot]","sonarcloud[bot]"]'), github.event.review.user.login) ||
+          contains(fromJSON('["coderabbitai[bot]","sonarqubecloud[bot]","sonarcloud[bot]"]'), github.event.comment.user.login) ||
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association) ||
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         )
@@ -57,4 +67,9 @@ jobs:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
       scanning_repo_ref: v2.3.4  # x-release-please-version
-    secrets: inherit
+    # Pass only the three secrets the reusable workflow declares, never
+    # `secrets: inherit` (that hands it every secret of the repository and org).
+    secrets:
+      AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

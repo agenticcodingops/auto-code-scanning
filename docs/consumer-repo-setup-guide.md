@@ -370,7 +370,8 @@ jobs:
 
 ### Fix-loop caller (only if `--enable-fix-loop`)
 
-This file owns the **privilege boundary** and `uses:` the reusable two-job workflow, pinned
+This file owns the **privilege boundary** and `uses:` the reusable workflow, whose
+`analyze`, `verify` and `apply-and-push` jobs propose, build and push the fix, pinned
 to a commit, with the three secrets it declares passed by name. Leave its gating `if:`
 intact:
 
@@ -396,7 +397,8 @@ jobs:
 
 Find `<commit-sha>` as in
 [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). The file
-setup copies still pins a tag and says `secrets: inherit`; replace both. Never use
+setup copies pins a tag; replace it with the commit. A copy from a release up to and including
+v2.3.4 also says `secrets: inherit`; replace that with the three secrets above. Never use
 `secrets: inherit` here: it hands the called workflow every secret of your repository and
 organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 

@@ -370,7 +370,7 @@ owner, at `scanning-repo-ref`; see
 The fix-loop caller (`autonomous-fix.yml`) runs when a PR carries the `ai-autofix` label
 and a trusted review or review comment triggers it, or when a maintainer dispatches it with a
 PR number (`templates/fix-loop/autonomous-fix.yml:18-26`). The template it copies pins a
-tag and says `secrets: inherit`; replace both. Pin the commit, and pass the three secrets
+tag; pin the commit instead. Pass only the three secrets
 `autonomous-fix.yml` declares (`AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` and
 `CLAUDE_CODE_OAUTH_TOKEN`) by name, as in
 [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).

@@ -255,9 +255,10 @@ Each excerpt leaves out the triggers and permissions; see
 call needs.
 
 The fix loop is the one call that pushes to your repository, so pin the commit and pass
-only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:56-65`). The
-shipped `templates/fix-loop/autonomous-fix.yml` says `secrets: inherit`; replace it. Never
-use `secrets: inherit` there: it hands the called workflow every secret of your repository
+only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:64-73`), as the
+shipped `templates/fix-loop/autonomous-fix.yml` now does. Its copies from releases up to
+and including v2.3.4 say `secrets: inherit`; replace that. Never use `secrets: inherit`
+there: it hands the called workflow every secret of your repository
 and organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
 
 The shipped caller templates (`templates/workflows/`, `templates/fix-loop/`) pin the release
@@ -339,8 +340,8 @@ The agentic fix loop calls Anthropic's `claude-code-action`. That action is
   v1.0.148, locks `@anthropic-ai/claude-agent-sdk` 0.3.177 in its `bun.lock`, and that
   SDK release matches Claude Code 2.1.177, well past the fix.
 
-The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 242;
-the header comment at line 27 names the version). It is mirrored as
+The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 333;
+the header comment at lines 35-37 names the version). It is mirrored as
 `fix_loop.claude_code_action_ref` in `scan-config.yaml` and in
 `templates/scan-config/starter.yaml`, `standard.yaml` and `strict.yaml`, which
 `setup-scan-fix` copies into a new adopter's `scan-config.yaml`. Nothing checks that

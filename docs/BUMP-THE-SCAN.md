@@ -150,7 +150,7 @@ grep -n -A1 'auto-code-scanning' .pre-commit-config.yaml 2>/dev/null   # the rev
 ```
 
 That includes `scanning_repo_ref` in an `autonomous-fix.yml` caller
-(`autonomous-fix.yml:51-55`) and a pre-commit `rev:`.
+(`autonomous-fix.yml:59-63`) and a pre-commit `rev:`.
 
 If an `autonomous-fix.yml` caller is among the pins, compare
 `.github/workflows/autonomous-fix.yml`, `scripts/check-fix-allowlist.py` and

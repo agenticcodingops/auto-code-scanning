@@ -7,7 +7,7 @@ you can adopt independently:
 
 1. **In-session** (`templates/claude/`) — Claude Code fixes its own edits *before* they're
    ever committed. Lowest risk, highest day-to-day value. Adopt this first.
-2. **CI** (`.github/workflows/autonomous-fix.yml`) — a hardened two-job workflow fixes a PR
+2. **CI** (`.github/workflows/autonomous-fix.yml`) — a hardened multi-job workflow fixes a PR
    after a review. Opt-in per PR via the `ai-autofix` label.
 
 Read **[SECURITY-MODEL.md](SECURITY-MODEL.md)** alongside this — it explains *why* each
@@ -30,7 +30,7 @@ fix_loop:
   gated_paths: ["auth","payment","crypto","security","identity","secret","credential",
                 ".github/",".claude/","hooks","lefthook.yml","scan-and-fix.ps1","scripts/",".env","LICENSE"]
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
-  build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in apply job
+  build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in the verify job (no secrets)
   required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]
 ```
 
@@ -62,48 +62,62 @@ Escape hatches for noisy local environments: `CC_SKIP_SEMGREP_HOOK=1`, `CC_SKIP_
 > `.claude/` is in `fix_loop.gated_paths`, so the CI loop can never modify the very hooks that
 > guard the agent.
 
-## 3. CI loop — the two-job workflow
+## 3. CI loop — the split-job workflow
 
-`autonomous-fix.yml` (reusable `workflow_call`) reproduces the proven two-job design generically.
+`autonomous-fix.yml` (reusable `workflow_call`) reproduces the proven split-job design generically.
 A consumer drops in the thin caller `templates/fix-loop/autonomous-fix.yml`, which owns the
 privilege boundary and `uses:` the reusable workflow at a pinned tag.
 
 ```
-   pull_request_review ──▶ caller `if:` (label + non-fork + trusted reviewer)
+   pull_request_review ──▶ caller `if:` (label + non-fork + trusted App or person)
                                │
                                ▼
-   ┌──────────────┐   patch    ┌───────────────────┐        ┌────────────────────┐
-   │ config       │──▶│ analyze │───────────▶│ apply-and-push  │──▶ push (AUTOFIX) │
-   │ (read config)│   │ read-only│  artifact  │ re-verify+gate  │                   │
-   └──────────────┘   └──────────┘            └─────────────────┘                   │
-                          │ cap/gate/fail            │                              │
-                          └──────────▶ flag-human-review ◀──────────────────────────┘
+   ┌──────────────┐   ┌──────────┐  patch +   ┌──────────────┐ result ┌────────────────────┐
+   │ config       │──▶│ analyze  │──────────▶ │ verify       │──────▶ │ apply-and-push     │──▶ push
+   │ (read config)│   │ read-only│  SHA-256   │ build, no    │  only  │ gate + scan + push │  (AUTOFIX)
+   └──────────────┘   └──────────┘            │ secrets      │        │ no project code    │
+                          │                   └──────────────┘        └────────────────────┘
+                          │ cap/gate/fail (any job)
+                          └──────────▶ flag-human-review
 ```
 
-| Job | Token | Sees untrusted input? | Egress? | Output |
-|---|---|---|---|---|
-| `config` | read-only | no (reads **base** ref) | no | trusted `fix_loop` config |
-| `analyze` | **read-only** | yes (PR/review text, as DATA) | **no** | a patch artifact |
-| `apply-and-push` | **AUTOFIX_TOKEN** (push step only) | **no** | no | a commit pushed to the PR head |
-| `flag-human-review` | issues/PR write | no | no | `needs-human-review` label + comment |
+| Job | Token / secrets | Runs the PR's code? | Output |
+|---|---|---|---|
+| `config` | read-only | no (reads **base** ref) | trusted `fix_loop` config + its SHA-256 |
+| `analyze` | **read-only**; model credentials in the agent step only | **no** (the agent reads and edits; it cannot build, test or run packages) | a patch artifact + its SHA-256 |
+| `verify` | read-only, **no secrets** | **yes** (`build_verify_cmd`) | pass/fail only |
+| `apply-and-push` | **AUTOFIX_TOKEN** (push step only) | **no** | a commit pushed to the PR head |
+| `flag-human-review` | issues/PR write | no | `needs-human-review` label + comment |
 
 > **Trust boundary (hardened).** `fix_loop` config — `build_verify_cmd`, `allowlist_paths`,
 > `gated_paths`, `max_iterations` — is read from the **base ref**, so a PR cannot change the gate
-> or the executed build command via its own head diff. In `apply-and-push` the checkout uses
-> `persist-credentials: false`; the gate, secret scan, and `build_verify_cmd` run **token-free**,
-> and `AUTOFIX_TOKEN` is injected only into the final push URL. Point `build_verify_cmd` at a
-> checked-in script under a gated path (e.g. `bash scripts/ci-build-verify.sh`) so it can't be
-> altered in-PR either. See [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
+> or the executed build command via its own head diff. `build_verify_cmd` runs in the `verify`
+> job, which holds **no secret** and hands the push job nothing but its result. `apply-and-push`
+> runs no project code: it checks the artifacts' digests, builds one tree from the head and the
+> patch, gates and secret-scans that tree, commits it with `git commit-tree`, and pushes that
+> commit with hooks off; `AUTOFIX_TOKEN` is injected only into the final push URL. Point
+> `build_verify_cmd` at a checked-in script under a gated path (e.g.
+> `bash scripts/ci-build-verify.sh`) so it can't be altered in-PR either. See
+> [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
 
 Key enforcement (all mechanical, independent of the prompt):
 - `analyze` runs `claude-code-action` **FIX-ONLY** with a **scoped tool allowlist** (no umbrella
-  `Bash`, no `WebSearch`/`WebFetch`, no `git push/commit`). It emits a patch only.
+  `Bash`, no build, test, package or interpreter commands, no `WebSearch`/`WebFetch`, no
+  `git push/commit`). The model credentials reach that step only. The agent's config files
+  (`.claude/`, `.mcp.json`, `CLAUDE.md`, …) are removed from the checkout, and the session
+  loads user-level settings only, with hooks off and only the action's own MCP servers. Its
+  Bun runtime is a checksum-verified download, never an Actions-cache entry. It emits a patch only.
+  The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of
-  every `gated_paths` substring, else → `needs-human-review`.
-- `apply-and-push` re-checks out the **exact analyzed SHA** (no TOCTOU), re-scans changed files
-  for secrets, runs `build_verify_cmd`, bumps `.fix-attempts` (hard cap `max_iterations`), and
-  pushes with `AUTOFIX_TOKEN`.
+  every `gated_paths` substring, else → `needs-human-review`. A patch that adds or changes a
+  submodule entry is refused.
+- `verify` checks out the **exact analyzed SHA**, applies the patch and runs `build_verify_cmd`.
+- `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
+  commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
+  It restores nothing from the Actions cache, which the `verify` job can write to.
+- The reusable workflow refuses to run for the shared `github-actions[bot]` identity, whatever
+  the caller's `if:` says.
 
 ## 4. Enable it (checklist)
 
@@ -119,12 +133,14 @@ Key enforcement (all mechanical, independent of the prompt):
    [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml). The template pins
    `@v2.0.0` and grants only `contents: read`.
 5. Add the **`ai-autofix`** label to a PR. After a trusted review (CodeRabbit/SonarCloud or an
-   OWNER/MEMBER/COLLABORATOR), the loop runs.
+   OWNER/MEMBER/COLLABORATOR), the loop runs. A review or dispatch made with a workflow's
+   `GITHUB_TOKEN` (the `github-actions[bot]` login) never starts it: give a review workflow its
+   own GitHub App and list that App's `<app>[bot]` login in the caller's `if:` instead.
 
 ## 5. Operating the loop
 
 - **Stuck PR?** It will carry `needs-human-review` with a comment explaining why (cap reached,
-  gated path, build failed, secret detected, or branch advanced). Fix it by hand, then reset
+  gated path, build failed, secret detected, a changed artifact, or branch advanced). Fix it by hand, then reset
   `.fix-attempts` to `0`.
 - **Tighten/loosen scope** by editing `allowlist_paths` / `gated_paths` (config is gated, so the
   loop can't widen its own scope).

@@ -258,13 +258,15 @@ code change that resolves genuine flagged defects, then the workflow re-verifies
 pushes it. It is **off by default** — it runs only when `fix_loop.enabled: true` in
 `scan-config.yaml` **and** the PR carries the `ai-autofix` label.
 
-It is a hardened **two-job design** that deliberately breaks the "lethal trifecta"
-(untrusted input + write credentials + egress never share a job):
+It is a hardened **split-job design** that deliberately breaks the "lethal trifecta"
+(untrusted input + write credentials + egress never share a job), and runs the PR's own
+code only in a job that holds no secret:
 
 | Job | Context | Token | What it does |
 |-----|---------|-------|--------------|
-| **analyze** | untrusted PR/review text | **read-only**, no push creds, no egress | Runs `claude-code-action` with a scoped tool allowlist; treats every PR/review/issue comment as **untrusted data** (never as instructions); emits a vetted **patch artifact** only |
-| **apply-and-push** | trusted artifact only | `AUTOFIX_TOKEN` (push) | Re-checks out the **exact analyzed SHA**, re-enforces the allowlist gate via `scripts/check-fix-allowlist.py`, re-verifies the **secret scan + `build_verify_cmd`**, bumps `.fix-attempts`, and pushes |
+| **analyze** | untrusted PR/review text | **read-only**, no push creds; model credentials in the agent step only | Runs `claude-code-action` with a scoped tool allowlist that runs no build, test or package command; treats every PR/review/issue comment as **untrusted data** (never as instructions); emits a vetted **patch artifact** and its SHA-256 only |
+| **verify** | the PR's code + the patch | read-only, **no secrets** | Runs the base-sourced `build_verify_cmd`; hands the push job nothing but its pass/fail result |
+| **apply-and-push** | trusted artifact only; runs no project code | `AUTOFIX_TOKEN` (push step) | Checks the artifact digests, builds one tree from the **exact analyzed SHA** + patch, re-enforces the allowlist gate via `scripts/check-fix-allowlist.py` and the **secret scan** on that tree, commits it with `.fix-attempts` bumped, and pushes that commit with hooks off |
 | **flag-human-review** | — | issues/PR write | Labels `needs-human-review` and comments on cap / gate / failure |
 
 Key guarantees for an agent operating in this flow:
@@ -281,7 +283,7 @@ Key guarantees for an agent operating in this flow:
   action's own version; see [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b). This pin is the single source of
   truth and must match `fix_loop.claude_code_action_ref`.
 
-The full threat model and the two-job rationale are in
+The full threat model and the split-job rationale are in
 [SECURITY-MODEL.md](SECURITY-MODEL.md).
 
 ### One-file configuration

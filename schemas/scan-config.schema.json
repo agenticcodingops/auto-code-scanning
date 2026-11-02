@@ -161,7 +161,7 @@
         },
         "build_verify_cmd": {
           "type": "string",
-          "description": "Authoritative re-verify command in apply-and-push (e.g. 'dotnet build api/App.slnx'). '' = secret scan only."
+          "description": "Authoritative re-verify command, run on the patched code by the verify job, which holds no secrets (e.g. 'dotnet build api/App.slnx'). '' = path gate and secret scan only."
         },
         "required_secrets": {
           "type": "array",
