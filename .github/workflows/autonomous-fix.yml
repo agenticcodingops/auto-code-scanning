@@ -15,8 +15,10 @@
 #                        build, test or package commands, and whose start-up config files
 #                        come from the base commit -> produces a PATCH ARTIFACT + digest.
 #   JOB verify         : runs the base-sourced build_verify_cmd on the patched code in a
-#                        job with NO secrets. It hands the push job nothing but its result,
-#                        so project code never runs where the commit is made or pushed.
+#                        job with NO secrets and NO Actions cache access (cache-mode: none).
+#                        It hands the push job nothing but its result, so project code
+#                        never runs where the commit is made or pushed, and nothing it
+#                        builds can be saved to a cache another job or workflow restores.
 #   JOB apply-and-push : runs NO project code. Checks the patch digest, builds a tree from
 #                        the PR head + patch in a private index, gates and secret-scans
 #                        that exact tree, commits it with plumbing, and pushes that commit
@@ -76,6 +78,11 @@ on:
 # AUTOFIX_TOKEN injected into the push URL in apply-and-push.
 permissions:
   contents: read
+
+# No job in this workflow uses the Actions cache, so none gets access to it. GitHub
+# enforces cache-mode with scoped cache tokens: a job cannot restore or save beyond the
+# mode it is granted, whatever its steps run. The verify job repeats it at job level.
+cache-mode: none
 
 concurrency:
   group: autonomous-fix-${{ inputs.pr_number }}
@@ -429,9 +436,10 @@ jobs:
           retention-days: 3
 
   # ==========================================================================
-  # JOB B — verify (PROJECT CODE context). NO secrets, NO outputs, NO uploads.
-  # Runs the base-sourced build command on the patched code. Only its pass/fail
-  # result reaches the push job; its workspace is thrown away with the runner.
+  # JOB B — verify (PROJECT CODE context). NO secrets, NO outputs, NO uploads,
+  # NO Actions cache. Runs the base-sourced build command on the patched code. Only
+  # its pass/fail result reaches the push job; its workspace is thrown away with the
+  # runner.
   # ==========================================================================
   verify:
     name: Build verify (no credentials)
@@ -444,6 +452,13 @@ jobs:
       needs.analyze.outputs.gated != 'true'
     permissions:
       contents: read
+    # The job runs the pull request's code. A dispatched run's cache scope is the
+    # branch it runs on, usually the default branch, which other workflows restore
+    # from. With cache-mode: none the job's cache token can neither save nor restore,
+    # so nothing this job runs can create a cache entry. Enforced by the cache service,
+    # not by the steps: see the dependency caching reference, "Controlling cache access
+    # with cache-mode". Keep it here even if the workflow-level value changes.
+    cache-mode: none
     steps:
       - name: Checkout the EXACT vetted SHA (no persisted creds)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2

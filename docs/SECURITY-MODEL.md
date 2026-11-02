@@ -70,7 +70,13 @@ single job ever holds more than one.**
 - **`verify`** runs the base-sourced **`build_verify_cmd`** on the PR head with the patch
   applied. It is the only job that runs the PR's code, so it holds **no secret**, declares
   **no outputs** and uploads **nothing**: only its pass/fail result reaches the push job,
-  and its files, index, git config and hooks are discarded with its runner.
+  and its files, index, git config and hooks are discarded with its runner. It also has
+  **no Actions cache access** (`cache-mode: none`). GitHub enforces `cache-mode` in the
+  cache service with a scoped cache token, so no step of the build can save a cache entry,
+  whatever it runs. This matters on a `workflow_dispatch` run, whose cache scope is the
+  branch the run is on (usually the default branch), which other workflows restore from.
+  The rest of the workflow uses no cache either, so the workflow declares `cache-mode: none`
+  for every job.
 - **`apply-and-push`** never runs the PR's code. It checks out the **exact immutable head
   SHA** the patch was built against into a subdirectory, **with
   `persist-credentials: false` — the `AUTOFIX_TOKEN` is never written to `.git/config`** —
@@ -83,8 +89,9 @@ single job ever holds more than one.**
   **push** step holds the token, injected directly into the push URL
   (`https://x-access-token:$AUTOFIX_TOKEN@github.com/$REPO.git`), checks that it pushes that
   commit, and pushes it by SHA with hooks switched off. The job restores nothing from the
-  Actions cache (its secret scanner runs with `cache: "false"`), because `verify` runs the
-  PR's code and can write cache entries.
+  Actions cache (its secret scanner runs with `cache: "false"`, and the job's `cache-mode`
+  is `none`), because the PR's code can write cache entries elsewhere, for example in the
+  PR's own CI runs.
 - Python runs with **`-I`**, from a virtual environment outside the checkout, in every job,
   so a `pip.py` or other module in the PR's checkout is never imported.
 
@@ -196,6 +203,7 @@ and somehow the `ai-autofix` label is present. They **still cannot**:
 | Push a malicious patch to a sensitive area | `apply-and-push` re-runs the **allowlist gate** (base config); anything touching `.github/`, `.claude/`, auth/crypto/secrets, `scripts/`, `LICENSE`, … is **rejected → needs-human-review**. |
 | Smuggle a secret into committed code | `apply-and-push` scans the changed files **as stored in the tree it commits** with Trivy and **fails closed** on a CRITICAL/HIGH secret. Trivy runs outside the PR's checkout, so no `trivy.yaml` or `.trivyignore` of the PR's changes what it reports. |
 | Break the build to slip something through | `build_verify_cmd` must pass in `verify` before the push job runs at all. |
+| Leave a cache entry from the fix-loop for a later, more trusted run | Every fix-loop job, and `verify` explicitly, runs with `cache-mode: none`. The cache service gives each job a token that can neither save nor restore, so the build `verify` runs cannot create a cache entry in any scope. This covers this workflow only: the PR's code can still save cache entries in other workflows, such as its own CI, so a workflow that restores a cache must treat it as untrusted, as `apply-and-push` does by restoring nothing. |
 | Run forever / brute-force the gate | Hard `max_iterations` cap → `needs-human-review`. |
 | Swap the action for a malicious version | `claude-code-action` and every other action in `autonomous-fix.yml` are **SHA-pinned**. |
 | Race the vetted SHA (TOCTOU) | `apply-and-push` re-checks out the **exact** analyzed SHA; if the branch advanced, the push is rejected. |
