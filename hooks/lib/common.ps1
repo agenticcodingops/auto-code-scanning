@@ -338,7 +338,7 @@ function Get-ChangedDirs {
             }
         }
 
-        $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf$' }
+        $changedFiles = Get-ChangedFilesForDetect | Where-Object { $_ -match '\.tf(?:\.json)?$' }
 
         if (-not $changedFiles -or $changedFiles.Count -eq 0) {
             # No changed .tf files — return empty so hooks skip scanning
@@ -405,8 +405,8 @@ function Get-TfFileCount {
     $count = 0
     foreach ($dir in $Directories) {
         if (Test-Path -LiteralPath $dir -PathType Container) {
-            $count += (Get-ChildItem -LiteralPath $dir -Filter '*.tf' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
-                Where-Object { $_.FullName -notmatch '[\\/]\.terraform[\\/]' }).Count
+            $count += (Get-ChildItem -LiteralPath $dir -File -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '\.tf(?:\.json)?$' -and $_.FullName -notmatch '[\\/]\.terraform[\\/]' }).Count
         }
     }
     return $count
