@@ -542,7 +542,7 @@ def test_lefthook_dispatcher_scans_real_push_objects(
     import yaml
 
     # Keep this literal command in sync with the shipped consumer entry point.
-    command = 'bash hooks/dispatcher.sh pre-push --hooks checkov,tflint,dotnet-build'
+    command = 'bash hooks/dispatcher.sh pre-push --remote {1} --hooks checkov,tflint,dotnet-build'
     template = yaml.safe_load((ROOT / 'templates/lefthook/lefthook.yml').read_text())
     push_command = template['pre-push']['commands']['scan-push-objects']
     assert push_command['run'] == command
@@ -568,7 +568,7 @@ def test_lefthook_dispatcher_scans_real_push_objects(
 
     shutil.copytree(package / 'hooks', consumer / 'hooks')
     entry = consumer / '.git/hooks/pre-push'
-    entry.write_text(f'#!/usr/bin/env bash\nexec {command}\n', newline='\n')
+    entry.write_text('#!/usr/bin/env bash\nexec ' + command.replace('{1}', '"$1"') + '\n', newline='\n')
     entry.chmod(0o755)
     remote = tmp_path / 'remote.git'
     git(consumer, 'init', '--bare', '-q', str(remote))
@@ -613,6 +613,182 @@ def load_push_runner(package):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize('entry', ['sh', 'ps1', 'lefthook'])
+@pytest.mark.parametrize('change', ['clean', 'finding', 'worktree', 'workflow', 'delete'])
+def test_push_scans_only_changed_object_files(consumer, package, scanner, tmp_path, entry, change):
+    policies = consumer / '.scanning/configs'
+    policies.mkdir(parents=True)
+    (policies / '.checkov.yaml').write_text('quiet: true\n')
+    # Same-directory and nested findings must not leak into a selected directory scan.
+    (consumer / 'old.tf').write_text('# finding\n')
+    (consumer / 'old.tf.json').write_text('{"finding": true}\n')
+    (consumer / 'nested').mkdir()
+    (consumer / 'nested/old.tf').write_text('# finding\n')
+    (consumer / 'clean.tf').write_text('# original\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote base')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    if change == 'delete':
+        git(consumer, 'rm', 'clean.tf')
+    else:
+        filename = 'workflow.yaml' if change == 'workflow' else 'clean.tf'
+        (consumer / filename).write_text('# finding\n' if change in ('finding', 'worktree') else '# clean change\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'push change')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'clean.tf').write_text('# clean worktree\n')
+    env, trace = scanner
+    (tmp_path / 'bin/mock.py').write_text('''import json, os, pathlib, sys
+sources = {p.as_posix(): p.read_text() for p in pathlib.Path('.').rglob('*')
+           if p.is_file() and (p.suffix == '.tf' or p.name.endswith('.tf.json'))}
+with open(os.environ['TRACE'], 'a') as output:
+    output.write(json.dumps(sources) + '\\n')
+finding = any('finding' in content for content in sources.values())
+print(json.dumps({'results': {'failed_checks': [{'severity': 'HIGH'}] if finding else []}}))
+sys.exit(1 if finding else 0)
+''')
+    if entry == 'lefthook':
+        command = [shutil.which('bash'), str(package / 'hooks/dispatcher.sh'), 'pre-push', '--hooks', 'checkov']
+    else:
+        command = hook(package, entry, 'checkov')
+    result = subprocess.run(command, cwd=consumer, env=env, capture_output=True, text=True,
+                            input=f'refs/heads/topic {oid} refs/heads/target {base}\n')
+    assert result.returncode == (1 if change in ('finding', 'worktree') else 0), result.stdout + result.stderr
+    if change in ('workflow', 'delete'):
+        assert not trace.exists()
+    else:
+        sources = json.loads(trace.read_text().splitlines()[0])
+        assert sources == {'clean.tf': '# finding\n' if change in ('finding', 'worktree') else '# clean change\n'}
+
+
+@pytest.mark.parametrize('default_branch', [True, False])
+@pytest.mark.parametrize('explicit_remote', [True, False])
+def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypatch, default_branch, explicit_remote):
+    (consumer / 'old.tf').write_text('# pre-existing finding\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote base')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'update-ref', 'refs/remotes/origin/main', base)
+    if default_branch:
+        git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    if explicit_remote:
+        # A different remote's default must not change the destination's base.
+        git(consumer, 'update-ref', 'refs/remotes/other/main', git(consumer, 'rev-parse', 'HEAD~1'))
+        git(consumer, 'symbolic-ref', 'refs/remotes/other/HEAD', 'refs/remotes/other/main')
+    (consumer / 'new.tf').write_text('# new branch\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    received = []
+    monkeypatch.setattr(runner, 'select_shell', lambda shell: ('sh', 'fixture'))
+    real_run = subprocess.run
+
+    def run(command, *args, **kwargs):
+        if command[0] != 'fixture':
+            return real_run(command, *args, **kwargs)
+        received.extend(Path(kwargs['env']['SCAN_PUSH_FILES']).read_bytes().split(b'\0')[:-1])
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    assert runner.scan(f'refs/heads/topic {oid} refs/heads/topic {ZERO}\n', [('trivy-iac-full', [])], 'sh',
+                       remote_name='origin' if explicit_remote else None) == 0
+    assert received == [b'new.tf']
+
+
+def test_same_tip_with_different_remote_bases_keeps_both_ranges(consumer, package, monkeypatch):
+    base = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'first.tf').write_text('# first\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'first')
+    middle = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'second.tf').write_text('# second\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'second')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    received = []
+    monkeypatch.setattr(runner, 'select_shell', lambda shell: ('sh', 'fixture'))
+    real_run = subprocess.run
+
+    def run(command, *args, **kwargs):
+        if command[0] != 'fixture':
+            return real_run(command, *args, **kwargs)
+        received.append(set(Path(kwargs['env']['SCAN_PUSH_FILES']).read_bytes().split(b'\0')[:-1]))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    records = f'refs/heads/one {oid} refs/heads/one {middle}\nrefs/heads/two {oid} refs/heads/two {base}\n'
+    assert runner.scan(records, [('trivy-iac-full', [])], 'sh') == 0
+    assert set().union(*received) == {b'first.tf', b'second.tf'}
+
+
+@pytest.mark.parametrize('kind', ['annotated', 'tree'])
+def test_new_tag_cannot_skip_object_selection(consumer, package, monkeypatch, kind):
+    (consumer / 'main.tf').write_text('# finding\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'tag source')
+    if kind == 'annotated':
+        git(consumer, 'tag', '-a', 'release', '-m', 'fixture')
+        oid = git(consumer, 'rev-parse', 'release')
+    else:
+        oid = git(consumer, 'rev-parse', 'HEAD^{tree}')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    assert 'main.tf' in runner.changed_paths(oid, ZERO)
+
+
+def test_push_selection_handles_force_updates_renames_and_missing_remote(consumer, package, monkeypatch):
+    (consumer / 'old name.tf').write_text('# existing\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'mv', 'old name.tf', 'new name.tf')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'rename')
+    local = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    assert runner.changed_paths(local, base) == ['new name.tf']
+    assert runner.changed_paths(base, local) == ['old name.tf']
+    with pytest.raises(subprocess.CalledProcessError):
+        runner.changed_paths(local, 'f' * 40)
+
+
+@pytest.mark.parametrize('policy_dir', ['.', 'policies space'])
+def test_changed_snapshot_keeps_unchanged_policy_in_custom_directory(consumer, package, monkeypatch, policy_dir):
+    folder = consumer / policy_dir
+    folder.mkdir(exist_ok=True)
+    (folder / '.checkov.yaml').write_text('quiet: true\n')
+    (consumer / 'main.tf').write_text('# old\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'policy and old source')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'main.tf').write_text('# changed\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'changed source')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    monkeypatch.setenv('SCAN_CONFIG_DIR', policy_dir)
+    monkeypatch.setattr(runner, 'select_shell', lambda shell: ('sh', 'fixture'))
+    real_run = subprocess.run
+    calls = []
+
+    def run(command, *args, **kwargs):
+        if command[0] != 'fixture':
+            return real_run(command, *args, **kwargs)
+        assert (kwargs['cwd'] / policy_dir / '.checkov.yaml').read_text() == 'quiet: true\n'
+        assert Path(kwargs['env']['SCAN_PUSH_FILES']).read_bytes() == b'main.tf\0'
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    assert runner.scan(f'ref {oid} ref {base}\n', [('checkov', [])], 'sh') == 0
+    assert len(calls) == 1
 
 
 BAD_SCAN_CONFIGS = [
@@ -1213,8 +1389,8 @@ def test_push_refuses_link_created_inside_canonical_snapshot(consumer, package, 
     sentinel.write_text('untouched')
     materialize = runner.materialize
 
-    def linked_report(oid, snapshot):
-        names = materialize(oid, snapshot)
+    def linked_report(oid, snapshot, selected=None):
+        names = materialize(oid, snapshot, selected)
         directory_link(snapshot / '.scanning', outside)
         return names
 

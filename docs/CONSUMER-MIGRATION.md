@@ -5,14 +5,21 @@
 Re-vendor `hooks/`, `scripts/validate-scan-config.py` and `schemas/` together.
 Pre-push scanners now scan a private copy of **each local object named by Git's
 stdin transaction**, including new branches, annotated tags, alternate destinations
-and non-HEAD/multiple refs. Deletions have no local tree and are skipped. Each tip's
-whole tree is scanned, rather than guessing a range from the current index or
-tracking branch. Uncommitted files, checkout filters and archive attributes cannot
-replace the scanned bytes. This can expose existing findings and take longer.
+and non-HEAD/multiple refs. Each ref selects files changed between its remote
+object and pushed object; deleted refs and deleted files scan nothing. New branches
+compare against the merge base with the destination remote's tracked default branch
+(`refs/remotes/<remote>/HEAD`). Without a usable default/merge base, paths come from
+commits absent from every remote-tracking ref (`--not --remotes`); an empty remote
+therefore scans all new files. Keep remote-tracking refs current before pushing.
+Uncommitted files, checkout filters and archive attributes cannot replace the
+scanned bytes. Terraform scans exclude unchanged source files even in selected
+directories, so pre-existing findings elsewhere do not block a clean change.
+Required tracked policy files still come from the pushed tip, even when unchanged.
+A changed `.cs`/`.csproj` file triggers a build of the complete pushed solution.
 The temporary copy is deleted after scanning; source files and the index are
 untouched. Reports are exported to the consumer's `.scanning/last-scan.json` before
 cleanup, and earlier reports are cleared when the next attempt produces no report.
-Unavailable/non-tree objects, symlinks, submodules and filesystem path collisions
+Unavailable/non-tree objects, selected symlinks, submodules and filesystem path collisions
 block the push because a complete isolated scan cannot be guaranteed.
 Transaction-bound validation is fail-closed: setup errors, malformed transactions
 or configuration, unsafe tree entries and missing required policies return `1`.
@@ -35,6 +42,7 @@ Individual legacy wrappers remain available only through the opt-in below.
 - **Lefthook:** replace the `pre-push` block with the current
   `templates/lefthook/lefthook.yml` block. It has one command with `use_stdin: true`
   and no file glob, which fans out the complete transaction to all selected tools.
+  Its `--remote {1}` passes Git's destination remote to new-branch selection.
   Adjust its `--hooks` list to the push scanners you enable.
 - **pre-commit:** after installing its push hook, run
   `python hooks/pre-push.py --install-pre-commit` from the consumer root. The
@@ -53,7 +61,10 @@ Individual legacy wrappers remain available only through the opt-in below.
   7, then Windows PowerShell, then Git Bash, as the dispatcher does.
 
 For manual validation, feed a real four-field transaction to a push wrapper or
-`python hooks/pre-push.py --hooks checkov,tflint,dotnet-build` on stdin. A direct
+`python hooks/pre-push.py --remote origin --hooks checkov,tflint,dotnet-build` on stdin.
+Direct Bash/PowerShell wrappers also accept `--remote origin`. Without a remote
+argument the runner uses a single tracked remote default, or the all-remotes
+fallback when that default is absent or ambiguous. A direct
 `pre-commit run --hook-stage pre-push --all-files` has no transaction and blocks.
 During a reviewed migration only, `SCAN_LEGACY_PUSH_STATE=1` explicitly restores
 the old index/tracking-ref/worktree behavior for individual push wrappers. It is

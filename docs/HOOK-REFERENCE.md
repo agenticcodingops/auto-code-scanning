@@ -1,7 +1,12 @@
 # Hook Reference
 
 Pre-push hooks require the complete Git stdin transaction and scan isolated object
-trees. Config validation reads the consumer's staged root config. Upgrade the
+snapshots of changed files. Existing refs compare the remote object with the pushed
+object. New branches compare with the merge base of the destination remote's tracked
+default branch; without one, only commits absent from all remote-tracking refs
+contribute paths. Deleted refs and deleted files scan nothing. File bytes and policy
+come from the pushed objects, regardless of the index or working tree.
+Config validation reads the consumer's staged root config. Upgrade the
 runner configuration and vendored files together; see
 [validation target migration](CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration)
 for runner setup, manual invocations, prerequisites and explicit legacy opt-ins.
@@ -36,7 +41,11 @@ All hooks use a dual-wrapper architecture:
 4. Shared functions are loaded from `hooks/lib/common.sh` (Bash) or `hooks/lib/common.ps1` (PowerShell)
 
 Commit scanners select staged files from the index. Transaction-bound push
-scanners select files from each isolated pushed tree. Hooks publish available
+scanners select changed files from each isolated pushed tree, alongside required
+tracked policy. Terraform directory scans exclude unchanged source files, including
+siblings and nested files of other IaC types. A changed
+`.cs`/`.csproj` input triggers a build with the complete pushed solution for context.
+Hooks publish available
 JSON reports to `.scanning/last-scan.json`; an incomplete scan can block without
 producing a report.
 
@@ -237,7 +246,7 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Build config**: Same `languages.csharp.build.{solution,working_dir}` resolution
   (and auto-detect) as `dotnet-format`
 - **Flags**: `/p:AnalysisMode=AllEnabledByDefault`, `--nologo`
-- **Behavior**: Runs when the pushed tree contains `.cs`/`.csproj` files. Surfaces
+- **Behavior**: Runs when the push changes `.cs`/`.csproj` files. Builds the complete pushed solution and surfaces
   the first ~40 analyzer/build error/warning lines. Build or analyzer errors and
   a missing solution block by default (exit 1).
 
