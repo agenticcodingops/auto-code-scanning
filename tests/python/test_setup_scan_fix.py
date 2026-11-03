@@ -137,10 +137,11 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
         command = [sys.executable, str(bootstrap), str(bin_dir), str(platform / 'scripts/setup-scan-fix.py'),
                    '--repo-path', str(consumer), '--hooks-runner', 'pre-commit', '--enable-fix-loop']
     else:
+        for name in ('pre-commit', 'gh'):
+            (bin_dir / f'{name}.ps1').write_text(
+                f'& $env:STUB_PY "$env:STUB_BIN/{name}.py" @args\nexit $LASTEXITCODE\n')
         bootstrap = tmp_path / 'setup.ps1'
         bootstrap.write_text(
-            'function pre-commit { & $env:STUB_PY "$env:STUB_BIN/pre-commit.py" @args }\n'
-            'function gh { & $env:STUB_PY "$env:STUB_BIN/gh.py" @args }\n'
             '$setupArgs = @($args | Select-Object -Skip 1)\n'
             '& $args[0] @setupArgs\nexit $LASTEXITCODE\n')
         env.update(STUB_PY=sys.executable, STUB_BIN=str(bin_dir))

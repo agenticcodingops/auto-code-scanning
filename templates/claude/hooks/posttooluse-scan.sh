@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# posttooluse-scan.sh â€” in-session, per-file scan for Claude Code (bash twin).
+# posttooluse-scan.sh — in-session, per-file scan for Claude Code (bash twin).
 # Fires after Write|Edit|MultiEdit; scans ONLY the edited file and exits 2 with
 # findings on stderr so Claude self-corrects within the session. Fail-open if a
 # tool is missing. Escape hatches: CC_SKIP_SEMGREP_HOOK=1, CC_SKIP_SECRET_HOOK=1

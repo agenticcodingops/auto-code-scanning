@@ -150,7 +150,7 @@ export SCAN_TFLINT_CONFIG=/trusted/scanning-release/configs/aws/.tflint.hcl
 export SCAN_TFLINT_PLUGIN_DIR=/trusted/scanning-cache/tflint
 ```
 
-Python setup resolves external executables to absolute paths before running any
+Both setup entry points resolve external executables to absolute paths before running any
 installation step. A tool that resolves inside the destination repository is
 rejected; install tools outside it and use a trusted PATH.
 
