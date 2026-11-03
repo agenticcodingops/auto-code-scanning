@@ -45,6 +45,16 @@ in base policy. Removing a skip leaves the check active; a deleted base comment
 cannot suppress a failed check. Missing or ambiguous base identity stays active.
 App-code scans continue to disable inline suppression comments.
 
+The inline matcher fails closed for an entire file when it encounters syntax it
+cannot fully model in either the base or current version. This includes any
+heredoc starting inside a quoted-template interpolation and, conservatively,
+any heredoc containing a template opener (`${` or `%{`, even escaped openers).
+This also covers heredocs nested inside another heredoc's interpolation. No
+inline skip in that file is honoured, including unchanged comments before or
+after the construct. Its skipped checks remain unapproved findings and need a
+schema-2.0 registry approval in base policy. Ordinary files retain their unchanged
+trusted-base approvals.
+
 Local `scripts/scan.py` uses the same matcher. Supply `--policy-root` with a
 separate checkout of the exact trusted base for PR parity. Without it, inline
 approval is read from Git objects at the current `origin/HEAD` commit

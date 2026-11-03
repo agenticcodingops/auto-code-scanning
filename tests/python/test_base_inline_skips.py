@@ -224,6 +224,65 @@ EOT
     assert checkov_checks(results, tmp_path, base) == [check]
 
 
+NESTED_HEREDOCS = [
+    '''resource "aws_instance" "example" {
+  user_data = "${<<EOT
+}"
+#checkov:skip=CKV_AWS_79:Reviewed exception
+EOT
+}"
+}
+''',
+    '''resource "aws_instance" "example" {
+  user_data = <<OUTER
+${<<INNER
+OUTER
+{
+#checkov:skip=CKV_AWS_79:Reviewed exception
+INNER
+}
+OUTER
+}
+''',
+]
+
+
+@pytest.mark.parametrize('text', NESTED_HEREDOCS, ids=['quoted', 'heredoc'])
+def test_nested_heredoc_data_cannot_approve_an_added_skip(tmp_path, text):
+    from scan_policy import checkov_checks
+    base = tmp_path / 'base'
+    base.mkdir()
+    (base / 'main.tf').write_text(text, encoding='utf-8')
+    (tmp_path / 'main.tf').write_text(text.replace('  user_data',
+        '  #checkov:skip=CKV_AWS_79:Reviewed exception\n  user_data'), encoding='utf-8')
+    check = dict(check_id='CKV_AWS_79', file_path='/main.tf', resource='aws_instance.example')
+    assert checkov_checks(dict(failed_checks=[], skipped_checks=[check]), tmp_path, base) == [check]
+
+
+@pytest.mark.parametrize('text', NESTED_HEREDOCS, ids=['quoted', 'heredoc'])
+@pytest.mark.parametrize('unsupported_in', ['base', 'current', 'both'])
+@pytest.mark.parametrize('position', ['before', 'after'])
+def test_unsupported_templates_reject_whole_file_only(tmp_path, text, unsupported_in, position):
+    from scan_policy import checkov_checks, terraform_inline_skips
+    base = tmp_path / 'base'
+    base.mkdir()
+    unsupported = text + SOURCE if position == 'before' else SOURCE + text
+    # A real approval anywhere in the unsupported file must also be discarded.
+    assert terraform_inline_skips(unsupported) == {}
+    modules = {'previous': './previous'}
+    assert terraform_inline_skips(unsupported, module_sources=modules) == {}
+    assert modules == {}
+    for root, version in ((tmp_path, 'current'), (base, 'base')):
+        (root / 'main.tf').write_text(
+            unsupported if unsupported_in in (version, 'both') else SOURCE, encoding='utf-8')
+        (root / 'ordinary.tf').write_text(SOURCE, encoding='utf-8')
+    rejected = dict(check_id='CKV_AZURE_53', file_path='/main.tf',
+                    resource='azurerm_mysql_server.example')
+    ordinary = dict(rejected, file_path='/ordinary.tf')
+    results = dict(failed_checks=[], skipped_checks=[rejected, ordinary])
+    assert checkov_checks(results, tmp_path, base) == [rejected]
+
+
 @pytest.mark.parametrize('opener', ['$${', '%%{'])
 def test_escaped_template_openers_keep_real_skips_visible(opener):
     from scan_policy import terraform_inline_skips

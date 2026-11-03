@@ -19,7 +19,6 @@ FINGERPRINT = re.compile(r"^v1:[0-9a-f]{64}$")
 # Strings and heredocs are opaque: text in them must never authorize a skip.
 HCL_HEREDOC_PATTERN = (r'<<(?P<indented>-)?(?P<tag>[^\W\d][\w-]*)[^\n]*\n'
                        r'.*?^(?(indented)[ \t]*)(?P=tag)[ \t]*(?=\n|$)')
-HCL_HEREDOC = re.compile(HCL_HEREDOC_PATTERN, re.MULTILINE | re.DOTALL)
 HCL_COMMENT = re.compile(r'\#[^\n]*|//[^\n]*|/\*.*?\*/', re.DOTALL)
 HCL_TOKEN = re.compile(HCL_HEREDOC_PATTERN +
     r'|"(?:\\.|[^"\\])*"|\#[^\n]*|//[^\n]*|/\*.*?\*/|[\w-]+|[^\s]',
@@ -28,17 +27,17 @@ INLINE_SKIP = re.compile(r'^(?:\#|//)\s*checkov:skip=([A-Za-z0-9_]+)(?::(.*))?$'
 
 
 def hcl_string_end(text, start):
-    """Skip a quoted template, including quoted strings inside interpolations."""
+    """Skip a quoted template; reject unsupported or unterminated literals."""
     position, expressions = start + 1, []
     while position < len(text):
         character = text[position]
         if expressions:
-            opaque = HCL_HEREDOC.match(text, position) or HCL_COMMENT.match(text, position)
+            opaque = HCL_COMMENT.match(text, position)
             if opaque:
                 position = opaque.end()
                 continue
             if text.startswith('<<', position):
-                return len(text)  # unknown or unterminated literal cannot grant approval
+                raise ValueError('Heredoc inside a template expression is unsupported')
         if character == '\\':
             position += 2
             continue
@@ -62,14 +61,15 @@ def hcl_string_end(text, start):
             if expressions[-1] == 0:
                 expressions.pop()
         position += 1
-    return len(text)
+    raise ValueError('Unterminated quoted template')
 
 
 def terraform_inline_skips(text, module_sources=None):
     """Index (check ID, justification) by definition address, never by line number.
 
-    Unknown/ambiguous definitions cannot grant approval. This intentionally does
-    not infer Terraform exceptions from other IaC formats or string contents.
+    Unknown/ambiguous definitions cannot grant approval. Unsupported template
+    nesting invalidates the entire file, including previously indexed approvals.
+    This does not infer exceptions from other IaC formats or string contents.
     """
     definitions, header = {}, []
     text = text.replace('\r\n', '\n')
@@ -79,12 +79,20 @@ def terraform_inline_skips(text, module_sources=None):
         if match.start() < consumed:
             continue
         token = match.group()
-        if token == '<' and text.startswith('<<', match.start()):
+        # The heredoc regex cannot model interpolations or nested terminators.
+        # Conservatively reject template openers (even escaped ones) in heredocs.
+        if ((token == '<' and text.startswith('<<', match.start())) or
+                (token.startswith('<<') and ('${' in token or '%{' in token))):
             if module_sources is not None:
                 module_sources.clear()
             return {}
         if token.startswith('"'):
-            consumed = hcl_string_end(text, match.start())
+            try:
+                consumed = hcl_string_end(text, match.start())
+            except ValueError:
+                if module_sources is not None:
+                    module_sources.clear()
+                return {}
             token = text[match.start():consumed]
         if token.startswith(('#', '//', '/*')):
             skip = INLINE_SKIP.fullmatch(token)

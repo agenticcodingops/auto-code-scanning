@@ -9,6 +9,15 @@ justification remain on the same resource in the same file as at the trusted
 base commit. They do not need schema-2.0 registry entries. Line shifts or unrelated
 resource edits do not invalidate these reviewed skips.
 
+Files containing syntax the inline matcher cannot fully model fail closed: if
+either the trusted base or current version contains a heredoc inside a quoted
+template's interpolation, no inline skip from that file is honoured. Heredocs
+containing template openers (`${` or `%{`, even escaped openers) are also rejected
+conservatively, covering heredocs nested inside another heredoc's interpolation.
+All skipped checks in these files remain unapproved findings and need schema-2.0
+registry approvals in base policy, even when their comments are unchanged.
+Unchanged skips in ordinary files continue to be honoured.
+
 A PR adding or changing a skip, its reason, check ID, resource or file still
 reports a finding and needs a schema-2.0 occurrence approval in base policy.
 Deleting a skip restores the active check; an old base skip cannot hide a failure.
