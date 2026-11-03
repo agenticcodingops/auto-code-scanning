@@ -356,6 +356,7 @@ permissions:
   contents: read
   actions: read
   security-events: write    # upload SARIF
+  pull-requests: write      # PR annotations
 jobs:
   code-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.1 # x-release-please-version
@@ -365,6 +366,11 @@ jobs:
       category-prefix: "myrepo-"
       fail-on-findings: true
 ```
+
+Every caller with an explicit permission ceiling must grant `actions: read`,
+including public repositories and intermediate reusable workflows, even with
+`upload-sarif: false`. The upload jobs request it unconditionally; private
+repositories also need it for the SARIF upload API to read workflow-run metadata.
 
 > Note: the scan workflow reads `scan-config.yaml` itself — there is **no `config_path` input** here.
 > (Terraform repos additionally use `terraform-scan.yml`, which `uses:` `reusable-scan.yml`

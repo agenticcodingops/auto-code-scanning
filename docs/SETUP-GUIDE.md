@@ -348,6 +348,12 @@ jobs:
       fail-on-findings: true
 ```
 
+Every app-code caller with an explicit permission ceiling must grant
+`actions: read`, including public repositories and intermediate reusable
+workflows, even with `upload-sarif: false`. The upload jobs request it
+unconditionally; private repositories also need it for the SARIF upload API to
+read workflow-run metadata.
+
 Terraform caller (`terraform-scan.yml`):
 
 ```yaml

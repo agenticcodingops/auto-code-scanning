@@ -102,6 +102,12 @@ jobs:
     permissions: { contents: read, actions: read, security-events: write, pull-requests: write }
 ```
 
+Every caller with an explicit permission ceiling must grant `actions: read`,
+including public repositories and intermediate reusable workflows, even with
+`upload-sarif: false`. The `semgrep` and `secrets` jobs request it unconditionally.
+Private repositories also need it for the SARIF upload API to read workflow-run
+metadata; without it, uploads fail with `Resource not accessible by integration`.
+
 ---
 
 ## 5. Custom rules

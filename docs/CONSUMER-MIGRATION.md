@@ -3,8 +3,9 @@
 ## Caller SARIF permissions
 
 All existing callers with explicit permission blocks must grant `actions: read` alongside `contents: read`,
-`security-events: write` and `pull-requests: write` when calling the reusable scan.
-The reusable job requests this permission unconditionally, so public callers
+`security-events: write` and `pull-requests: write` when calling either
+`reusable-scan.yml` (IaC) or `code-security-scan.yml` (app code).
+Their SARIF upload jobs request this permission unconditionally, so public callers
 also need it to pass permission-ceiling validation, even with `upload-sarif: false`.
 Private callers additionally need it because the SARIF upload reads the workflow
 run; without `actions: read` that API call fails with `Resource not accessible by

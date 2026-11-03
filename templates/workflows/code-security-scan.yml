@@ -11,6 +11,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Explicit caller ceilings require actions: read even when SARIF uploads are
+# disabled. Private uploads also need it to read workflow-run metadata.
 permissions:
   contents: read
   actions: read
