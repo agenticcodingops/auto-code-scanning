@@ -235,6 +235,11 @@ your repository, and needs its own public copy of `auto-code-scanning`; see
 
 ```yaml
 # .github/workflows/code-security-scan.yml: application code
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  pull-requests: write
 jobs:
   code-scan:
     uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.1 # x-release-please-version
@@ -265,7 +270,13 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
 
-Each excerpt leaves out the triggers and permissions; see
+The app-code caller's explicit permission ceiling must include `actions: read`,
+including in public repositories and intermediate reusable workflows, even with
+`upload-sarif: false`. Its upload jobs request it unconditionally; private
+repositories also need it for the SARIF upload API to read workflow-run metadata.
+
+These excerpts leave out triggers; the Terraform and fix-loop excerpts also
+leave out permissions. See
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input and the permissions each
 call needs.
 

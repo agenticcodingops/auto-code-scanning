@@ -43,6 +43,7 @@ jobs:
     # must grant them even though the self-test switches both jobs off.
     permissions:
       contents: read
+      actions: read
       security-events: write
       pull-requests: write
     uses: ./.github/workflows/reusable-scan-self-test.yml

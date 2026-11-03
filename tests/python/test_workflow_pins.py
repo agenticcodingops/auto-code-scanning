@@ -65,6 +65,20 @@ def test_every_container_image_is_pinned_by_digest(path):
         assert IMAGE_DIGEST.search(image), f"{path.name}: image {image} has no @sha256 digest"
 
 
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_sarif_upload_jobs_can_read_workflow_runs(path):
+    workflow = _load(path)
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not any(step.get("uses", "").startswith("github/codeql-action/upload-sarif@")
+                   for step in job.get("steps") or []):
+            continue
+        # Job permissions replace workflow permissions; they do not merge.
+        permissions = job.get("permissions", workflow.get("permissions", {}))
+        assert isinstance(permissions, dict) and permissions.get("actions") == "read", (
+            f"{path.name}: {job_id} uploads SARIF without actions: read"
+        )
+
+
 def test_the_snyk_job_installs_an_exact_version():
     installs = []
     for path in WORKFLOWS:

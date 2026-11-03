@@ -1,0 +1,54 @@
+[
+  {
+    "check_type": "terraform",
+    "results": {
+      "failed_checks": [],
+      "skipped_checks": [
+        {
+          "check_id": "CKV_AZURE_110",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed nested exception"
+          },
+          "file_path": "\\modules\\b\\main.tf",
+          "file_line_range": [
+            1,
+            5
+          ],
+          "resource": "module.outer[\"green\"].module.inner.azurerm_key_vault.example",
+          "caller_file_path": "\\modules\\a\\main.tf",
+          "caller_file_line_range": [
+            1,
+            4
+          ]
+        },
+        {
+          "check_id": "CKV_AZURE_110",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed nested exception"
+          },
+          "file_path": "\\modules\\b\\main.tf",
+          "file_line_range": [
+            1,
+            5
+          ],
+          "resource": "module.outer[\"blue\"].module.inner.azurerm_key_vault.example",
+          "caller_file_path": "\\modules\\a\\main.tf",
+          "caller_file_line_range": [
+            1,
+            4
+          ]
+        }
+      ]
+    },
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "skipped": 2,
+      "parsing_errors": 0,
+      "resource_count": 2,
+      "checkov_version": "3.3.19"
+    }
+  }
+]

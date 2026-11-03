@@ -151,6 +151,7 @@ jobs:
   scan:
     permissions:
       contents: read
+      actions: read
       security-events: write
       pull-requests: write
     uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.1 # x-release-please-version

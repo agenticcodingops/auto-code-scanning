@@ -1,5 +1,18 @@
 # Runbook: Migrate an Inline Scan or Fix Loop to the Platform
 
+## Caller SARIF permissions
+
+All existing callers with explicit permission blocks must grant `actions: read` alongside `contents: read`,
+`security-events: write` and `pull-requests: write` when calling either
+`reusable-scan.yml` (IaC) or `code-security-scan.yml` (app code).
+Their SARIF upload jobs request this permission unconditionally, so public callers
+also need it to pass permission-ceiling validation, even with `upload-sarif: false`.
+Private callers additionally need it because the SARIF upload reads the workflow
+run; without `actions: read` that API call fails with `Resource not accessible by
+integration`. Update the caller's permission ceiling before upgrading, including
+any intermediate reusable workflow. The templates in `templates/workflows/`
+include this permission.
+
 ## Trusted base inline skip migration
 
 Re-vendor `scripts/scan.py` and `scripts/scan_policy.py` together and upgrade the
@@ -8,6 +21,16 @@ Terraform `#checkov:skip=<ID>:<reason>` comments are honoured when the same ID a
 justification remain on the same resource in the same file as at the trusted
 base commit. They do not need schema-2.0 registry entries. Line shifts or unrelated
 resource edits do not invalidate these reviewed skips.
+
+Module-block skips also match plain, `for_each` and `count` calls and require the
+same literal source in base. An unchanged literal remote source can approve the
+module block itself; traversal into remote modules still fails closed. Nested resource
+skips use the scanner's immediate caller file and full module address, including
+when the root module is below the scanned directory. Every local call name and
+source in that chain must still match the trusted base; new, renamed, repointed
+or ambiguous chains retain their findings.
+If multiple current roots share the same reported address, declaration and
+immediate caller, their skips remain findings even if only one chain is trusted.
 
 Files containing syntax the inline matcher cannot fully model fail closed: if
 either the trusted base or current version contains a heredoc inside a quoted

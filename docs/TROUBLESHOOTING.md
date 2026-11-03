@@ -149,7 +149,7 @@ pre-commit run --all-files  # Test all hooks
 
 **Causes and Fixes**:
 
-- **Missing permission**: The workflow requires `security-events: write` permission. If your repository doesn't grant this, set `upload-sarif: false` in the workflow input.
+- **Missing permission**: The workflow requires `security-events: write` permission and private callers must also grant `actions: read` so the SARIF uploader can read the workflow run. If your repository doesn't grant this, set `upload-sarif: false` in the workflow input.
 - **SARIF too large**: GitHub limits SARIF to 25MB or 5000 results. The workflow automatically truncates, but very large codebases may exceed limits.
 
 ```yaml
