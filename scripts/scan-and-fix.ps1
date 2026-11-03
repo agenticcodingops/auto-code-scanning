@@ -9,6 +9,7 @@
   per-repo .claude hooks call into it. It fails open on missing tools (so a
   developer without trivy/semgrep is never hard-blocked) but fails CLOSED on
   real findings (non-zero exit) so the Stop hook can block "done".
+  C# builds also fail closed when no solution is available or a build cannot start.
 
 .PARAMETER ScanType
   secrets | semgrep | terraform | csharp | typescript | all

@@ -12,6 +12,37 @@ from .test_validation_targets import (
 )
 
 
+@pytest.mark.parametrize('default', [False, True])
+@pytest.mark.parametrize('mapping', ['nested-name', 'custom-target', 'negative'])
+def test_destination_ref_ownership_is_unambiguous(consumer, package, monkeypatch, default, mapping):
+    base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'remote', 'add', 'origin', 'https://example.test/destination.git')
+    # Existing configs can overlap even on Git versions that reject adding a
+    # slash-separated remote with `remote add` after its parent already exists.
+    git(consumer, 'config', 'remote.origin/mirror.url', 'https://example.test/mirror.git')
+    git(consumer, 'config', 'remote.origin/mirror.fetch', '+refs/heads/*:refs/remotes/origin/mirror/*')
+    git(consumer, 'update-ref', 'refs/remotes/origin/main', base)
+    if default:
+        git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    (consumer / 'new.tf').write_text('# must scan despite overlapping remote mappings\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
+    tip = git(consumer, 'rev-parse', 'HEAD')
+    if mapping == 'custom-target':
+        git(consumer, 'config', '--replace-all', 'remote.origin.fetch', '+refs/heads/*:refs/scan/destination/*')
+        git(consumer, 'update-ref', 'refs/scan/destination/main', base)
+        # A default alias to a different namespace cannot justify exclusion.
+        if default:
+            git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/mirror/main')
+    elif mapping == 'negative':
+        git(consumer, 'config', '--remove-section', 'remote.origin/mirror')
+        git(consumer, 'config', '--add', 'remote.origin.fetch', '^refs/heads/mirror/*')
+    git(consumer, 'update-ref', 'refs/remotes/origin/mirror/main', tip)
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    assert runner.changed_paths(tip, ZERO, 'origin') == ['new.tf']
+
+
 @pytest.mark.parametrize('destination', ['origin', 'url', 'empty', None])
 @pytest.mark.parametrize('default', ['missing', 'unrelated'])
 def test_new_branch_fallback_uses_only_destination_refs(consumer, package, monkeypatch, destination, default):

@@ -88,6 +88,56 @@ def tips(records: str) -> list[tuple[str, str]]:
     return result
 
 
+def fetch_sources(ref: str, specs: list[str]) -> set[str]:
+    """Invert positive fetch mappings, applying negative specs to source refs."""
+    sources = set()
+    for spec in specs:
+        if spec.startswith('^'):
+            continue
+        source, separator, target = spec.removeprefix('+').partition(':')
+        if not separator or not target or source.count('*') != target.count('*') or target.count('*') > 1:
+            continue
+        match = re.fullmatch(re.escape(target).replace(r'\*', '(.*)'), ref)
+        if match:
+            sources.add(source.replace('*', match[1]) if '*' in target else source)
+    return {source for source in sources if not any(
+        re.fullmatch(re.escape(spec[1:]).replace(r'\*', '.*'), source)
+        for spec in specs if spec.startswith('^'))}
+
+
+def destination_refs(remote_name: str | None) -> tuple[list[str], list[str]]:
+    """Only unambiguously owned fetch targets establish destination ancestry."""
+    if remote_name is None:
+        return [], []
+    remotes = git('remote').decode().splitlines()
+    names = {name for name in remotes if name == remote_name or
+             git('remote', 'get-url', name).decode().strip() == remote_name}
+    if not names:
+        return [], []
+    mappings = {}
+    for name in remotes:
+        try:
+            mappings[name] = git('config', '--get-all', f'remote.{name}.fetch').decode().splitlines()
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode != 1:
+                raise
+            mappings[name] = []
+    refs = dict(line.split('\0', 1) for line in
+                git('for-each-ref', '--format=%(refname)%00%(symref)').decode().splitlines())
+    tracking = []
+    for ref, symbolic_target in refs.items():
+        if symbolic_target:
+            continue
+        owners = {name for name, specs in mappings.items() if fetch_sources(ref, specs)}
+        # A namespace can be shared by slash-separated remote names or custom
+        # refspecs. Ambiguous ownership must increase scanning, never exclude it.
+        if owners and owners <= names:
+            tracking.append(ref)
+    defaults = [ref for ref, target in refs.items() if target in tracking and
+                any(ref == f'refs/remotes/{name}/HEAD' for name in names)]
+    return tracking, defaults
+
+
 def changed_paths(local: str, remote: str, remote_name: str | None = None) -> list[str]:
     """Select the transaction's range, independent of HEAD and the index."""
     if set(remote) == {'0'}:
@@ -98,15 +148,7 @@ def changed_paths(local: str, remote: str, remote_name: str | None = None) -> li
                     '--full-tree', local).split(b'\0') if name]
         # Only the destination's refs can establish what it already holds.
         # An unknown destination must conservatively scan all reachable commits.
-        tracking = git('for-each-ref', '--format=%(refname)', 'refs/remotes').decode().splitlines()
-        names = set()
-        if remote_name is not None:
-            names = {remote_name}
-            for name in git('remote').decode().splitlines():
-                if git('remote', 'get-url', name).decode().strip() == remote_name:
-                    names.add(name)
-        tracking = [ref for ref in tracking if any(ref.startswith(f'refs/remotes/{name}/') for name in names)]
-        defaults = [ref for ref in tracking if any(ref == f'refs/remotes/{name}/HEAD' for name in names)]
+        tracking, defaults = destination_refs(remote_name)
         if len(defaults) == 1:
             try:
                 base = git('merge-base', local, defaults[0]).decode().strip()

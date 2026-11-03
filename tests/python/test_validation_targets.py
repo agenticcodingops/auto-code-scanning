@@ -674,6 +674,7 @@ def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypa
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote base')
     base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'remote', 'add', 'origin', 'https://example.test/origin.git')
     git(consumer, 'update-ref', 'refs/remotes/origin/main', base)
     if default_branch:
         git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
@@ -681,8 +682,6 @@ def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypa
         # A different remote's default must not change the destination's base.
         git(consumer, 'update-ref', 'refs/remotes/other/main', git(consumer, 'rev-parse', 'HEAD~1'))
         git(consumer, 'symbolic-ref', 'refs/remotes/other/HEAD', 'refs/remotes/other/main')
-    if explicit_remote == 'url':
-        git(consumer, 'remote', 'add', 'origin', 'https://example.test/origin.git')
     (consumer / 'new.tf').write_text('# new branch\n')
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
@@ -926,6 +925,7 @@ def test_direct_wrapper_consumes_git_remote_arguments(consumer, package, scanner
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'destination default')
     base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'remote', 'add', 'origin', 'https://example.test/origin.git')
     git(consumer, 'update-ref', 'refs/remotes/origin/main', base)
     git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
     (consumer / 'new.tf').write_text('# pushed clean source\n')
