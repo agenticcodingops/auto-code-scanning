@@ -118,6 +118,11 @@ $tools = @(
 
 foreach ($tool in $tools) {
     if (Test-CommandExists $tool.Command) {
+        if ($tool.Command -eq 'tflint') {
+            # Even informational invocations must stay behind policy validation.
+            Add-CheckResult -Passed $true -Message 'tflint found; trusted policy verification follows'
+            continue
+        }
         try {
             $version = & $tool.Command $tool.Args 2>&1 | Select-Object -First 1
             $version = ($version -replace "^[^0-9]*", "" -replace "\s.*$", "").Trim()
@@ -141,13 +146,13 @@ Write-Header "2. Checking Configuration Files"
 
 $configFiles = @(
     @{Path = ".pre-commit-config.yaml"; Name = "Pre-commit configuration"; Required = $true },
-    @{Path = ".tflint.hcl"; Name = "tflint configuration"; Required = $true },
+    @{Path = $env:SCAN_TFLINT_CONFIG; Name = "Trusted external tflint configuration"; Required = $true },
     @{Path = ".checkov.yaml"; Name = "Checkov configuration"; Required = $true },
     @{Path = ".trivyignore"; Name = "Trivy ignore file"; Required = $false }
 )
 
 foreach ($config in $configFiles) {
-    if (Test-Path $config.Path) {
+    if ($config.Path -and (Test-Path -LiteralPath $config.Path)) {
         $size = (Get-Item $config.Path).Length
         Add-CheckResult -Passed $true -Message "$($config.Name) exists ($size bytes)"
     }

@@ -151,7 +151,6 @@ def test_verifier_uses_external_policy_only(tmp_path, policy, init_code):
         del env['SCAN_TFLINT_CONFIG']
     command = (
         'function tflint { '
-        'if ($args -contains "--version") { $global:LASTEXITCODE=0; return }; '
         '@{ args=@($args); cache=$env:TFLINT_PLUGIN_DIR } | ConvertTo-Json -Compress | Add-Content $env:STUB_TRACE; '
         '$global:LASTEXITCODE=if ($args -contains "--init") { [int]$env:STUB_INIT_CODE } else { 2 } }; '
         'function trivy { $global:LASTEXITCODE=0 }; function checkov {}; function pre-commit {}; '
