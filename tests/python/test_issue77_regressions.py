@@ -40,7 +40,58 @@ def test_destination_ref_ownership_is_unambiguous(consumer, package, monkeypatch
     git(consumer, 'update-ref', 'refs/remotes/origin/mirror/main', tip)
     runner = load_push_runner(package)
     monkeypatch.chdir(consumer)
-    assert runner.changed_paths(tip, ZERO, 'origin') == ['new.tf']
+    expected = {'App.cs', 'App.sln', 'new.tf'} if mapping == 'custom-target' else {'new.tf'}
+    assert set(runner.changed_paths(tip, ZERO, 'origin')) == expected
+
+
+@pytest.mark.parametrize('existing', [False, True])
+@pytest.mark.parametrize('mixed', [False, True])
+@pytest.mark.parametrize('target', [
+    'refs/heads/*', 'refs/tags/*', 'refs/notes/*', 'refs/stash', 'HEAD',
+    'refs/scan/*', 'topic',
+])
+def test_local_fetch_targets_scan_conservatively(consumer, package, monkeypatch, existing, mixed, target):
+    base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'remote', 'add', 'origin', 'https://example.test/destination.git')
+    source = 'refs/heads/*' if '*' in target else 'refs/heads/topic'
+    git(consumer, 'config', '--replace-all', 'remote.origin.fetch', f'+{source}:{target}')
+    if mixed:
+        git(consumer, 'config', '--add', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*')
+    (consumer / 'new.tf').write_text('# local refs cannot establish destination ancestry\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
+    tip = git(consumer, 'rev-parse', 'HEAD')
+    if target != 'HEAD':
+        git(consumer, 'update-ref', target.replace('*', 'topic'), tip)
+    # Even a usable tracking default must not narrow an ambiguous destination.
+    git(consumer, 'update-ref', 'refs/remotes/origin/main', tip)
+    git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    expected = {'new.tf'} if existing else {'App.cs', 'App.sln', 'new.tf'}
+    assert set(runner.changed_paths(tip, base if existing else ZERO, 'origin')) == expected
+    assert runner.destination_refs('origin') == ([], [])
+
+
+@pytest.mark.parametrize('target', ['refs/heads/topic', 'refs/tags/topic', 'refs/notes/topic', 'refs/stash', 'HEAD'])
+@pytest.mark.parametrize('chain', [False, True])
+def test_tracking_symbolic_refs_cannot_exclude_local_commits(consumer, package, monkeypatch, target, chain):
+    git(consumer, 'remote', 'add', 'origin', 'https://example.test/destination.git')
+    (consumer / 'new.tf').write_text('# symbolic tracking aliases must not exclude local commits\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
+    tip = git(consumer, 'rev-parse', 'HEAD')
+    if target != 'HEAD':
+        git(consumer, 'update-ref', target, tip)
+    if chain:
+        git(consumer, 'symbolic-ref', 'refs/remotes/origin/alias', target)
+        target = 'refs/remotes/origin/alias'
+    git(consumer, 'symbolic-ref', 'refs/remotes/origin/main', target)
+    git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    assert runner.destination_refs('origin') == ([], [])
+    assert set(runner.changed_paths(tip, ZERO, 'origin')) == {'App.cs', 'App.sln', 'new.tf'}
 
 
 @pytest.mark.parametrize('destination', ['origin', 'url', 'empty', None])

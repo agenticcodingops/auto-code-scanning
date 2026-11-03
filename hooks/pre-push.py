@@ -106,7 +106,13 @@ def fetch_sources(ref: str, specs: list[str]) -> set[str]:
 
 
 def destination_refs(remote_name: str | None) -> tuple[list[str], list[str]]:
-    """Only unambiguously owned fetch targets establish destination ancestry."""
+    """Only direct, unambiguously owned refs/remotes/ refs prove ancestry.
+
+    A destination with any fetch target outside refs/remotes/ is ambiguous:
+    local branches, tags and other writable refs cannot prove what it holds.
+    Discard all its tracking/default refs, including otherwise safe mappings,
+    so new branches scan all ancestry and existing branches scan their range.
+    """
     if remote_name is None:
         return [], []
     remotes = git('remote').decode().splitlines()
@@ -122,11 +128,17 @@ def destination_refs(remote_name: str | None) -> tuple[list[str], list[str]]:
             if exc.returncode != 1:
                 raise
             mappings[name] = []
+    for name in names:
+        for spec in mappings[name]:
+            if not spec.startswith('^'):
+                _, separator, target = spec.removeprefix('+').partition(':')
+                if separator and target and not target.startswith('refs/remotes/'):
+                    return [], []
     refs = dict(line.split('\0', 1) for line in
                 git('for-each-ref', '--format=%(refname)%00%(symref)').decode().splitlines())
     tracking = []
     for ref, symbolic_target in refs.items():
-        if symbolic_target:
+        if symbolic_target or not ref.startswith('refs/remotes/'):
             continue
         owners = {name for name, specs in mappings.items() if fetch_sources(ref, specs)}
         # A namespace can be shared by slash-separated remote names or custom
