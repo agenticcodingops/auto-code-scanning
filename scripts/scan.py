@@ -30,11 +30,15 @@ import subprocess
 import sys
 import time
 import uuid
+import yaml
 from datetime import datetime, timezone
 from pathlib import Path
 from safe_io import write_text
 from scan_policy import apply_exceptions, occurrence_fingerprint, suppression_file, load_suppression_entries, baseline_keys, scanner_path, checkov_checks
 from scan_reports import validate_report
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'hooks/lib'))
+from checkov_policy import prepared_policy
 
 # Severity normalization mappings
 TRIVY_SEVERITY_MAP = {
@@ -247,13 +251,20 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None, trusted_root=None):
         "--compact",
     ]
 
-    if config_file and Path(config_file).exists():
-        cmd.extend(["--config-file", str(config_file)])
-
     if auto_fix:
         cmd.append("--fix")
 
-    rc, stdout, stderr = run_cmd(cmd, timeout=600)
+    if trusted_root is not None:
+        # An explicit policy checkout replaces every consumer-policy candidate.
+        candidate = Path(trusted_root) / '.scanning/configs/.checkov.yaml'
+        config_file = candidate if candidate.is_file() else None
+    try:
+        with prepared_policy(config_file) as config:
+            cmd.extend(['--config-file', str(config)])
+            rc, stdout, stderr = run_cmd(cmd, timeout=600)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        print(f'  [WARN] Checkov policy rejected: {exc}', file=sys.stderr)
+        return findings, True, 0
 
     if rc not in (0, 1):
         print(f"  [WARN] Checkov scan failed (exit {rc}): {stderr.strip()[:200]}", file=sys.stderr)

@@ -19,6 +19,26 @@ run_push_snapshot() {
     exit $?
 }
 
+# Re-enter passive commit scanners after one batch export of index blobs.
+run_staged_snapshot() {
+    [[ "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]] && return 0
+    local py
+    py="$(find_python)" || { hook_error 'Python is required for index snapshots'; exit 1; }
+    "$py" "${SCRIPT_DIR}/pre-commit.py" --shell sh "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
+    exit $?
+}
+
+prepare_checkov_policy() {
+    local py source
+    [[ $# -eq 0 ]] || { hook_error 'Checkov extra arguments are disabled'; exit 1; }
+    py="$(find_python)" || { hook_error 'Python is required for passive Checkov policy'; exit 1; }
+    source="$(resolve_config '.checkov.yaml' 2>/dev/null || true)"
+    checkov_policy_dir="$(mktemp -d)" || exit 1
+    trap 'rm -rf -- "$checkov_policy_dir"' EXIT
+    "$py" -E -P "${SCRIPT_DIR}/lib/checkov_policy.py" "$source" > "$checkov_policy_dir/policy.yaml" || exit 1
+    checkov_policy_file="$checkov_policy_dir/policy.yaml"
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -290,7 +310,7 @@ _changed_files_for_detect() {
     git diff --cached --name-only -z --diff-filter=ACMR -- > "$listing" || { rm -f -- "$listing"; return 1; }
     if [[ ! -s "$listing" ]]; then
         for reference in '@{push}' '@{upstream}'; do
-            if git rev-parse --verify "$reference" >/dev/null 2>&1; then
+            if git rev-parse --verify -q "$reference" >/dev/null 2>&1; then
                 git diff --name-only -z --diff-filter=ACMR "$reference" HEAD -- > "$listing" || { rm -f -- "$listing"; return 1; }
                 [[ -s "$listing" ]] && break
             fi

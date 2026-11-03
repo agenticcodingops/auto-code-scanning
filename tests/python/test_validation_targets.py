@@ -1279,7 +1279,9 @@ def test_tracked_custom_policy_directory_is_honored(consumer, package, scanner, 
                             input=f'refs/heads/main {oid} refs/heads/main {ZERO}\n',
                             text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert policy_trace.read_text() == content
+    import yaml
+    assert yaml.safe_load(policy_trace.read_text()) == {'download-external-modules': False, 'skip-download': True}
+    assert (policies / '.checkov.yaml').read_text() == content
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])

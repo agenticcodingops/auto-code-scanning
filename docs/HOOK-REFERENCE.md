@@ -40,7 +40,11 @@ All hooks use a dual-wrapper architecture:
    - Windows (PowerShell available): `hooks/<hook-id>.ps1`
 4. Shared functions are loaded from `hooks/lib/common.sh` (Bash) or `hooks/lib/common.ps1` (PowerShell)
 
-Commit scanners select staged files from the index. Transaction-bound push
+Semgrep, Trivy's pre-commit IaC scanner and SQLFluff run in temporary trees exported
+from the index, including their tracked policy inputs. Unstaged edits do not change
+the bytes they inspect. Export errors block; temporary trees are removed after
+reports are published. Formatters retain their existing worktree behavior.
+Transaction-bound push
 scanners select changed files from each isolated pushed tree, alongside required
 tracked policy. Terraform directory scans exclude unchanged source files, including
 siblings and nested files of other IaC types. Both `.tf` and `.tf.json` changes
@@ -56,6 +60,17 @@ tracked policy. An unchanged, unrelated symlink or submodule is outside that
 snapshot and does not block these file-only scanners. A selected symlink or
 submodule blocks. TFLint and dotnet build copy the complete pushed tree for
 context, so any symlink or submodule in that tree blocks them, even if unchanged.
+
+Local Checkov entrypoints accept only passive configuration: `framework`,
+`skip-framework`, `skip-check`, `skip-path`, `deep-analysis`, `evaluate-variables`,
+`quiet`, `compact`, `skip-download`, `download-external-modules` (false only), and
+standard `output` formats. Output format selection is owned by the wrapper.
+Unknown keys, extension loading, module downloads, output paths, and extra hook
+arguments are rejected before launch. The scanner always receives an explicit
+temporary config so automatic configuration discovery cannot change the policy.
+`scripts/scan.py --policy-root` reads Checkov policy from that checkout's
+`.scanning/configs/.checkov.yaml`, ignoring consumer policy; a missing policy uses
+the same safe defaults.
 
 ## Exit Code Contract
 

@@ -33,19 +33,8 @@ foreach ($dir in $scanDirs) {
     # Build Checkov arguments
     $checkovArgs = @('-d', $dir, '--framework', 'terraform', '--output', 'json', '--compact', '--quiet')
 
-    # Check for config file
-    $configFile = Resolve-ScanConfig -Filename '.checkov.yaml'
-    if ($configFile) {
-        $checkovArgs += @('--config-file', $configFile)
-    }
-
-    # Add extra args
-    if ($ExtraArgs) {
-        $checkovArgs += $ExtraArgs
-    }
-
     # Run Checkov
-    $output = & checkov @checkovArgs 2>&1
+    $output = Invoke-PassiveCheckov -Arguments $checkovArgs -ExtraArgs $ExtraArgs
     $exitCode = $LASTEXITCODE
 
     if ($exitCode -eq 1) {

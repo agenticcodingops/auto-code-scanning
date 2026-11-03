@@ -18,6 +18,35 @@ function Invoke-PushSnapshot {
     exit $LASTEXITCODE
 }
 
+function Invoke-StagedSnapshot {
+    param([string]$HookPath, [object[]]$HookArguments)
+    if ($env:SCAN_INDEX_SNAPSHOT -eq '1') { return }
+    $py = Find-WorkingPython
+    if (-not $py) { throw 'Python is required for index snapshots' }
+    $runner = Join-Path (Split-Path -Parent $HookPath) 'pre-commit.py'
+    & $py $runner --shell ps1 ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
+    exit $LASTEXITCODE
+}
+
+function Invoke-PassiveCheckov {
+    param([string[]]$Arguments, [object[]]$ExtraArgs)
+    if ($ExtraArgs) { throw 'Checkov extra arguments are disabled' }
+    $py = Find-WorkingPython
+    if (-not $py) { throw 'Python is required for passive Checkov policy' }
+    $source = Resolve-ScanConfig -Filename '.checkov.yaml'
+    $helper = Join-Path $PSScriptRoot 'checkov_policy.py'
+    $policy = & $py -E -P $helper $source
+    if ($LASTEXITCODE -ne 0) { throw 'Checkov policy rejected; scan incomplete' }
+    $temporary = [IO.Path]::GetTempFileName()
+    try {
+        [IO.File]::WriteAllText($temporary, ($policy -join "`n"))
+        & checkov @Arguments --config-file $temporary 2>&1
+        $global:LASTEXITCODE = $LASTEXITCODE
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
@@ -339,12 +368,12 @@ function Get-ChangedFilesForDetect {
     }
     $files = @(Invoke-GitPaths -Arguments @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
     if ($files.Count -eq 0) {
-        git rev-parse --verify '@{push}' 2>$null | Out-Null
+        git rev-parse --verify -q '@{push}' 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $files = @(Invoke-GitPaths -Arguments @('diff', '--name-only', '-z', '--diff-filter=ACMR', '@{push}', 'HEAD', '--'))
         }
         if ($files.Count -eq 0) {
-            git rev-parse --verify '@{upstream}' 2>$null | Out-Null
+            git rev-parse --verify -q '@{upstream}' 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 $files = @(Invoke-GitPaths -Arguments @('diff', '--name-only', '-z', '--diff-filter=ACMR', '@{upstream}', 'HEAD', '--'))
             }

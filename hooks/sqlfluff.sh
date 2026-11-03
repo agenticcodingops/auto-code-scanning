@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
+run_staged_snapshot "$@"
+
 require_tool "sqlfluff" || exit 0
 
 read_nul_paths files get_staged_files sql
