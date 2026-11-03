@@ -133,6 +133,27 @@ the loop on later by re-running setup.)
 
 ## 4. Step 2 — Run one-command setup
 
+Before verification, provision the same trusted external TFLint policy used by the
+normal hooks. Set `SCAN_TFLINT_CONFIG` to an absolute `.hcl` file outside the
+repository and `SCAN_TFLINT_PLUGIN_DIR` to an absolute external plugin cache.
+The policy must not set `plugin_dir`; verification validates both paths and uses
+them for initialization and scanning. A missing or repository-local policy/cache
+fails verification. The destination's `.tflint.hcl` is never used by verification.
+For example, use an approved provider config from a separate release checkout:
+
+```powershell
+$env:SCAN_TFLINT_CONFIG = '/trusted/scanning-release/configs/aws/.tflint.hcl'
+$env:SCAN_TFLINT_PLUGIN_DIR = '/trusted/scanning-cache/tflint'
+```
+```bash
+export SCAN_TFLINT_CONFIG=/trusted/scanning-release/configs/aws/.tflint.hcl
+export SCAN_TFLINT_PLUGIN_DIR=/trusted/scanning-cache/tflint
+```
+
+Python setup resolves external executables to absolute paths before running any
+installation step. A tool that resolves inside the destination repository is
+rejected; install tools outside it and use a trusted PATH.
+
 Run from **inside your consumer repo** (or pass `--repo-path`). The script is **idempotent** —
 re-run it any time (e.g., to add a language or turn on the fix-loop).
 
@@ -196,7 +217,7 @@ languages:
   csharp:
     enabled: true
     build:
-      solution: "api/MyApp.slnx"   # your .sln/.slnx; "" = auto-detect the nearest one
+      solution: "MyApp.slnx"       # relative to working_dir; "" = auto-detect the nearest one
       working_dir: "api"           # directory to run `dotnet` from
 ```
 

@@ -13,7 +13,7 @@ import pytest
 
 def test_python_setup_vendors_schemas(tmp_path: Path, monkeypatch):
     """The Python setup copies every schema beside the copied validator."""
-    monkeypatch.setattr(setup_scan_fix, "have", lambda _command: False)
+    monkeypatch.setattr(setup_scan_fix, "resolve_tool", lambda *_args: None)
     monkeypatch.setattr(setup_scan_fix.subprocess, "run", lambda *args, **kwargs: None)
 
     assert setup_scan_fix.main(["setup-scan-fix.py", "--repo-path", str(tmp_path)]) == 0
@@ -127,8 +127,9 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
             'import os,runpy,shutil,subprocess,sys\n'
             'run,which=subprocess.run,shutil.which\n'
             'stubs={name:os.path.join(sys.argv[1],name+".py") for name in ("pre-commit","gh")}\n'
+            'stub_paths=set(stubs.values())\n'
             'subprocess.run=lambda cmd,**kw: run([sys.executable,stubs[cmd[0]],*cmd[1:]] '
-            'if cmd[0] in stubs else cmd,**kw)\n'
+            'if cmd[0] in stubs else [sys.executable,*cmd] if cmd[0] in stub_paths else cmd,**kw)\n'
             'shutil.which=lambda cmd: stubs.get(cmd) or which(cmd)\n'
             'sys.argv=sys.argv[2:]\n'
             'sys.path.insert(0,os.path.dirname(sys.argv[0]))\n'

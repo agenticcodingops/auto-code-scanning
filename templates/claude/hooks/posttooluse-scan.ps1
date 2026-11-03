@@ -38,12 +38,36 @@ function Invoke-SecretFile {
     param([string]$Path)
     if ($env:CC_SKIP_SECRET_HOOK -eq '1') { return 0 }
     if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) { return 0 }
-    $out = & trivy fs $Path --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet 2>&1
-    if ($LASTEXITCODE -eq 1) {
-        [Console]::Error.WriteLine("PostToolUse: secret detected in $Path")
-        $out | ForEach-Object { [Console]::Error.WriteLine("  $_") }
+    $out = & trivy fs $Path --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet --format json 2>$null
+    $code = $LASTEXITCODE
+    if ($code -notin @(0, 1)) {
+        [Console]::Error.WriteLine('PostToolUse: secret scan failed (details redacted).')
         return 2
     }
+    try {
+        $report = ($out -join "`n") | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $report -or $report -is [array] -or
+            (-not $report.PSObject.Properties['Results'] -and $report.SchemaVersion -isnot [int] -and $report.SchemaVersion -isnot [long]) -or
+            $report.error -or $report.errors) { throw 'Invalid report' }
+        $rows = @()
+        if ($report.PSObject.Properties['Results'] -and $report.Results -isnot [array]) { throw 'Invalid results' }
+        foreach ($result in $report.Results) {
+            if ($result.Target -isnot [string]) { throw 'Invalid target' }
+            if ($result.PSObject.Properties['Secrets'] -and $result.Secrets -isnot [array]) { throw 'Invalid secrets' }
+            foreach ($secret in $result.Secrets) {
+                if ($secret.RuleID -isnot [string] -or -not $secret.RuleID -or
+                    $secret.StartLine -isnot [long] -and $secret.StartLine -isnot [int] -or $secret.StartLine -le 0) { throw 'Invalid finding' }
+                $rows += @{ file = $result.Target; line = $secret.StartLine; rule = $secret.RuleID }
+            }
+        }
+        foreach ($row in $rows) { [Console]::Error.WriteLine(($row | ConvertTo-Json -Compress)) }
+        if ($rows.Count) { [Console]::Error.WriteLine("PostToolUse: secret finding count=$($rows.Count)"); return 2 }
+    }
+    catch {
+        [Console]::Error.WriteLine('PostToolUse: secret scan report invalid (details redacted).')
+        return 2
+    }
+    if ($code -eq 1) { return 2 }
     return 0
 }
 

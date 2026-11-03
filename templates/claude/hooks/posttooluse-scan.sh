@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# posttooluse-scan.sh — in-session, per-file scan for Claude Code (bash twin).
+# posttooluse-scan.sh â€” in-session, per-file scan for Claude Code (bash twin).
 # Fires after Write|Edit|MultiEdit; scans ONLY the edited file and exits 2 with
 # findings on stderr so Claude self-corrects within the session. Fail-open if a
 # tool is missing. Escape hatches: CC_SKIP_SEMGREP_HOOK=1, CC_SKIP_SECRET_HOOK=1
@@ -38,14 +38,45 @@ semgrep_file() {
 }
 
 secret_file() {
-    local path="$1"
+    local path="$1" out code
     [[ "${CC_SKIP_SECRET_HOOK:-0}" == "1" ]] && return 0
     command -v trivy >/dev/null 2>&1 || return 0
-    if ! out="$(trivy fs "${path}" --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet 2>&1)"; then
-        echo "PostToolUse: secret detected in ${path}" >&2
-        echo "${out}" >&2
+    out="$(trivy fs "${path}" --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet --format json 2>/dev/null)"
+    code=$?
+    if [[ $code -ne 0 && $code -ne 1 ]]; then
+        echo 'PostToolUse: secret scan failed (details redacted).' >&2
         rc=2
+        return
     fi
+    # Project only metadata; neither raw output nor parser errors reach feedback.
+    printf '%s' "$out" | "$py" -c '
+import json,sys
+try:
+    data=json.load(sys.stdin)
+    if not isinstance(data,dict) or not ("Results" in data or type(data.get("SchemaVersion")) is int): raise ValueError()
+    if data.get("error") or data.get("errors"): raise ValueError()
+    results=data.get("Results",[])
+    if not isinstance(results,list): raise ValueError()
+    rows=[]
+    for result in results:
+        if not isinstance(result,dict) or not isinstance(result.get("Target"),str): raise ValueError()
+        secrets=result.get("Secrets",[])
+        if not isinstance(secrets,list): raise ValueError()
+        for secret in secrets:
+            if not isinstance(secret,dict): raise ValueError()
+            rule,line=secret.get("RuleID"),secret.get("StartLine")
+            if not isinstance(rule,str) or not rule or type(line) is not int or line<1: raise ValueError()
+            rows.append(dict(file=result["Target"],line=line,rule=rule))
+    for row in rows:
+        print(json.dumps(row),file=sys.stderr)
+    if rows:
+        print("PostToolUse: secret finding count="+str(len(rows)),file=sys.stderr)
+        sys.exit(2)
+except Exception:
+    print("PostToolUse: secret scan report invalid (details redacted).",file=sys.stderr)
+    sys.exit(2)
+' >&2 || rc=2
+    if [[ $code -eq 1 ]]; then rc=2; fi
 }
 
 cs_ruleset="${SEMGREP_RULESET_CSHARP:-p/csharp}"

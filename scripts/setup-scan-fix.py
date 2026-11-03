@@ -30,8 +30,15 @@ def warn(m): print(f"[WARN] {m}")
 def step(m): print(f"\n=== {m} ===")
 
 
-def have(cmd) -> bool:
-    return shutil.which(cmd) is not None
+def resolve_tool(cmd, repo):
+    """Freeze executable identity before running anything in the destination."""
+    found = shutil.which(cmd)
+    if found is None:
+        return None
+    resolved = Path(found).resolve()
+    if resolved.is_relative_to(repo):
+        raise ValueError(f"{cmd} must resolve outside the destination repository")
+    return str(resolved)
 
 
 def copy(src: Path, dst: Path):
@@ -50,6 +57,14 @@ def main(argv) -> int:
     args = ap.parse_args(argv[1:])
 
     repo = assert_safe_path(args.repo_path)
+    try:
+        tools = {name: resolve_tool(name, repo) for name in ("lefthook", "pre-commit", "gh", "pwsh")}
+        python = str(Path(sys.executable).resolve())
+        if Path(python).is_relative_to(repo):
+            raise ValueError("Python must resolve outside the destination repository")
+    except ValueError as exc:
+        warn(str(exc))
+        return 1
     failed_steps = []
 
     def install_step(command, label):
@@ -72,7 +87,7 @@ def main(argv) -> int:
 
     # 1) scan-config.yaml
     step(f"scan-config.yaml ({args.tier} tier)")
-    render = [sys.executable, str(PLATFORM_ROOT / "scripts/render-scan-config.py"),
+    render = [python, str(PLATFORM_ROOT / "scripts/render-scan-config.py"),
               "--tier", args.tier, "--languages", langs,
               "--templates-dir", str(PLATFORM_ROOT / "templates/scan-config"),
               "--out", str(repo / "scan-config.yaml")]
@@ -100,8 +115,8 @@ def main(argv) -> int:
     step(f"Local runner: {args.hooks_runner}")
     if args.hooks_runner == "lefthook":
         copy(PLATFORM_ROOT / "templates/lefthook/lefthook.yml", repo / "lefthook.yml")
-        if have("lefthook"):
-            subprocess.run(["lefthook", "install"], cwd=repo, check=False)
+        if tools["lefthook"]:
+            subprocess.run([tools["lefthook"], "install"], cwd=repo, check=False)
             ok("lefthook installed")
         else:
             warn("lefthook not on PATH. Install it (choco/go/brew), then 'lefthook install'")
@@ -110,9 +125,9 @@ def main(argv) -> int:
         pc_dst = repo / ".pre-commit-config.yaml"
         if pc_src.exists() and not pc_dst.exists():
             copy(pc_src, pc_dst)
-        if have("pre-commit"):
-            install_step(["pre-commit", "install"], "pre-commit hook installation")
-            install_step([sys.executable, str(repo / 'hooks/pre-push.py'), '--install-pre-commit'],
+        if tools["pre-commit"]:
+            install_step([tools["pre-commit"], "install"], "pre-commit hook installation")
+            install_step([python, str(repo / 'hooks/pre-push.py'), '--install-pre-commit'],
                          "push transaction adapter installation")
         else:
             warn("pre-commit not on PATH. 'pip install pre-commit', then 'pre-commit install'")
@@ -143,16 +158,16 @@ def main(argv) -> int:
     # 6+7) Labels + secret verification
     if args.enable_fix_loop:
         step("Fix-loop: labels + secret verification")
-        if have("gh"):
+        if tools["gh"]:
             for name, color, desc in [
                 ("ai-autofix", "1D76DB", "Opt this PR into the autonomous fix-loop"),
                 ("needs-human-review", "B60205", "Autonomous fix loop stopped; needs a human"),
             ]:
-                r = subprocess.run(["gh", "label", "create", name, "--color", color, "--description", desc, "--force"],
+                r = subprocess.run([tools["gh"], "label", "create", name, "--color", color, "--description", desc, "--force"],
                                    cwd=repo, capture_output=True, text=True)
                 ok(f"label {name}") if r.returncode == 0 else warn(f"could not create {name}: {r.stderr.strip()}")
             present = []
-            r = subprocess.run(["gh", "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True)
+            r = subprocess.run([tools["gh"], "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True)
             if r.returncode == 0:
                 try:
                     present = [s["name"] for s in json.loads(r.stdout)]
@@ -174,8 +189,8 @@ def main(argv) -> int:
     # 8) Verify
     step("Verify install")
     verify = PLATFORM_ROOT / "scripts/verify-scanning.ps1"
-    if have("pwsh") and verify.exists():
-        subprocess.run(["pwsh", "-NoProfile", "-File", str(verify)], cwd=repo, check=False)
+    if tools["pwsh"] and verify.exists():
+        subprocess.run([tools["pwsh"], "-NoProfile", "-File", str(verify)], cwd=repo, check=False)
     else:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 

@@ -17,7 +17,7 @@ languages:
     enabled: true
     file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx"]
     build:
-      solution: "api/App.slnx"   # empty "" => auto-detect nearest .sln/.slnx
+      solution: "App.slnx"       # relative to working_dir; "" => auto-detect nearest .sln/.slnx
       working_dir: "api"         # run dotnet from here
     tools:
       semgrep_csharp: { enabled: true, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }

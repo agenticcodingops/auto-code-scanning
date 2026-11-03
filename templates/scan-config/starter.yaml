@@ -35,7 +35,7 @@ languages:
     enabled: false
     file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx", "**/*.sln"]
     exclude_patterns: ["**/bin/**", "**/obj/**"]
-    build: { solution: "", working_dir: "." }
+    build: { solution: "", working_dir: "." } # solution is relative to working_dir
     tools:
       dotnet_format:  { enabled: true,  args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
       semgrep_csharp: { enabled: false, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }

@@ -20,6 +20,7 @@ param(
     [switch]$ShowDetails = $false
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
 $ErrorActionPreference = "Continue"
 
 # ============================================================================
@@ -250,18 +251,25 @@ else {
 Write-Header "6. Testing tflint"
 
 if (Test-CommandExists "tflint") {
-    if (Test-Path ".tflint.hcl") {
-        Write-Info "Initializing tflint plugins..."
-        try {
-            tflint --init 2>&1 | Out-Null
-            Add-CheckResult -Passed $true -Message "tflint initialized with plugins"
+    try {
+        if (-not $env:SCAN_TFLINT_CONFIG -or -not (Test-Path -LiteralPath $env:SCAN_TFLINT_CONFIG -PathType Leaf)) {
+            throw 'Set SCAN_TFLINT_CONFIG to a trusted external HCL file'
         }
-        catch {
-            Add-CheckResult -Passed $true -Warning -Message "tflint init had warnings (plugins may download on first use)"
-        }
+        Assert-TrustedTflintConfig $env:SCAN_TFLINT_CONFIG
+        if (-not $env:SCAN_TFLINT_PLUGIN_DIR) { throw 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache' }
+        Assert-ExternalPath $env:SCAN_TFLINT_PLUGIN_DIR
+        Assert-SafeWritePath $env:SCAN_TFLINT_PLUGIN_DIR
+        $env:TFLINT_PLUGIN_DIR = Resolve-ExternalRealPath $env:SCAN_TFLINT_PLUGIN_DIR
+        $trustedConfig = Resolve-ExternalRealPath $env:SCAN_TFLINT_CONFIG
+        Write-Info "Initializing tflint with trusted external policy..."
+        tflint --init --config=$trustedConfig 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'tflint initialization failed' }
+        tflint --config=$trustedConfig 2>&1 | Out-Null
+        if ($LASTEXITCODE -notin @(0, 2)) { throw 'tflint verification failed' }
+        Add-CheckResult -Passed $true -Message "tflint initialized and verified with trusted external policy"
     }
-    else {
-        Add-CheckResult -Passed $true -Warning -Message "tflint available but .tflint.hcl not found"
+    catch {
+        Add-CheckResult -Passed $false -Message "Cannot verify tflint: $_"
     }
 }
 else {
@@ -326,7 +334,7 @@ else {
     Write-Host "  pre-commit run --all-files  - Run all hooks manually" -ForegroundColor White
     Write-Host "  trivy config .              - Scan Terraform for issues" -ForegroundColor White
     Write-Host "  checkov -d .                - Run Checkov policies" -ForegroundColor White
-    Write-Host "  tflint --recursive          - Lint Terraform files" -ForegroundColor White
+    Write-Host '  tflint --recursive --config="$env:SCAN_TFLINT_CONFIG" - Lint with trusted policy' -ForegroundColor White
 }
 
 Write-Host ""

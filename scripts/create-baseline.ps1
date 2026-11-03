@@ -7,9 +7,9 @@
     report only NEW findings. This enables teams adopting scanning on existing
     codebases to focus on preventing new issues while gradually addressing debt.
 
-    Baseline matching uses (rule_id, file_path) tuples with SHA-256 hashing
-    for O(1) lookup. Line numbers are intentionally excluded to be resilient
-    to code refactoring.
+    Schema 2.0 uses occurrence_fingerprint: tool, rule, repository-relative path,
+    resource, line range and the file-content SHA-256 hash. Any content change
+    in that file invalidates its entries, requiring renewed approval.
 
     Output conforms to the Baseline entity schema in data-model.md.
 
@@ -47,7 +47,7 @@
 
 .NOTES
     Part of auto-code-scanning infrastructure.
-    Baseline matching: SHA-256(rule_id + "|" + file_path) per FR-074b.
+    Each schema 2.0 entry approves one exact occurrence_fingerprint.
     Staleness warning at 90 days per FR-072.
 #>
 
@@ -112,6 +112,8 @@ $baseline = @{
     cloud_provider = $CloudProvider
     scoped_directories = $scopedDirs
     entries = @()
+    checkov_reports = @()
+    scanner_reports = @()
 }
 
 function New-TrivyBaseline {
@@ -127,9 +129,12 @@ function New-TrivyBaseline {
 
     foreach ($dir in $scanDirs) {
         $trivyJson = trivy config --severity CRITICAL,HIGH,MEDIUM,LOW --include-non-failures --format json --quiet -- $dir 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Trivy scan failed for $dir (exit $LASTEXITCODE)" }
+        if (-not $trivyJson) { throw "Trivy returned no report for $dir" }
         if ($trivyJson) {
             try {
                 $trivyResults = $trivyJson | ConvertFrom-Json
+                $baseline.scanner_reports += @{ tool = 'trivy'; report = $trivyResults }
                 foreach ($result in $trivyResults.Results) {
                     foreach ($misconfig in $result.Misconfigurations) {
                         if ($misconfig.Status -eq 'PASS') { continue }
@@ -150,7 +155,7 @@ function New-TrivyBaseline {
                 }
             }
             catch {
-                Write-Warning "Failed to parse Trivy output for $dir`: $_"
+                throw "Failed to parse Trivy output for $dir"
             }
         }
     }
@@ -172,32 +177,16 @@ function New-CheckovBaseline {
 
     foreach ($dir in $scanDirs) {
         $checkovJson = checkov -d $dir --framework terraform --output json --quiet --compact 2>$null
-        if ($checkovJson) {
-            try {
-                $checkovResults = $checkovJson | ConvertFrom-Json
-                foreach ($check in $checkovResults.results.failed_checks) {
-                    $ruleId = $check.check_id
-                    $filePath = $check.file_path
-                    $entries += @{
-                        rule_id = $ruleId
-                        file = $filePath
-                        scan_directory = $dir
-                        line = $check.file_line_range[0]
-                        end_line = $check.file_line_range[-1]
-                        resource = $check.resource
-                        tool = "checkov"
-                        severity = $check.severity ?? "MEDIUM"
-                        baselined_date = $dateStamp
-                    }
-                }
-            }
-            catch {
-                Write-Warning "Failed to parse Checkov output for $dir`: $_"
-            }
+        if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
+        if (-not $checkovJson) { throw "Checkov returned no report for $dir" }
+        $baseline.checkov_reports += @{
+            scan_directory = Resolve-HookPath $dir
+            report = ($checkovJson -join "`n") | ConvertFrom-Json
+            baselined_date = $dateStamp
         }
     }
 
-    Write-Host "  Checkov: $($entries.Count) findings baselined" -ForegroundColor Gray
+    Write-Host "  Checkov: report collected for shared gate normalization" -ForegroundColor Gray
     return $entries
 }
 
@@ -226,9 +215,12 @@ function New-TflintBaseline {
 
     foreach ($dir in $scanDirs) {
         $tflintJson = tflint --config=$env:SCAN_TFLINT_CONFIG --chdir=$dir --format json 2>$null
+        if ($LASTEXITCODE -notin @(0, 2)) { throw "tflint scan failed for $dir (exit $LASTEXITCODE)" }
+        if (-not $tflintJson) { throw "tflint returned no report for $dir" }
         if ($tflintJson) {
             try {
                 $tflintResults = $tflintJson | ConvertFrom-Json
+                $baseline.scanner_reports += @{ tool = 'tflint'; report = $tflintResults }
                 foreach ($issue in $tflintResults.issues) {
                     $ruleId = $issue.rule.name
                     $filePath = $issue.range.filename
@@ -246,7 +238,7 @@ function New-TflintBaseline {
                 }
             }
             catch {
-                Write-Warning "Failed to parse tflint output for $dir`: $_"
+                throw "Failed to parse tflint output for $dir"
             }
         }
     }
@@ -317,7 +309,7 @@ try {
     & $python "$PSScriptRoot/finalize_baseline.py" $pending $metadataFile $sourceRoot
     if ($LASTEXITCODE -ne 0) { throw 'Baseline identity validation failed' }
 } finally { Remove-Item -LiteralPath $pending -ErrorAction SilentlyContinue }
-$dedupedEntries = $allEntries
+$dedupedEntries = @((Get-Content -LiteralPath $metadataFile -Raw | ConvertFrom-Json).entries)
 
 # Summary
 $bySeverity = @{ CRITICAL = 0; HIGH = 0; MEDIUM = 0; LOW = 0 }
