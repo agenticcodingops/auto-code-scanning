@@ -167,7 +167,7 @@ selection and render behaviour. The accepted ID families are documented in the
 | `security-events: write` | Upload SARIF | `reusable-scan.yml:861-863` |
 | `pull-requests: write` | PR Comment | `reusable-scan.yml:998-1000` |
 
-Grant all three even when you turn the SARIF or comment job off
+Grant all four permissions even when you turn the SARIF or comment job off
 (`reusable-scan-self-test.yml:135-140`).
 
 ### What a run produces

@@ -179,19 +179,20 @@ def module_resource_address(resource, source_file, source_root, scan_directory, 
     """Resolve local module instances only through matching trusted source chains.
 
     A new/renamed call address or changed module source cannot borrow a declaration's
-    approval. Dynamic, remote and ambiguous sources retain the finding.
+    approval. Traversal through dynamic, remote or ambiguous sources fails closed.
+    Module-block approvals bind the literal source without traversing its target.
     """
     match = re.fullmatch(r'(?P<modules>(?:module\.[\w-]+(?:\[[^\]]+\])?\.)+)'
                          r'(?P<resource>(?:data\.)?[\w-]+\.[\w-]+|[\w-]+)(?:\[[^\]]+\])?', resource)
+    call = None
     if not match:
         # Module policies use a bare call name, including evaluated instance keys.
         call = re.fullmatch(r'([\w-]+)(?:\[[^\]]+\])?', resource)
-        if call:
-            return 'module.' + call[1]
-        declaration = re.fullmatch(r'((?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
-        return declaration[1] if declaration else resource
+        if not call:
+            declaration = re.fullmatch(r'((?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
+            return declaration[1] if declaration else resource
 
-    def module_target(directory, trusted, name):
+    def module_sources(directory, trusted):
         directory.relative_to(source_root)
         key = directory, trusted
         if key not in module_cache:
@@ -206,13 +207,26 @@ def module_resource_address(resource, source_file, source_root, scan_directory, 
                 for label, target in found.items():
                     modules[label] = None if label in modules else target
             module_cache[key] = modules
-        modules = module_cache[key]
-        source = modules.get(name)
+        return module_cache[key]
+
+    def module_target(directory, trusted, name):
+        source = module_sources(directory, trusted).get(name)
         if not isinstance(source, str) or not source.startswith(('./', '../')):
             return None
         target = (directory / source).resolve()
         target.relative_to(source_root)
         return target
+
+    def unchanged_call(directory, name):
+        current = module_sources(directory, False).get(name)
+        trusted = module_sources(directory, True).get(name)
+        # A block may explicitly approve a remote source, but never an inferred
+        # or changed source. This does not authorize traversal into that module.
+        return (isinstance(current, str) and bool(current) and
+                '${' not in current and '%{' not in current and current == trusted)
+
+    if call:
+        return 'module.' + call[1] if unchanged_call(source_file.parent, call[1]) else None
 
     scan_root = (source_root / scan_directory).resolve()
     scan_root.relative_to(source_root)
@@ -238,22 +252,56 @@ def module_resource_address(resource, source_file, source_root, scan_directory, 
         roots = {scan_root}
     resolved = []
     for root in roots:
-        directory = root
-        for index, name in enumerate(names):
-            if index == len(names) - 1 and caller_file is not None and caller_file.parent != directory:
-                break
-            current = module_target(directory, False, name)
-            trusted = module_target(directory, True, name)
-            if current is None or current != trusted:
-                break
-            directory = current
-        else:
-            if directory == source_file.parent:
-                resolved.append(root)
+        try:
+            directory = root
+            approved = True
+            for index, name in enumerate(names):
+                if index == len(names) - 1 and caller_file is not None and caller_file.parent != directory:
+                    break
+                sources = module_sources(directory, False)
+                if name not in sources:
+                    break
+                source = sources[name]
+                if (not isinstance(source, str) or not source or
+                        '${' in source or '%{' in source):
+                    resolved.append(False)
+                    break
+                if source.startswith(('./', '../')):
+                    current = module_target(directory, False, name)
+                elif Path(source).is_absolute():
+                    # Count an absolute current chain for ambiguity, but the
+                    # local-only trusted resolver can never approve that hop.
+                    current = Path(source).resolve()
+                    current.relative_to(source_root)
+                else:
+                    # An unresolvable alternative cannot borrow the identity of
+                    # a verified chain (for example through a cached module).
+                    resolved.append(False)
+                    break
+                try:
+                    trusted = module_target(directory, True, name)
+                except (OSError, ValueError, UnicodeError, subprocess.CalledProcessError):
+                    trusted = None
+                approved = approved and current == trusted
+                directory = current
+            else:
+                if directory == source_file.parent:
+                    if '.' not in match['resource']:
+                        try:
+                            approved = approved and unchanged_call(directory, match['resource'])
+                        except (OSError, ValueError, UnicodeError, subprocess.CalledProcessError):
+                            approved = False
+                    # Count current chains even if they lack base approval: the
+                    # scanner identity cannot distinguish a new duplicate root.
+                    resolved.append(approved)
+        except (OSError, ValueError, UnicodeError, subprocess.CalledProcessError):
+            # An unsafe/unreadable candidate cannot approve anything, but must
+            # not veto an independent, fully verified chain in another root.
+            continue
     declaration = match['resource']
     if '.' not in declaration:
         declaration = 'module.' + declaration
-    return declaration if len(resolved) == 1 else None
+    return declaration if len(resolved) == 1 and resolved[0] else None
 
 
 def checkov_checks(results, source_root, policy_root=None, scan_directory='.', allow_inline=False,
