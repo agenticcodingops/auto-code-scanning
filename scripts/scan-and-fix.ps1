@@ -81,24 +81,27 @@ function Invoke-TerraformScan {
     Add-Result -Tool 'Trivy IaC' -ExitCode $code -Issues (Get-IssueLines $text) -OutputTail ($text.Substring([Math]::Max(0, $text.Length - 3000)))
 }
 
-function Test-CSharpInputs {
+function Find-CSharpInput {
+    param([string]$WorkingDir = '.', [switch]$SolutionsOnly)
     # Walk directories explicitly so excluded trees are never traversed. Do not
     # follow directory links outside the working tree or into recursive cycles.
-    $pending = [System.Collections.Generic.Stack[string]]::new()
-    $pending.Push((Get-Location).Path)
+    # Breadth-first discovery prefers the nearest solution without a depth cap.
+    $extensions = if ($SolutionsOnly) { @('.sln', '.slnx') } else { @('.sln', '.slnx', '.csproj') }
+    $pending = [System.Collections.Generic.Queue[string]]::new()
+    $pending.Enqueue((Get-Item -LiteralPath $WorkingDir -ErrorAction Stop).FullName)
     while ($pending.Count -gt 0) {
-        foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop) {
+        foreach ($item in Get-ChildItem -LiteralPath $pending.Dequeue() -Force -ErrorAction Stop) {
             if ($item.PSIsContainer) {
                 if ($item.Name -notin @('.git', 'bin', 'obj', 'node_modules') -and
                     -not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-                    $pending.Push($item.FullName)
+                    $pending.Enqueue($item.FullName)
                 }
-            } elseif ($item.Extension -in @('.sln', '.slnx', '.csproj')) {
-                return $true
+            } elseif ($item.Extension -in $extensions) {
+                return $item.FullName
             }
         }
     }
-    return $false
+    return ''
 }
 
 function Invoke-CSharpScan {
@@ -110,7 +113,7 @@ function Invoke-CSharpScan {
             Write-Host '[scan-and-fix] C# disabled in scan-config.yaml; skipping C#'
             return
         }
-        if ($enabled -ne 'true' -and -not (Test-CSharpInputs)) {
+        if ($enabled -ne 'true' -and -not (Find-CSharpInput)) {
             Write-Host '[scan-and-fix] No C# solution or project files found; skipping C#'
             return
         }
@@ -121,7 +124,7 @@ function Invoke-CSharpScan {
         }
         # Discovery returns an absolute path; configured paths are relative to
         # working_dir, just as they are in the push build hook.
-        if (-not $solution) { $solution = Find-DotnetSolution -WorkingDir $workingDir }
+        if (-not $solution) { $solution = Find-CSharpInput -WorkingDir $workingDir -SolutionsOnly }
         Push-Location -LiteralPath $workingDir -ErrorAction Stop
         try {
             if (-not $solution -or -not (Test-Path -LiteralPath $solution -PathType Leaf)) {

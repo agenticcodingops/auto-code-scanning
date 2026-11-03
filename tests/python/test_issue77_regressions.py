@@ -68,16 +68,17 @@ def test_new_branch_fallback_uses_only_destination_refs(consumer, package, monke
     assert selected == ({'new.tf'} if destination in ('origin', 'url') else {'App.cs', 'App.sln', 'new.tf'})
 
 
-@pytest.mark.parametrize('mode', ['configured', 'discovered', 'root-discovered'])
+@pytest.mark.parametrize('mode', ['configured', 'discovered', 'root-discovered', 'deep-discovered'])
 @pytest.mark.parametrize('build_exit', [0, 7])
 def test_on_demand_csharp_builds_working_tree(tmp_path, package, mode, build_exit):
     result, trace = run_csharp(tmp_path, package, mode, build_exit=build_exit)
     assert result.returncode == int(build_exit != 0), result.stdout + result.stderr
     call = json.loads(trace.read_text())
-    expected_dir = tmp_path if mode == 'root-discovered' else tmp_path / 'source space'
+    expected_dir = tmp_path if mode in ('root-discovered', 'deep-discovered') else tmp_path / 'source space'
     assert call['cwd'] == str(expected_dir)
     assert call['args'][0] == 'build'
-    assert (expected_dir / call['args'][1]).resolve() == (expected_dir / 'Chosen.sln').resolve()
+    solution_dir = tmp_path / 'one/two/three/four/five' if mode == 'deep-discovered' else expected_dir
+    assert (expected_dir / call['args'][1]).resolve() == (solution_dir / 'Chosen.sln').resolve()
     assert call['args'][2:] == ['/p:AnalysisMode=AllEnabledByDefault', '--nologo']
     assert ('PASS' if build_exit == 0 else 'FAIL') in result.stdout
 
@@ -101,8 +102,9 @@ def run_csharp(tmp_path, package, mode, build_exit=0):
     pwsh = shutil.which('pwsh')
     if not pwsh:
         pytest.skip('PowerShell unavailable')
-    folder = tmp_path if mode == 'root-discovered' else tmp_path / 'source space'
-    folder.mkdir(exist_ok=True)
+    folder = (tmp_path if mode == 'root-discovered' else tmp_path / 'one/two/three/four/five'
+              if mode == 'deep-discovered' else tmp_path / 'source space')
+    folder.mkdir(parents=True, exist_ok=True)
     if not mode.startswith('missing'):
         (folder / 'Chosen.sln').write_text('working-tree solution')
     if mode == 'configured':
@@ -112,6 +114,10 @@ def run_csharp(tmp_path, package, mode, build_exit=0):
         'working_dir': 'absent' if mode == 'bad-working-dir' else str(folder.relative_to(tmp_path)),
         'solution': '' if mode in ('discovered', 'root-discovered', 'missing-discovered') else 'Chosen.sln',
     }}}}
+    if mode == 'deep-discovered':
+        # No opt-in or configured paths: both eligibility and solution discovery
+        # must reach this solution beyond the old depth-three discovery boundary.
+        config = {}
     # JSON is YAML too; keep this harness independent of a PowerShell YAML module.
     (tmp_path / 'scan-config.yaml').write_text(json.dumps(config))
     trace = tmp_path / 'build-trace'
