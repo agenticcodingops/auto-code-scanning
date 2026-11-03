@@ -283,6 +283,55 @@ def test_unsupported_templates_reject_whole_file_only(tmp_path, text, unsupporte
     assert checkov_checks(results, tmp_path, base) == [rejected]
 
 
+def test_excessive_template_nesting_rejects_whole_file():
+    from scan_policy import terraform_inline_skips
+    template = '"value"'
+    for _ in range(sys.getrecursionlimit() + 10):
+        template = '"${' + template + '}"'
+    text = SOURCE + 'locals { deep = ' + template + ' }\n'
+    modules = {'previous': './previous'}
+    assert terraform_inline_skips(text, module_sources=modules) == {}
+    assert modules == {}
+
+
+@pytest.mark.parametrize('split_documents', [False, True])
+def test_sarif_keeps_module_location_shared_with_unapproved_instance(tmp_path, split_documents):
+    import checkov_consumer_options as options
+    from scan_policy import checkov_checks
+    def git(*args):
+        return subprocess.run(['git', '-C', str(tmp_path), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+    (tmp_path / 'modules/database').mkdir(parents=True)
+    (tmp_path / 'modules/database/main.tf').write_text(SOURCE, encoding='utf-8')
+    call = 'module "database" { source = "./modules/database" }\n'
+    (tmp_path / 'main.tf').write_text(call, encoding='utf-8')
+    git('init', '-b', 'main')
+    git('config', 'user.name', 'Test')
+    git('config', 'user.email', 'test@example.com')
+    git('add', '.')
+    git('commit', '-m', 'fixture base')
+    base = git('rev-parse', 'HEAD')
+    (tmp_path / 'main.tf').write_text(call + call.replace('"database"', '"new"'), encoding='utf-8')
+    approved = dict(check_id='CKV_AZURE_53', file_path='/modules/database/main.tf',
+                    file_line_range=[1, 4], resource='module.database.azurerm_mysql_server.example')
+    pending = dict(approved, resource='module.new.azurerm_mysql_server.example')
+    checks = dict(failed_checks=[], skipped_checks=[approved, pending])
+    assert checkov_checks(checks, tmp_path, base_commit=base) == [pending]
+    report = ([dict(results=dict(failed_checks=[], skipped_checks=[check]))
+               for check in (approved, pending)] if split_documents else dict(results=checks))
+    locations = options.approved_inline_locations(report, tmp_path, '.', base)
+    assert locations == set()
+    results = [dict(ruleId='CKV_AZURE_53', suppressions=[dict(kind='inSource')],
+                    properties=dict(resource=check['resource']),
+                    locations=[dict(physicalLocation=dict(
+                        artifactLocation=dict(uri='modules/database/main.tf'),
+                        region=dict(startLine=1, endLine=4)))]) for check in (approved, pending)]
+    sarif = dict(runs=[dict(results=results)])
+    assert options.filter_sarif(sarif, False, locations, tmp_path) == 0
+    assert sarif['runs'][0]['results'] == results
+    assert all(result['level'] == 'error' and 'suppressions' not in result for result in results)
+
+
 @pytest.mark.parametrize('opener', ['$${', '%%{'])
 def test_escaped_template_openers_keep_real_skips_visible(opener):
     from scan_policy import terraform_inline_skips

@@ -156,8 +156,9 @@ still apply. HIGH and CRITICAL always require `approved_by`; registry settings
 can add approval levels but cannot remove that floor. Severity is required and
 approval must cover the actual finding severity. Expiry is capped at 180 days.
 
-Source inline skips are not independent approvals. Inline IaC skips remain in
-the gate and report; app-code scans disable inline suppression comments. To
+Source inline skips require the trusted-base comparison described above:
+unchanged base-approved skips are honoured in supported files; all others
+remain in the gate and report. App-code scans disable inline suppression comments. To
 retain source inline policy for the policy scanner during migration, trusted
 IaC callers can explicitly set `allow-inline-checkov-skips: true` (default
 `false`). Explicit caller skip lists and the platform's reviewed cloud

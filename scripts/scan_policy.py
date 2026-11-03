@@ -89,7 +89,7 @@ def terraform_inline_skips(text, module_sources=None):
         if token.startswith('"'):
             try:
                 consumed = hcl_string_end(text, match.start())
-            except ValueError:
+            except (ValueError, RecursionError):
                 if module_sources is not None:
                     module_sources.clear()
                 return {}

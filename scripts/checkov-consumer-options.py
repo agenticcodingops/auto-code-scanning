@@ -59,17 +59,20 @@ def approved_inline_locations(report, source_root, scan_directory, base_commit):
     if not re.fullmatch(r'[0-9a-fA-F]{40,64}', base_commit):
         raise ValueError('A full trusted base commit is required')
     validate_report(report, 'checkov')
-    locations = set()
+    locations, blocked = set(), set()
     for document in report if isinstance(report, list) else [report]:
         checks = document['results']
         pending = checkov_checks(checks, source_root, scan_directory=scan_directory, base_commit=base_commit)
         retained = {id(check) for check in pending}
         for check in checks.get('skipped_checks', []):
             lines = check.get('file_line_range') or []
-            if id(check) not in retained and lines:
-                locations.add((check['check_id'], scanner_path(check['file_path'], 'checkov',
-                               source_root, scan_directory), lines[0], lines[-1]))
-    return locations
+            if lines:
+                key = (check['check_id'], scanner_path(check['file_path'], 'checkov',
+                       source_root, scan_directory), lines[0], lines[-1])
+                (blocked if id(check) in retained else locations).add(key)
+    # SARIF locations omit module-instance identity. A pending instance must
+    # keep a shared location active even when another instance is approved.
+    return locations - blocked
 
 
 def filter_sarif(sarif, allow_inline=None, approved_locations=(), source_root='.', scan_directory='.'):
