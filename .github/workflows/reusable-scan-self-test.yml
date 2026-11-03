@@ -28,6 +28,10 @@ on:
       - "tests/fixtures/terraform-valid/**"
       - "tests/fixtures/checkov-consumer-inputs/**"
       - "scripts/checkov-consumer-options.py"
+      - "scripts/scan_policy.py"
+      - "scripts/aggregate_scan.py"
+      - "scripts/scan.py"
+      - "tests/fixtures/checkov-inline-trust/**"
   push:
     branches: [main]
     paths:
@@ -37,6 +41,10 @@ on:
       - "tests/fixtures/terraform-valid/**"
       - "tests/fixtures/checkov-consumer-inputs/**"
       - "scripts/checkov-consumer-options.py"
+      - "scripts/scan_policy.py"
+      - "scripts/aggregate_scan.py"
+      - "scripts/scan.py"
+      - "tests/fixtures/checkov-inline-trust/**"
   workflow_dispatch:
   # Called by release-verify.yml on each release tag.
   workflow_call:
@@ -148,6 +156,58 @@ jobs:
           assert not any(result.get("suppressions") for result in results)
           assert not {"CKV_AZURE_33", "CKV_AZURE_110"} & {r["ruleId"] for r in results}
           print("Consumer and inline skips removed; rendered storage network rules passed")
+          PYTHON_SCRIPT
+
+      - name: Commit trusted inline approvals and edit the current fixture
+        run: |
+          cp -R tests/fixtures/checkov-inline-trust .inline-trust-fixture
+          git add -f .inline-trust-fixture/main.tf
+          git -c user.name=Fixture -c user.email=fixture@example.test commit -qm "trusted fixture"
+          echo "TRUSTED_POLICY_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          python3 << 'PYTHON_SCRIPT'
+          from pathlib import Path
+          path = Path('.inline-trust-fixture/main.tf')
+          text = path.read_text().replace('Original fixture exception', 'Edited fixture exception')
+          text = text.replace('resource "azurerm_key_vault" "new" {',
+                              'resource "azurerm_key_vault" "new" {\n  #checkov:skip=CKV_AZURE_110:New fixture exception')
+          path.write_text(text)
+          PYTHON_SCRIPT
+
+      - name: Scan trusted, edited and new inline skips
+        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
+        with:
+          directory: .inline-trust-fixture
+          framework: terraform
+          output_format: cli,json,sarif
+          output_file_path: console,inline-trust-results.json,inline-trust-results.sarif
+          soft_fail: true
+          download_external_modules: false
+
+      - name: Filter SARIF using committed base approvals
+        env:
+          ALLOW_INLINE_CHECKOV_SKIPS: "false"
+          TERRAFORM_DIRECTORY: .inline-trust-fixture
+        run: python3 scripts/checkov-consumer-options.py filter-sarif inline-trust-results.sarif --checkov-report inline-trust-results.json
+
+      - name: Verify only unchanged inline skips are honoured
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('inline-trust-results.json').read_text())
+          reports = data if isinstance(data, list) else [data]
+          checks = [check for report in reports for check in report['results']['skipped_checks']
+                    if check['check_id'] == 'CKV_AZURE_110']
+          assert {c['resource'] for c in checks} == {
+              'azurerm_key_vault.unchanged', 'azurerm_key_vault.edited', 'azurerm_key_vault.new'}
+          sarif = json.loads(Path('inline-trust-results.sarif').read_text())
+          results = [r for run in sarif['runs'] for r in run['results'] if r['ruleId'] == 'CKV_AZURE_110']
+          expected = {tuple(c['file_line_range']) for c in checks if c['resource'] != 'azurerm_key_vault.unchanged'}
+          actual = {(r['locations'][0]['physicalLocation']['region']['startLine'],
+                     r['locations'][0]['physicalLocation']['region']['endLine']) for r in results}
+          assert len(results) == 2 and actual == expected, (actual, expected)
+          assert all(not r.get('suppressions') and r['level'] == 'error' for r in results)
+          print('Committed unchanged skip honoured; edited and new skips remain active errors')
           PYTHON_SCRIPT
 
   scan:

@@ -365,72 +365,35 @@ print("PASS: unparsed array blocked and was not printed")
 PY
 fi
 
-echo "=== ${impl}: broken config fail-open ==="
+echo "=== ${impl}: broken config blocks incomplete scan ==="
 printf 'this is not toml [[[[\n' > "${SCAN_CONFIG_DIR}/.gitleaks.toml"
+rm -f .scanning/last-scan.json
 status="$(run_hook "${out_file}" "${err_file}")"
-if [[ "${status}" -ne 0 ]]; then
-    echo "FAIL: broken config expected exit 0, got ${status}" >&2
-    echo "---- stdout ----" >&2
-    cat "${out_file}" >&2
-    echo "---- stderr ----" >&2
-    cat "${err_file}" >&2
+if [[ "${status}" -ne 1 ]]; then
+    echo "FAIL: broken config expected exit 1, got ${status}" >&2
     exit 1
 fi
 assert_no_secrets "broken-config" "${out_file}" "${err_file}"
-"${py}" -I - "${out_file}" "${err_file}" <<'PY'
-import json
-import pathlib
-import sys
+if grep -q 'PASS:' "${out_file}" "${err_file}" || [[ -f .scanning/last-scan.json ]]; then
+    echo "FAIL: incomplete scan claimed a pass" >&2
+    exit 1
+fi
 
-out_path, err_path = sys.argv[1:3]
-shown = (
-    pathlib.Path(out_path).read_text(encoding="utf-8", errors="replace")
-    + pathlib.Path(err_path).read_text(encoding="utf-8", errors="replace")
-)
-if "FAIL:" in shown:
-    sys.stderr.write("FAIL: broken config was counted as a finding\n")
-    sys.stderr.write(shown + "\n")
-    sys.exit(1)
-if "fail-open" not in shown.lower():
-    sys.stderr.write("FAIL: broken config did not warn fail-open\n")
-    sys.stderr.write(shown + "\n")
-    sys.exit(1)
-scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
-if scan["summary"]["total_findings"] != 0 or scan["findings"]:
-    sys.stderr.write("FAIL: broken config stored findings\n")
-    sys.exit(1)
-print("PASS: broken config warned and allowed the commit")
-PY
+# The shared explicit local escape hatch warns, without claiming a clean scan.
+export SCAN_ALLOW_TOOL_ERRORS=1
+status="$(run_hook "${out_file}" "${err_file}")"
+unset SCAN_ALLOW_TOOL_ERRORS
+[[ "${status}" -eq 0 ]] || { echo "FAIL: explicit tool-error opt-in failed" >&2; exit 1; }
+grep -q 'explicit local fail-open opt-in' "${out_file}" "${err_file}"
+assert_no_secrets "broken-config-opt-in" "${out_file}" "${err_file}"
 
 if [[ "${impl}" == "sh" && "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
-    echo "=== sh: broken config and no parser ==="
+    echo "=== sh: broken config and no parser blocks ==="
     hook_path="${parser_free}"
     status="$(run_hook "${out_file}" "${err_file}")"
     hook_path="${PATH}"
-    if [[ "${status}" -ne 0 ]]; then
-        echo "FAIL: no-parser broken config expected exit 0, got ${status}" >&2
-        cat "${out_file}" >&2
-        cat "${err_file}" >&2
-        exit 1
-    fi
+    [[ "${status}" -eq 1 ]] || { echo "FAIL: no-parser config failure allowed" >&2; exit 1; }
     assert_no_secrets "no-parser-broken-config" "${out_file}" "${err_file}"
-    if ! grep -q "fail-open" "${out_file}" "${err_file}"; then
-        echo "FAIL: no-parser broken config did not warn fail-open" >&2
-        cat "${out_file}" >&2
-        cat "${err_file}" >&2
-        exit 1
-    fi
-    "${py}" -I - <<'PY'
-import json
-import pathlib
-import sys
-
-scan = json.loads(pathlib.Path(".scanning/last-scan.json").read_text(encoding="utf-8"))
-if scan["summary"]["total_findings"] != 0 or scan["findings"]:
-    sys.stderr.write("FAIL: no-parser broken config stored findings\n")
-    sys.exit(1)
-print("PASS: no-parser broken config still fail-open")
-PY
 fi
 
 echo "=== ${impl}: clean staged file ==="
