@@ -204,6 +204,10 @@ function New-TflintBaseline {
     }
 
     if (-not $env:SCAN_TFLINT_CONFIG -or -not (Test-Path -LiteralPath $env:SCAN_TFLINT_CONFIG -PathType Leaf)) {
+        if ($Tool -eq 'all' -and -not $env:SCAN_TFLINT_CONFIG) {
+            Write-Warning 'SCAN_TFLINT_CONFIG is unset. Skipping tflint baseline.'
+            return @()
+        }
         throw 'SCAN_TFLINT_CONFIG must name a trusted external config'
     }
     Assert-TrustedTflintConfig $env:SCAN_TFLINT_CONFIG
@@ -296,6 +300,12 @@ $python = Find-WorkingPython
 if (-not $python) { throw 'Baseline creation requires Python' }
 $sourceRoot = git rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
+# Scanner directories are relative to the invocation, while identities are
+# repository-relative. Pass absolute contexts to the shared normalizer.
+foreach ($entry in $allEntries) {
+    $entry.scan_directory = Resolve-HookPath $entry.scan_directory
+}
+$baseline.scan_directory = Resolve-HookPath $TerraformDir
 $pending = New-TemporaryFile
 try {
     Assert-SafeWritePath $pending

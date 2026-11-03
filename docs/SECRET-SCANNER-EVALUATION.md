@@ -282,41 +282,26 @@ Betterleaks v2 migration doc: the rc does not move Docker `latest`, the Homebrew
 
 The official Gitleaks Action README example sets `GITLEAKS_LICENSE` and says it is only required for organizations, not personal accounts. This change does not use that action.
 
-### Fail-open exit code
+### Tool failures block by default
 
-The hook contract says exit 2 or higher is an infrastructure error and must not be used for a finding. Line 73 is the table row:
+The v3 hook contract blocks incomplete scans. Both hook implementations normalize
+missing, malformed or non-array JSON, inconsistent exit statuses, and tool exits
+above 1 to a tool error. They use the shared exit-code handler: the commit blocks
+unless the adopter explicitly sets `SCAN_ALLOW_TOOL_ERRORS=1`. That local override
+warns and never writes a clean pass report. Raw reports and stderr are not printed,
+so configuration errors cannot expose staged credentials.
 
-```73:73:specs/001-security-scanning-spec/contracts/hook-interface.md
-| `2+` | Infrastructure error | Treat as pass (fail-open) |
-```
-
-Line 75 is:
-
-```75:75:specs/001-security-scanning-spec/contracts/hook-interface.md
-**Critical**: Exit code `1` MUST only be returned when actual security findings exceed the configured severity threshold. All other errors (tool not found, DB lock, network failure, parse error) MUST exit with code `2` or higher to trigger fail-open behavior.
-```
-
-`hooks/lib/common.sh` classifies exit 2+ as fail-open and then returns 0:
-
-```41:41:hooks/lib/common.sh
-#   exit 2+ = infrastructure error (fail-open, warn + allow)
-```
-
-```56:58:hooks/lib/common.sh
-            hook_warn "Tool error (exit code ${exit_code}) - allowing commit (fail-open)"
-            return 0
-```
-
-pre-commit blocks the commit on any non-zero hook exit. `hooks/dispatcher.sh` `exec`s the `.ps1` or `.sh` (lines 38-51), so the script's process exit is what pre-commit sees. On base `2b78f59`, `hooks/gitleaks.sh` lines 64-67 turned a tool exit of 2 or higher into a warning and process exit 0. A process exit of 2 would block the commit and would not fail open. The fix keeps that implementation for a report that is not a JSON array: a bad config warns and the process exits 0. It does not count as a finding.
-
-A JSON array is not that case. On this branch, `hooks/gitleaks.sh` lines 170-179 block when the report is a JSON array and neither Python nor jq can read it, and they do not print the report. `[]` is still a pass. `hooks/gitleaks.ps1` lines 180-191 do the same when the report is array-shaped and cannot be parsed. PowerShell's `ConvertFrom-Json` accepts truncated JSON, so that path uses `System.Text.Json` when the type exists. Exit 1 is a parsed findings array, or that one undetailed block. A non-array report stays fail-open at `hooks/gitleaks.sh` line 188 and `hooks/gitleaks.ps1` line 193.
+An empty JSON array passes only with exit 0. Parsed findings block. A nonempty
+array that cannot be parsed also blocks without printing credential fields.
+The integration test covers broken configuration with and without a parser,
+the explicit local override, real findings, and a clean staged file.
 
 ## Plan
 
 ### Files to change
 
 - `hooks/gitleaks.sh` and `hooks/gitleaks.ps1`. Command becomes `gitleaks git --staged --report-format json --report-path - --redact --no-banner --exit-code 1 --log-level error`, plus `--config` when `resolve_config` / `Resolve-ScanConfig` finds `.gitleaks.toml`. Stdout is parsed alone. Stderr is not merged into the report.
-- `tests/integration/test-gitleaks-hook.sh`. Own temp git repo. Three runtime-generated values that Gitleaks 8.30.1 reported in the probe above (`stripe-access-token`, `github-pat`, `slack-webhook-url`). Asserts three findings, each with rule, file, and line, and asserts those strings are absent from stdout, stderr, and `.scanning/last-scan.json`. A broken `.scanning/configs/.gitleaks.toml` must warn, exit 0, and write a pass report. The bash run also hides Python and jq: the same staged file must exit 1 with one `gitleaks-report-unparsed` finding and must not print the report, and the broken config must still exit 0. The PowerShell run stubs `gitleaks` with an array-shaped non-JSON report and requires the same block without printing that text.
+- `tests/integration/test-gitleaks-hook.sh`. Own temporary repository; verifies findings contain only safe fields, tool/configuration errors block without a pass report, the explicit local tool-error override warns, and clean staged files pass. Both shell implementations are exercised locally; CI exercises Bash.
 - `.github/workflows/ci.yml`. One job, not multiplied by the aws/azure/gcp matrix. Download `gitleaks_8.30.1_linux_x64.tar.gz`, require SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, then run the new test. Checkout stays on the existing SHA pin `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`.
 - `docs/HOOK-REFERENCE.md`. The gitleaks note currently says it complements trivy-secrets with different detection patterns (`docs/HOOK-REFERENCE.md` line 85). Replace that with the measured direction and the new command.
 - `docs/TESTING-GUIDE-CONSUMING-REPO.md` line 215, which tells an adopter that the AWS example key blocks the Gitleaks hook. That expectation is false for 8.30.1.
@@ -329,13 +314,11 @@ The new script runs the bash hook and, when asked, the PowerShell hook. CI runs 
 
 ### Adopter impact
 
-Adopters who already run the `gitleaks` hook will see one block per real staged finding, with rule, file, and line, instead of a single undetailed failure. A `.scanning/configs/.gitleaks.toml` that Gitleaks cannot load will warn and allow the commit instead of blocking. That is a behaviour change of the existing hook. Repos that do not enable the hook are unchanged. CI and the fix loop still scan secrets with Trivy only.
-
-Residual: a broken local Gitleaks config fail-opens the local hook while the bad file is in place, including when the index also contains a secret. Trivy in CI does not read that config and remains the backstop. `docs/SECURITY-MODEL.md` line 163:
-
-```163:163:docs/SECURITY-MODEL.md
-| Smuggle a secret into committed code | `apply-and-push` re-scans changed files with Trivy and **fails closed** on a CRITICAL/HIGH secret. |
-```
+Adopters running the `gitleaks` hook must repair broken scanner configuration
+before committing. Missing or invalid reports block by default, including when
+staged files contain secrets. The existing explicit local tool-error override
+remains available. Re-vendor both hooks and their shared libraries together.
+CI and the fix loop continue to scan secrets with their existing scanner.
 
 ### Rollback
 

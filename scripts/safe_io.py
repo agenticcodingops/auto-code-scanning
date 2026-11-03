@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import stat
 import tempfile
+import secrets
 
 
 def assert_safe_path(path):
@@ -31,10 +32,22 @@ def write_text(path, text, encoding='utf-8'):
     path = assert_safe_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     assert_safe_path(path)
-    descriptor, temporary = tempfile.mkstemp(prefix='.scan-write-', dir=path.parent)
+    # os.open applies the process umask without changing it (umask is global).
+    # Keep the randomized temporary private until its contents are complete.
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else None
+    while True:
+        temporary = path.parent / ('.scan-write-' + secrets.token_hex(16))
+        try:
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            break
+        except FileExistsError:
+            continue
     try:
+        desired_mode = mode if mode is not None else stat.S_IMODE(os.fstat(descriptor).st_mode)
+        os.chmod(temporary, 0o600)
         with os.fdopen(descriptor, 'w', encoding=encoding) as stream:
             stream.write(text)
+        os.chmod(temporary, desired_mode)
         assert_safe_path(path)
         os.replace(temporary, path)
     finally:

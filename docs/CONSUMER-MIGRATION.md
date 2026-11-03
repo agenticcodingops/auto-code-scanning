@@ -54,6 +54,10 @@ A changed `.cs`/`.csproj` file triggers a build of the complete pushed solution.
 The temporary copy is deleted after scanning; source files and the index are
 untouched. Reports are exported to the consumer's `.scanning/last-scan.json` before
 cleanup, and earlier reports are cleared when the next attempt produces no report.
+Checkov, Trivy IaC and Snyk IaC use file-only snapshots: unchanged, unrelated
+symlinks and submodules are excluded and do not block those scanners. Changed
+links and submodules still block. TFLint and dotnet build require the complete
+pushed tree for context; any link or submodule anywhere in that tree blocks them.
 Unavailable/non-tree objects, selected symlinks, submodules and filesystem path collisions
 block the push because a complete isolated scan cannot be guaranteed.
 Transaction-bound validation is fail-closed: setup errors, malformed transactions

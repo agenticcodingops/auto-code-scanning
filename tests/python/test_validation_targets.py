@@ -7,6 +7,10 @@ import subprocess
 import sys
 
 import pytest
+import jsonschema
+import scan
+from safe_io import write_text
+from scan_policy import suppression_file
 
 ROOT = Path(__file__).resolve().parents[2]
 ZERO = '0' * 40
@@ -792,6 +796,55 @@ def test_changed_snapshot_keeps_unchanged_policy_in_custom_directory(consumer, p
     monkeypatch.setattr(runner.subprocess, 'run', run)
     assert runner.scan(f'ref {oid} ref {base}\n', [('checkov', [])], 'sh') == 0
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('tool', ['checkov', 'trivy-iac-full', 'snyk-iac', 'tflint', 'dotnet-build'])
+@pytest.mark.parametrize('kind', ['symlink', 'submodule'])
+@pytest.mark.parametrize('changed', [False, True])
+def test_push_link_boundary_by_tool_context(consumer, package, scanner, monkeypatch, tool, kind, changed):
+    env, _ = scanner
+    monkeypatch.setenv('SCAN_TFLINT_CONFIG', env['SCAN_TFLINT_CONFIG'])
+    monkeypatch.setenv('SCAN_TFLINT_PLUGIN_DIR', env['SCAN_TFLINT_PLUGIN_DIR'])
+    (consumer / '.scanning/configs').mkdir(parents=True)
+    (consumer / '.scanning/configs/.checkov.yaml').write_text('quiet: true\n')
+    (consumer / 'main.tf').write_text('# before\n')
+    git(consumer, 'add', '.')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    if kind == 'symlink':
+        blob = subprocess.check_output(['git', 'hash-object', '-w', '--stdin'], cwd=consumer, input=b'outside')
+        mode, target = '120000', blob.decode().strip()
+    else:
+        mode, target = '160000', oid
+    if not changed:
+        git(consumer, 'update-index', '--add', '--cacheinfo', f'{mode},{target},unrelated-link')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'base with source')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'main.tf').write_text('# changed\n')
+    (consumer / 'App.cs').write_text('// changed\n')
+    git(consumer, 'add', 'main.tf', 'App.cs')
+    if changed:
+        git(consumer, 'update-index', '--add', '--cacheinfo', f'{mode},{target},changed-link.tf')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'push source')
+    local = git(consumer, 'rev-parse', 'HEAD')
+    runner = load_push_runner(package)
+    monkeypatch.chdir(consumer)
+    monkeypatch.setattr(runner, 'select_shell', lambda shell: ('sh', 'fixture'))
+    real_run = subprocess.run
+    calls = []
+    def run(command, *args, **kwargs):
+        if command[0] != 'fixture':
+            return real_run(command, *args, **kwargs)
+        assert (kwargs['cwd'] / 'main.tf').read_text() == '# changed\n'
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0)
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    if changed or tool in ('tflint', 'dotnet-build'):
+        with pytest.raises(ValueError, match='symlink or submodule'):
+            runner.scan(f'ref {local} ref {base}\n', [(tool, [])], 'sh')
+        assert not calls
+    else:
+        assert runner.scan(f'ref {local} ref {base}\n', [(tool, [])], 'sh') == 0
+        assert len(calls) == 1
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
@@ -1618,3 +1671,131 @@ def test_powershell_push_scanners_run_manifest_without_git(
     assert trace.is_file(), result.stdout + result.stderr
     assert 'No Terraform files' not in result.stdout
     assert 'No C# files' not in result.stdout
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('report,code', [('', 1), ('{}', 1), ('[', 1), ('[]', 2), ('[null]', 0), ('[]', 1)])
+def test_gitleaks_incomplete_scan_blocks(consumer, package, scanner, shell, report, code):
+    env, _ = scanner
+    bin_dir = Path(env['PATH'].split(os.pathsep)[0])
+    mock = bin_dir / 'gitleaks.py'
+    mock.write_text('import os,sys\nprint(os.environ["LEAK_REPORT"])\nsys.exit(int(os.environ["LEAK_EXIT"]))\n')
+    (bin_dir / 'gitleaks').write_text(f'#!/usr/bin/env bash\nexec python "{mock.as_posix()}"\n', newline='\n')
+    (bin_dir / 'gitleaks').chmod(0o755)
+    (bin_dir / 'gitleaks.cmd').write_text(f'@"{sys.executable}" "{mock}"\n')
+    (consumer / 'App.cs').write_text('staged change\n')
+    git(consumer, 'add', 'App.cs')
+    env.update(LEAK_REPORT=report, LEAK_EXIT=str(code))
+    result = subprocess.run(hook(package, shell, 'gitleaks'), cwd=consumer, env=env, capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'PASS:' not in result.stdout
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('kind', ['pass', 'findings'])
+def test_hook_report_conforms_to_schema(tmp_path, package, shell, kind):
+    common = (package / f'hooks/lib/common.{shell}').as_posix()
+    if shell == 'sh':
+        build = 'build_pass_json checkov . 1' if kind == 'pass' else "build_findings_json checkov . 1 '[]' 0 0 0 0"
+        command = [shutil.which('bash'), '-c', f'source "{common}"; {build}']
+    else:
+        build = 'Build-PassJson -Tool checkov' if kind == 'pass' else "Build-FindingsJson -Tool checkov -FindingsArray '[]'"
+        command = ['pwsh', '-NoProfile', '-Command', f". '{common}'; {build}"]
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    jsonschema.validate(json.loads(result.stdout), json.loads((ROOT / 'schemas/last-scan.schema.json').read_text()))
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX permission modes')
+@pytest.mark.parametrize('existing', [False, True])
+def test_atomic_write_preserves_mode_or_umask(tmp_path, existing):
+    target = tmp_path / 'output'
+    if existing:
+        target.write_text('old')
+        target.chmod(0o751)
+    old = os.umask(0o027)
+    try:
+        write_text(target, 'new')
+    finally:
+        os.umask(old)
+    assert target.stat().st_mode & 0o777 == (0o751 if existing else 0o640)
+
+
+@pytest.mark.parametrize('section', ['bad', ['file'], 1, False, {'file': []}, {'file': None}])
+def test_malformed_suppression_config_is_a_policy_error(tmp_path, section):
+    (tmp_path / 'scan-config.yaml').write_text(json.dumps({'suppressions': section}))
+    with pytest.raises(ValueError, match='suppressions'):
+        suppression_file(tmp_path)
+
+
+@pytest.mark.parametrize('malformed', [False, True])
+def test_json_stdout_is_one_document_and_policy_error_marks_incomplete(tmp_path, monkeypatch, capsys, malformed):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'scan-config.yaml').write_text('suppressions: bad\n' if malformed else '{}\n')
+    monkeypatch.setattr(scan, 'run_trivy', lambda *a: ([], False))
+    monkeypatch.setattr(sys, 'argv', ['scan.py', '.', '--tools', 'trivy', '--format', 'json'])
+    with pytest.raises(SystemExit) as exited:
+        scan.main()
+    output = capsys.readouterr()
+    assert exited.value.code == (2 if malformed else 0)
+    assert json.loads(output.out)['scan_complete'] is (not malformed)
+    assert 'Scanning ' in output.err
+
+
+@pytest.mark.parametrize('autofix,code', [(False, 0), (True, 0), (False, 1), (True, 1)])
+def test_scan_and_fix_checks_output_only_when_writing(tmp_path, autofix, code):
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+    link = repo / '.claude'
+    directory_link(link, outside)
+    script = (ROOT / 'scripts/scan-and-fix.ps1').as_posix()
+    command = f"function trivy {{ $global:LASTEXITCODE={code} }}; & '{script}' -ScanType secrets"
+    if autofix:
+        command += ' -AutoFix'
+    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=repo, capture_output=True, text=True)
+    assert result.returncode == (1 if code else 0), result.stdout + result.stderr
+    if autofix and code:
+        assert 'symlink or reparse point' in result.stderr
+    else:
+        assert 'symlink or reparse point' not in result.stderr
+    assert not list(outside.iterdir())
+
+
+@pytest.mark.parametrize('tool', ['all', 'trivy'])
+def test_baseline_all_skips_unconfigured_tflint_and_uses_current_directory(tmp_path, tool):
+    repo = tmp_path / 'repo'
+    folder = repo / 'infra'
+    folder.mkdir(parents=True)
+    git(repo, 'init', '-q')
+    source = folder / 'main.tf'
+    source.write_text('resource "sample" "one" {}\n')
+    script = (ROOT / 'scripts/create-baseline.ps1').as_posix()
+    # Functions keep this regression independent of installed scanner versions.
+    command = ("function trivy { $global:LASTEXITCODE=0; "
+               "'{\"Results\":[{\"Target\":\"main.tf\",\"Misconfigurations\":[{\"ID\":\"AVD-TEST-1\",\"Severity\":\"HIGH\",\"CauseMetadata\":{\"StartLine\":1,\"EndLine\":1}}]}]}' }; "
+               "function checkov {}; function tflint { throw 'unconfigured scanner executed' }; "
+               f"& '{script}' -Tool {tool} -CloudProvider aws -Force")
+    env = clean_env()
+    env.pop('SCAN_TFLINT_CONFIG', None)
+    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=folder, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    if tool == 'all':
+        assert 'Skipping tflint' in result.stdout
+    baseline = json.loads((folder / '.scan-baseline/baseline.json').read_text())
+    assert baseline['entries'][0]['file'] == 'infra/main.tf'
+    assert baseline['entries'][0]['fingerprint'].startswith('v1:')
+
+
+@pytest.mark.parametrize('target_location', ['external', 'consumer', 'snapshot'])
+def test_powershell_resolves_tool_links_before_boundary_check(tmp_path, target_location):
+    for name in ('external', 'consumer', 'snapshot', 'links'):
+        (tmp_path / name).mkdir()
+    (tmp_path / target_location / 'tool').write_text('tool')
+    directory_link(tmp_path / 'links/bin', tmp_path / target_location)
+    common = (ROOT / 'hooks/lib/common.ps1').as_posix()
+    command = f". '{common}'; Assert-ExternalPath '{(tmp_path / 'links/bin/tool').as_posix()}'"
+    env = dict(clean_env(), SCAN_PUSH_SNAPSHOT='1', SCAN_CONSUMER_ROOT=str(tmp_path / 'consumer'))
+    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=tmp_path / 'snapshot', env=env, capture_output=True, text=True)
+    assert result.returncode == (0 if target_location == 'external' else 1), result.stderr

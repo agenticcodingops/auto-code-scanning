@@ -561,10 +561,11 @@ def main():
                 checkov_config = str(candidate)
                 break
 
-    print(f"Scanning {scan_dir} with {', '.join(tools_to_run)}...")
+    progress = sys.stderr if args.format == 'json' else sys.stdout
+    print(f"Scanning {scan_dir} with {', '.join(tools_to_run)}...", file=progress)
     if cloud_provider:
-        print(f"  Cloud provider: {cloud_provider}")
-    print()
+        print(f"  Cloud provider: {cloud_provider}", file=progress)
+    print(file=progress)
 
     start_time = time.time()
     all_findings = []

@@ -193,7 +193,7 @@ build_pass_json() {
 {
   "schema_version": "1.0",
   "scan_id": "$(generate_id)",
-  "timestamp": "${timestamp}",
+  "scan_timestamp": "${timestamp}",
   "duration_ms": ${duration_ms},
   "scan_directory": "${scan_dir}",
   "tools_executed": ["${tool}"],
@@ -234,7 +234,7 @@ build_findings_json() {
 {
   "schema_version": "1.0",
   "scan_id": "$(generate_id)",
-  "timestamp": "${timestamp}",
+  "scan_timestamp": "${timestamp}",
   "duration_ms": ${duration_ms},
   "scan_directory": "${scan_dir}",
   "tools_executed": ["${tool}"],

@@ -51,6 +51,12 @@ Hooks publish available
 JSON reports to `.scanning/last-scan.json`; an incomplete scan can block without
 producing a report.
 
+Checkov, Trivy IaC and Snyk IaC copy only selected changed files and required
+tracked policy. An unchanged, unrelated symlink or submodule is outside that
+snapshot and does not block these file-only scanners. A selected symlink or
+submodule blocks. TFLint and dotnet build copy the complete pushed tree for
+context, so any symlink or submodule in that tree blocks them, even if unchanged.
+
 ## Exit Code Contract
 
 Transaction-bound push validation is **fail-closed**:

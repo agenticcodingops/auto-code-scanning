@@ -174,10 +174,10 @@ def git_source_prefix(source_root):
     return None
 
 
-def module_resource_address(resource, source_file, source_root, scan_directory, read_trusted, module_cache):
+def module_resource_address(resource, source_file, source_root, scan_directory, read_trusted, list_trusted, module_cache):
     """Resolve local module instances only through matching trusted source chains.
 
-    A new/renamed call or changed module source cannot borrow a declaration's
+    A new/renamed call address or changed module source cannot borrow a declaration's
     approval. Dynamic, remote and ambiguous sources retain the finding.
     """
     match = re.fullmatch(r'(?P<modules>(?:module\.[\w-]+(?:\[[^\]]+\])?\.)+)'
@@ -194,7 +194,8 @@ def module_resource_address(resource, source_file, source_root, scan_directory, 
             key = directory, trusted
             if key not in module_cache:
                 modules = {}
-                for path in directory.glob('*.tf'):
+                paths = (source_root / relative for relative in list_trusted(directory)) if trusted else directory.glob('*.tf')
+                for path in paths:
                     path.resolve().relative_to(source_root)
                     relative = path.relative_to(source_root).as_posix()
                     content = read_trusted(relative) if trusted else path.read_text(encoding='utf-8')
@@ -234,6 +235,22 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
         base_commit = local_inline_base(source_root)
     prefix = git_source_prefix(source_root)
     trusted_cache = {}
+    def list_trusted(directory):
+        relative = directory.relative_to(source_root)
+        git_directory = (prefix or '') + (relative.as_posix() + '/' if relative.parts else '')
+        if policy_root is not None:
+            base_root = Path(policy_root).resolve()
+            base_directory = (base_root / git_directory).resolve()
+            base_directory.relative_to(base_root)
+            return [(relative / path.name).as_posix() for path in base_directory.glob('*.tf')]
+        if not base_commit or prefix is None:
+            return []
+        result = subprocess.run(['git', '-C', str(source_root), 'ls-tree', '-r', '-z',
+                                 '--name-only', '--full-tree', base_commit, '--', ':(top)' + git_directory],
+                                check=True, capture_output=True)
+        names = [name.decode('utf-8') for name in result.stdout.split(b'\0') if name]
+        return [name[len(prefix):] for name in names if
+                Path(name).suffix == '.tf' and Path(name).parent == Path(git_directory or '.')]
     def read_trusted(relative):
         """Read the corresponding repository path from the trusted base only."""
         git_relative = (prefix or '') + relative
@@ -270,8 +287,8 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
         resource = check.get('resource', '')
         try:
             resource = module_resource_address(resource, (source_root / relative).resolve(),
-                                               source_root, scan_directory, read_trusted, module_cache)
-        except (OSError, ValueError, UnicodeError):
+                                               source_root, scan_directory, read_trusted, list_trusted, module_cache)
+        except (OSError, ValueError, UnicodeError, subprocess.CalledProcessError):
             resource = None
         current_reasons = {reason for rule, reason in current.get(resource) or set()
                            if rule == check.get('check_id')}
@@ -351,7 +368,14 @@ def suppression_file(policy_root):
         data = yaml.safe_load(config.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("scan-config.yaml must be a mapping")
-        name = (data.get("suppressions") or {}).get("file", name)
+        section = data.get("suppressions", {})
+        if section is None:
+            section = {}
+        if not isinstance(section, dict):
+            raise ValueError("suppressions must be a mapping")
+        name = section.get("file", name)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("suppressions.file must be a non-empty path string")
     candidate = (root / name).resolve()
     candidate.relative_to(root)  # policy cannot name files outside its checkout
     return candidate

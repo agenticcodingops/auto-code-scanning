@@ -128,10 +128,33 @@ function Write-ScanJson {
     } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
 }
 
+function Resolve-ExternalRealPath {
+    param([string]$Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    for ($hop = 0; $hop -lt 40; $hop++) {
+        $current = $full
+        $resolved = $false
+        while ($current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                $target = $item.ResolveLinkTarget($true)
+                if (-not $target) { throw 'Cannot resolve trusted path link' }
+                $suffix = $full.Substring($current.Length).TrimStart('/', '\')
+                $full = if ($suffix) { Join-Path $target.FullName $suffix } else { $target.FullName }
+                $resolved = $true
+                break
+            }
+            $parent = [IO.Directory]::GetParent($current)
+            $current = if ($parent) { $parent.FullName } else { $null }
+        }
+        if (-not $resolved) { return $full }
+    }
+    throw 'Too many links in trusted path'
+}
+
 function Assert-ExternalPath {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path)) { throw 'Trusted path must be absolute' }
-    Assert-SafeWritePath $Path
     $root = if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { (Get-Location).Path } else {
         Assert-GitAvailable
         & git rev-parse --show-toplevel 2>$null
@@ -141,9 +164,9 @@ function Assert-ExternalPath {
     if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -and $env:SCAN_CONSUMER_ROOT) {
         $roots += $env:SCAN_CONSUMER_ROOT
     }
-    $full = [IO.Path]::GetFullPath($Path)
+    $full = Resolve-ExternalRealPath $Path
     foreach ($boundary in $roots) {
-        $boundary = [IO.Path]::GetFullPath($boundary).TrimEnd('/', '\')
+        $boundary = (Resolve-ExternalRealPath $boundary).TrimEnd('/', '\')
         if ($full -eq $boundary -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'Trusted path must be outside the scanned and consumer checkouts'
         }
@@ -200,7 +223,7 @@ function Build-PassJson {
 {
   "schema_version": "1.0",
   "scan_id": "$scanId",
-  "timestamp": "$timestamp",
+  "scan_timestamp": "$timestamp",
   "duration_ms": $DurationMs,
   "scan_directory": "$safeScanDir",
   "tools_executed": ["$Tool"],
@@ -242,7 +265,7 @@ function Build-FindingsJson {
 {
   "schema_version": "1.0",
   "scan_id": "$scanId",
-  "timestamp": "$timestamp",
+  "scan_timestamp": "$timestamp",
   "duration_ms": $DurationMs,
   "scan_directory": "$safeScanDir",
   "tools_executed": ["$Tool"],
