@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import os
 from pathlib import Path, PurePosixPath
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,14 +22,47 @@ EXTENSIONS = {
 }
 
 
+def index_tree():
+    """Capture index bytes without writing to the index shared by parallel hooks."""
+    source = Path(os.fsdecode(push.git('rev-parse', '--git-path', 'index')).strip()).absolute()
+    with tempfile.TemporaryDirectory(prefix='scan-index-capture-') as directory:
+        private = Path(directory) / 'index'
+        if source.exists():
+            shutil.copyfile(source, private)
+        environment = dict(os.environ, GIT_INDEX_FILE=str(private))
+        return subprocess.check_output(
+            ['git', '--no-replace-objects', '-c', 'core.splitIndex=false', 'write-tree'],
+            env=environment, stderr=subprocess.PIPE).decode().strip()
+
+
+def rule_inputs(root, tree, hook):
+    """Bind consumer-local rule files/directories to the captured index too."""
+    setting = {'semgrep-csharp': 'SEMGREP_RULESET_CSHARP',
+               'semgrep-typescript': 'SEMGREP_RULESET_TYPESCRIPT'}.get(hook)
+    configured = os.environ.get(setting, '') if setting else ''
+    if not configured:
+        return set(), {}
+    target = Path(os.path.abspath(root / configured))
+    try:
+        relative = target.relative_to(root).as_posix()
+    except ValueError:
+        # Preserve explicitly external rules when cwd changes to the snapshot.
+        return set(), {setting: str(target)}
+    names = {os.fsdecode(name) for name in push.git('ls-tree', '-rz', '--name-only', tree).split(b'\0') if name}
+    inputs = {name for name in names if name == relative or name.startswith(relative.rstrip('/') + '/')}
+    # Registry references remain unchanged. Absolute consumer paths must never
+    # keep reading worktree bytes, even when the rule file is absent in the index.
+    override = {setting: relative} if inputs or Path(configured).is_absolute() else {}
+    return inputs, override
+
+
 def scan(hook, arguments, shell):
     root = Path(os.fsdecode(push.git('rev-parse', '--show-toplevel')).strip()).resolve()
-    os.chdir(root)
     report = root / '.scanning/last-scan.json'
     push.clear_report(report)
-    # write-tree captures one index version; both selection and byte export use it.
-    # Unmerged entries fail here rather than being silently omitted.
-    tree = os.fsdecode(push.git('write-tree')).strip()
+    tree = index_tree()
+    os.chdir(root)
+    # The captured tree binds selection and export to one index version.
     try:
         base = os.fsdecode(push.git('rev-parse', '--verify', '-q', 'HEAD^{tree}')).strip()
     except subprocess.CalledProcessError:
@@ -40,6 +74,8 @@ def scan(hook, arguments, shell):
     policy_dir = push.policy_directory(root)
     policy = {'scan-config.yaml', '.sqlfluff', '.semgrepignore', '.gitignore',
               str(PurePosixPath(policy_dir) / '.trivyignore')}
+    rules, rule_environment = rule_inputs(root, tree, hook)
+    policy.update(rules)
     implementation, executable = push.select_shell(shell)
     with tempfile.TemporaryDirectory(prefix='scan-index-') as directory:
         temporary = Path(directory).resolve(strict=True)
@@ -52,6 +88,7 @@ def scan(hook, arguments, shell):
         env.update(SCAN_INDEX_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
                    SCAN_CONFIG_FILE='scan-config.yaml', SCAN_CONFIG_DIR=policy_dir,
                    SCAN_CONSUMER_ROOT=str(root))
+        env.update(rule_environment)
         script = str(HERE / f'{hook}.{implementation}')
         command = ([executable, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script]
                    if implementation == 'ps1' else [executable, script])

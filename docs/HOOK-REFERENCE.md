@@ -44,6 +44,12 @@ Semgrep, Trivy's pre-commit IaC scanner and SQLFluff run in temporary trees expo
 from the index, including their tracked policy inputs. Unstaged edits do not change
 the bytes they inspect. Export errors block; temporary trees are removed after
 reports are published. Formatters retain their existing worktree behavior.
+Parallel scanners capture private index copies. Repository-local Semgrep rule
+overrides (files or directories) are exported from that same index version.
+The pre-commit Terraform snapshot contains selected changed IaC files and policy,
+as the file-only push scanners do. Unchanged sibling files are excluded, so local
+evaluation has less module context for cross-file references. Use the complete
+CI scan as the authoritative result for module-wide analysis.
 Transaction-bound push
 scanners select changed files from each isolated pushed tree, alongside required
 tracked policy. Terraform directory scans exclude unchanged source files, including

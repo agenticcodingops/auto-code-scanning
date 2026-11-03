@@ -30,15 +30,11 @@ import subprocess
 import sys
 import time
 import uuid
-import yaml
 from datetime import datetime, timezone
 from pathlib import Path
 from safe_io import write_text
 from scan_policy import apply_exceptions, occurrence_fingerprint, suppression_file, load_suppression_entries, baseline_keys, scanner_path, checkov_checks
 from scan_reports import validate_report
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'hooks/lib'))
-from checkov_policy import prepared_policy
 
 # Severity normalization mappings
 TRIVY_SEVERITY_MAP = {
@@ -243,6 +239,13 @@ def run_trivy(scan_dir, severity_filter=None):
 def run_checkov(scan_dir, auto_fix=False, config_file=None, trusted_root=None):
     """Run Checkov scan and return normalized findings."""
     findings = []
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'hooks/lib'))
+        import yaml
+        from checkov_policy import prepared_policy
+    except ImportError as exc:
+        print(f'  [WARN] Checkov policy support unavailable: {exc}', file=sys.stderr)
+        return findings, True, 0
 
     cmd = [
         "checkov",

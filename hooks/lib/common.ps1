@@ -196,13 +196,14 @@ function Resolve-ExternalRealPath {
 function Assert-ExternalPath {
     param([string]$Path)
     if (-not [IO.Path]::IsPathRooted($Path)) { throw 'Trusted path must be absolute' }
-    $root = if ($env:SCAN_PUSH_SNAPSHOT -eq '1') { (Get-Location).Path } else {
+    $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
+    $root = if ($snapshot) { (Get-Location).Path } else {
         Assert-GitAvailable
         & git rev-parse --show-toplevel 2>$null
     }
     if (-not $root) { $root = (Get-Location).Path }
     $roots = @($root)
-    if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -and $env:SCAN_CONSUMER_ROOT) {
+    if ($snapshot -and $env:SCAN_CONSUMER_ROOT) {
         $roots += $env:SCAN_CONSUMER_ROOT
     }
     $full = Resolve-ExternalRealPath $Path

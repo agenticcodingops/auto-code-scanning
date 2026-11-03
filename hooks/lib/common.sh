@@ -144,7 +144,7 @@ assert_external_path() {
         case "${OSTYPE:-}" in msys*|cygwin*) hook_error 'Python required for Windows path checks'; exit 1 ;; esac
         [[ "$external_path" == /* && ! -L "$external_path" ]] || { hook_error 'Trusted path must be absolute and unlinked'; exit 1; }
         local root parent canonical consumer_root
-        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]]; then
+        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]]; then
             root="$PWD"
         else
             require_scan_git
@@ -154,24 +154,24 @@ assert_external_path() {
         parent="$(cd "$(dirname -- "$external_path")" && pwd -P)" || exit 1
         canonical="$parent/${external_path##*/}"
         case "$canonical/" in "$root/"*) hook_error 'Trusted path must be outside the scanned checkout'; exit 1 ;; esac
-        if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 && -n "${SCAN_CONSUMER_ROOT:-}" ]]; then
+        if [[ -n "${SCAN_CONSUMER_ROOT:-}" && ( "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ) ]]; then
             consumer_root="$(cd "$SCAN_CONSUMER_ROOT" && pwd -P)" || exit 1
             case "$canonical/" in "$consumer_root/"*) hook_error 'Trusted path must be outside the consumer checkout'; exit 1 ;; esac
         fi
         return 0
     fi
     if command -v cygpath >/dev/null 2>&1; then external_path="$(cygpath -w "$external_path")"; fi
-    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 ]] || require_scan_git
+    [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]] || require_scan_git
     "$py" -I - "$external_path" <<'PYEXTERNAL'  || exit 1
 import os, pathlib, subprocess, sys
 try:
-    root = (pathlib.Path.cwd() if os.environ.get('SCAN_PUSH_SNAPSHOT') == '1' else
+    root = (pathlib.Path.cwd() if any(os.environ.get(key) == '1' for key in ('SCAN_PUSH_SNAPSHOT', 'SCAN_INDEX_SNAPSHOT')) else
             pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())).resolve()
 except subprocess.CalledProcessError:
     root = pathlib.Path.cwd().resolve()
 p = pathlib.Path(sys.argv[1])
 roots = [root]
-if os.environ.get('SCAN_PUSH_SNAPSHOT') == '1' and os.environ.get('SCAN_CONSUMER_ROOT'):
+if any(os.environ.get(key) == '1' for key in ('SCAN_PUSH_SNAPSHOT', 'SCAN_INDEX_SNAPSHOT')) and os.environ.get('SCAN_CONSUMER_ROOT'):
     roots.append(pathlib.Path(os.environ['SCAN_CONSUMER_ROOT']).resolve())
 if not p.is_absolute():
     sys.exit("Trusted path must be absolute and outside the scanned checkout")
