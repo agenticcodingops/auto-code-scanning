@@ -241,6 +241,8 @@ jobs:
       - name: Install Trivy
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
+        # always(): the SARIF steps below run after a failure too and need the binary.
+        if: always()
         env:
           TRIVY_VERSION: "0.75.0"
           TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"

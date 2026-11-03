@@ -338,10 +338,10 @@ To bump a scanner, change it in one release:
 
 1. Checkov: choose the `checkov-action` tag whose `action.yml` names the Checkov
    image you want, and pin that tag's commit SHA.
-2. Trivy: change `TRIVY_VERSION` and `TRIVY_SHA256` on every `Install Trivy` step together
-   (`reusable-scan.yml`, `code-security-scan.yml`, `autonomous-fix.yml` and this repository's
-   own CI workflows), taking the SHA-256 of `trivy_<version>_Linux-64bit.tar.gz` from that
-   release's `trivy_<version>_checksums.txt`.
+2. Trivy: change `TRIVY_VERSION` and `TRIVY_SHA256` together on every `Install Trivy` step in
+   `.github/workflows/` (`grep -rl TRIVY_SHA256 .github/workflows` lists them;
+   `tests/python/test_workflow_pins.py` fails if any pair differs), taking the SHA-256 of
+   `trivy_<version>_Linux-64bit.tar.gz` from that release's `trivy_<version>_checksums.txt`.
 3. TFLint: change `tflint_version:`, and replace `checksums:` with the SHA-256 of
    `tflint_linux_amd64.zip` and `tflint_linux_arm64.zip` from that release's
    `checksums.txt`.
