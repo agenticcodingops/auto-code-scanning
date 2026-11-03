@@ -56,7 +56,7 @@ def main(argv) -> int:
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args(argv[1:])
 
-    repo = assert_safe_path(args.repo_path)
+    repo = assert_safe_path(args.repo_path).resolve()
     try:
         tools = {name: resolve_tool(name, repo) for name in ("lefthook", "pre-commit", "gh", "pwsh")}
         python = str(Path(sys.executable).resolve())

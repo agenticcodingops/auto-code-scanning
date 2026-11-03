@@ -217,7 +217,7 @@ languages:
   csharp:
     enabled: true
     build:
-      solution: "MyApp.slnx"       # relative to working_dir; "" = auto-detect the nearest one
+      solution: "MyApp.slnx"       # relative to working_dir; "" = use the first matching solution
       working_dir: "api"           # directory to run `dotnet` from
 ```
 
