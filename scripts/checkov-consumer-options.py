@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from urllib.parse import unquote
 from safe_io import assert_safe_path, append_text, write_text
 
 
@@ -51,7 +52,27 @@ def validate_render_count(value):
     return value
 
 
-def filter_sarif(sarif, allow_inline=None):
+def approved_inline_locations(report, source_root, scan_directory, base_commit):
+    """Translate only base-approved JSON skips into exact SARIF locations."""
+    from scan_policy import checkov_checks, scanner_path
+    from scan_reports import validate_report
+    if not re.fullmatch(r'[0-9a-fA-F]{40,64}', base_commit):
+        raise ValueError('A full trusted base commit is required')
+    validate_report(report, 'checkov')
+    locations = set()
+    for document in report if isinstance(report, list) else [report]:
+        checks = document['results']
+        pending = checkov_checks(checks, source_root, scan_directory=scan_directory, base_commit=base_commit)
+        retained = {id(check) for check in pending}
+        for check in checks.get('skipped_checks', []):
+            lines = check.get('file_line_range') or []
+            if id(check) not in retained and lines:
+                locations.add((check['check_id'], scanner_path(check['file_path'], 'checkov',
+                               source_root, scan_directory), lines[0], lines[-1]))
+    return locations
+
+
+def filter_sarif(sarif, allow_inline=None, approved_locations=()):
     if allow_inline is None:
         allow_inline = os.environ.get("ALLOW_INLINE_CHECKOV_SKIPS") == "true"
     """Checkov 3.3.19 labels skipped records with SARIF suppressions.
@@ -77,7 +98,12 @@ def filter_sarif(sarif, allow_inline=None):
                 for key in ("skipped", "suppressed")
             )
             if result.get("suppressions") or skipped:
-                if allow_inline:
+                locations = result.get('locations') or []
+                location = locations[0].get('physicalLocation', {}) if len(locations) == 1 else {}
+                region = location.get('region') or {}
+                key = (result.get('ruleId'), unquote((location.get('artifactLocation') or {}).get('uri', '')),
+                       region.get('startLine'), region.get('endLine'))
+                if allow_inline or key in approved_locations:
                     removed += 1
                     continue
                 result.pop("suppressions", None)
@@ -122,7 +148,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("prepare").add_argument("config", type=Path)
-    commands.add_parser("filter-sarif").add_argument("sarif", type=Path)
+    sarif_parser = commands.add_parser("filter-sarif")
+    sarif_parser.add_argument("sarif", type=Path)
+    sarif_parser.add_argument("--checkov-report", type=Path)
     args = parser.parse_args()
     try:
         if args.command == "prepare":
@@ -130,7 +158,12 @@ def main():
         else:
             with args.sarif.open(encoding="utf-8") as stream:
                 sarif = json.load(stream)
-            removed = filter_sarif(sarif)
+            approved = set()
+            if args.checkov_report:
+                report = json.loads(args.checkov_report.read_text(encoding='utf-8'))
+                approved = approved_inline_locations(report, Path.cwd(),
+                    os.environ.get('TERRAFORM_DIRECTORY', '.'), os.environ.get('TRUSTED_POLICY_SHA', ''))
+            removed = filter_sarif(sarif, approved_locations=approved)
             # Leave an unfiltered file untouched if parsing or filtering fails.
             temporary = args.sarif.with_suffix(".sarif.tmp")
             assert_safe_path(args.sarif)

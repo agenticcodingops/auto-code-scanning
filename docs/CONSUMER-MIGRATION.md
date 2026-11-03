@@ -1,5 +1,27 @@
 # Runbook: Migrate an Inline Scan or Fix Loop to the Platform
 
+## Trusted base inline skip migration
+
+Re-vendor `scripts/scan.py` and `scripts/scan_policy.py` together and upgrade the
+reusable scan to a release containing the trusted-base inline skip fix. Existing
+Terraform `#checkov:skip=<ID>:<reason>` comments are honoured when the same ID and
+justification remain on the same resource in the same file as at the trusted
+base commit. They do not need schema-2.0 registry entries. Line shifts or unrelated
+resource edits do not invalidate these reviewed skips.
+
+A PR adding or changing a skip, its reason, check ID, resource or file still
+reports a finding and needs a schema-2.0 occurrence approval in base policy.
+Deleting a skip restores the active check; an old base skip cannot hide a failure.
+Keep `allow-inline-checkov-skips` at its default `false` to enforce this boundary.
+
+For identical local and CI decisions, pass `python scripts/scan.py <directory>
+--policy-root <separate-base-checkout>` using the exact PR base commit. With no
+explicit policy checkout, the local inline matcher reads the merge base with
+`origin/HEAD` (or `origin/main`) from Git objects. Fetch that remote branch first.
+If no base is available, skips remain active. See
+[suppression governance](SUPPRESSION-GOVERNANCE.md#scan-policy-and-occurrence-approval-migration)
+for the complete rule and the separate registry migration.
+
 ## Push-object and staged-config validation migration
 
 Re-vendor `hooks/`, `scripts/validate-scan-config.py` and `schemas/` together.

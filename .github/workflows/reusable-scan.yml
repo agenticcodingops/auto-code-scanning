@@ -398,10 +398,12 @@ jobs:
         id: filter-checkov-artifact
         env:
           ALLOW_INLINE_CHECKOV_SKIPS: ${{ inputs.allow-inline-checkov-skips }}
+          TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          TERRAFORM_DIRECTORY: ${{ inputs.terraform-directory }}
         if: always()
         run: |
           if [ -f checkov-results.sarif ]; then
-            python3 "${GITHUB_WORKSPACE}/.scan-tooling/checkov-consumer-options.py" filter-sarif checkov-results.sarif
+            python3 "${GITHUB_WORKSPACE}/.scan-tooling/checkov-consumer-options.py" filter-sarif checkov-results.sarif --checkov-report checkov-results.json
           fi
 
       - name: Upload Checkov results

@@ -214,8 +214,9 @@ checkov-skip-checks: "CKV_AZURE_35,CKV2_AZURE_1,CKV_TF_1"
 checkov-render-iter-count: "20"
 ```
 
-The job summary records the effective skip list and render setting. Inline skips
-remain visible and gated by default. Suppression and baseline schema 2.0 binds
+The job summary records the effective skip list and render setting. New or edited
+inline skips remain visible and gated; unchanged skips already on the same
+resource in the trusted base are honoured. Suppression and baseline schema 2.0 binds
 each approval to one occurrence; legacy matching requires an explicit migration
 opt-in. Scanner failures always block completion, including report-only runs. See [the reusable workflow reference](docs/REUSABLE-WORKFLOWS.md)
 for permissions, outputs and suppression semantics.

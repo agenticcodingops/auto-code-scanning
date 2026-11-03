@@ -35,9 +35,24 @@ still apply. HIGH and CRITICAL always require `approved_by`; registry settings
 can add approval levels but cannot remove that floor. Severity is required and
 approval must cover the actual finding severity. Expiry is capped at 180 days.
 
-Source inline skips are not independent approvals. Inline IaC skips remain in
-the gate and report; app-code scans disable inline suppression comments. To
-retain source inline policy for the policy scanner during migration, trusted
+An inline Terraform `#checkov:skip=<ID>:<reason>` is honoured when the identical
+check ID and justification already exist on the same resource in the same
+repository-relative file at the trusted base commit. Reviewed base skips do not
+need new schema-2.0 entries. Line shifts and unrelated edits do not revoke them.
+Skips added or edited by a pull request (including a changed check ID, reason,
+resource or file) remain findings until a schema-2.0 occurrence approval exists
+in base policy. Removing a skip leaves the check active; a deleted base comment
+cannot suppress a failed check. Missing or ambiguous base identity stays active.
+App-code scans continue to disable inline suppression comments.
+
+Local `scripts/scan.py` uses the same matcher. Supply `--policy-root` with a
+separate checkout of the exact trusted base for PR parity. Without it, inline
+approval is read from Git objects at the merge base of `HEAD` and `origin/HEAD`
+(falling back to `origin/main`); fetch the remote default branch first. If no
+base can be resolved, inline skips stay active. Other policy files keep their
+existing local defaults. Unsupported inline formats stay active.
+
+To retain all source inline policy during a reviewed migration, trusted
 IaC callers can explicitly set `allow-inline-checkov-skips: true` (default
 `false`). Explicit caller skip lists and the platform's reviewed cloud
 configuration remain supported. IaC findings without severity are treated as

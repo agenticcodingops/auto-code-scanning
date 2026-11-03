@@ -11,8 +11,156 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 
 FINGERPRINT = re.compile(r"^v1:[0-9a-f]{64}$")
+
+# Tokenize only enough HCL to associate real comments with top-level definitions.
+# Strings and heredocs are opaque: text in them must never authorize a skip.
+HCL_TOKEN = re.compile(
+    r'<<-?(?P<tag>[A-Za-z_][\w-]*)[^\n]*\n.*?^[ \t]*(?P=tag)[ \t]*(?=\n|$)'
+    r'|"(?:\\.|[^"\\])*"|\#[^\n]*|//[^\n]*|/\*.*?\*/|[\w-]+|[^\s]',
+    re.MULTILINE | re.DOTALL)
+INLINE_SKIP = re.compile(r'^(?:\#|//)\s*checkov:skip=([A-Za-z0-9_]+)(?::(.*))?$')
+
+
+def hcl_string_end(text, start):
+    """Skip a quoted template, including quoted strings inside interpolations."""
+    position, expressions = start + 1, []
+    while position < len(text):
+        character = text[position]
+        if character == '\\':
+            position += 2
+            continue
+        if not expressions:
+            if character == '"':
+                return position + 1
+            if text[position:position + 2] in ('${', '%{'):
+                expressions.append(1)
+                position += 2
+                continue
+        elif character == '"':
+            position = hcl_string_end(text, position)
+            continue
+        elif character == '{':
+            expressions[-1] += 1
+        elif character == '}':
+            expressions[-1] -= 1
+            if expressions[-1] == 0:
+                expressions.pop()
+        position += 1
+    return len(text)
+
+
+def terraform_inline_skips(text):
+    """Index (check ID, justification) by definition address, never by line number.
+
+    Unknown/ambiguous definitions cannot grant approval. This intentionally does
+    not infer Terraform exceptions from other IaC formats or string contents.
+    """
+    definitions, header = {}, []
+    text = text.replace('\r\n', '\n')
+    depth, address, skips, consumed = 0, None, set(), 0
+    for match in HCL_TOKEN.finditer(text):
+        if match.start() < consumed:
+            continue
+        token = match.group()
+        if token.startswith('"'):
+            consumed = hcl_string_end(text, match.start())
+            token = text[match.start():consumed]
+        if token.startswith(('#', '//', '/*')):
+            skip = INLINE_SKIP.fullmatch(token)
+            if address and skip:
+                skips.add((skip[1], (skip[2] or '').strip()))
+            continue
+        if token == '{':
+            if depth == 0:
+                address, skips = None, set()
+                if len(header) == 3 and header[0] in ('resource', 'data'):
+                    try:
+                        labels = [json.loads(label) for label in header[1:]]
+                        if all(isinstance(label, str) for label in labels):
+                            address = '.'.join(labels)
+                            if header[0] == 'data':
+                                address = 'data.' + address
+                    except ValueError:
+                        pass
+                header = []
+            depth += 1
+        elif token == '}':
+            depth -= 1
+            if depth < 0:
+                return {}
+            if depth == 0 and address:
+                # Duplicate addresses are invalid and must not share approval.
+                definitions[address] = None if address in definitions else skips
+                address = None
+        elif depth == 0:
+            header.append(token)
+    return {} if depth else definitions
+
+
+def local_inline_base(source_root):
+    """Use the merge base with the remote default branch, never the PR tip."""
+    try:
+        for ref in ('refs/remotes/origin/HEAD', 'refs/remotes/origin/main'):
+            result = subprocess.run(['git', '-C', str(source_root), 'merge-base', 'HEAD', ref],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                return result.stdout.strip()
+    except OSError:
+        pass
+    return None
+
+
+def checkov_checks(results, source_root, policy_root=None, scan_directory='.', allow_inline=False,
+                   base_commit=None):
+    """Keep failed/new skips; honour only identical trusted-base inline skips.
+
+    CI supplies a separate base checkout. Local scans without that checkout read
+    the merge base from Git objects so worktree/PR edits cannot approve themselves.
+    Missing source/base identity fails closed by retaining the skipped finding.
+    """
+    pending = list(results.get('failed_checks', []))
+    if allow_inline:
+        return pending
+    source_root = Path(source_root).resolve()
+    if not results.get('skipped_checks'):
+        return pending
+    if policy_root is None and base_commit is None:
+        base_commit = local_inline_base(source_root)
+    cache = {}
+    for check in results.get('skipped_checks', []):
+        relative = scanner_path(check.get('file_path', ''), 'checkov', source_root, scan_directory)
+        if relative not in cache:
+            current, trusted = {}, {}
+            try:
+                source = (source_root / relative).resolve()
+                source.relative_to(source_root)
+                if source.suffix == '.tf':
+                    current = terraform_inline_skips(source.read_text(encoding='utf-8'))
+                    if policy_root is not None:
+                        base_root = Path(policy_root).resolve()
+                        base = (base_root / relative).resolve()
+                        base.relative_to(base_root)
+                        trusted = terraform_inline_skips(base.read_text(encoding='utf-8'))
+                    elif base_commit:
+                        result = subprocess.run(['git', '-C', str(source_root), 'show',
+                                                 f'{base_commit}:{relative}'], capture_output=True)
+                        if result.returncode == 0:
+                            trusted = terraform_inline_skips(result.stdout.decode('utf-8'))
+            except (OSError, ValueError, UnicodeError):
+                pass
+            cache[relative] = current, trusted
+        current, trusted = cache[relative]
+        resource = check.get('resource', '')
+        current_reasons = {reason for rule, reason in current.get(resource) or set()
+                           if rule == check.get('check_id')}
+        trusted_reasons = {reason for rule, reason in trusted.get(resource) or set()
+                           if rule == check.get('check_id')}
+        if not current_reasons or current_reasons != trusted_reasons:
+            pending.append(check)
+    return pending
 
 
 def scanner_path(raw, tool, source_root=".", scan_directory="."):
