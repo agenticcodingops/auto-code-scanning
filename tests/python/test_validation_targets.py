@@ -542,7 +542,7 @@ def test_lefthook_dispatcher_scans_real_push_objects(
     import yaml
 
     # Keep this literal command in sync with the shipped consumer entry point.
-    command = 'bash hooks/dispatcher.sh pre-push --remote {1} --hooks checkov,tflint,dotnet-build'
+    command = "bash hooks/dispatcher.sh pre-push --remote '{1}' --hooks checkov,tflint,dotnet-build"
     template = yaml.safe_load((ROOT / 'templates/lefthook/lefthook.yml').read_text())
     push_command = template['pre-push']['commands']['scan-push-objects']
     assert push_command['run'] == command
@@ -568,7 +568,7 @@ def test_lefthook_dispatcher_scans_real_push_objects(
 
     shutil.copytree(package / 'hooks', consumer / 'hooks')
     entry = consumer / '.git/hooks/pre-push'
-    entry.write_text('#!/usr/bin/env bash\nexec ' + command.replace('{1}', '"$1"') + '\n', newline='\n')
+    entry.write_text('#!/usr/bin/env bash\nexec ' + command.replace("'{1}'", '"$1"') + '\n', newline='\n')
     entry.chmod(0o755)
     remote = tmp_path / 'remote.git'
     git(consumer, 'init', '--bare', '-q', str(remote))
@@ -664,7 +664,7 @@ sys.exit(1 if finding else 0)
 
 
 @pytest.mark.parametrize('default_branch', [True, False])
-@pytest.mark.parametrize('explicit_remote', [True, False])
+@pytest.mark.parametrize('explicit_remote', [True, False, 'url'])
 def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypatch, default_branch, explicit_remote):
     (consumer / 'old.tf').write_text('# pre-existing finding\n')
     git(consumer, 'add', '.')
@@ -677,6 +677,8 @@ def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypa
         # A different remote's default must not change the destination's base.
         git(consumer, 'update-ref', 'refs/remotes/other/main', git(consumer, 'rev-parse', 'HEAD~1'))
         git(consumer, 'symbolic-ref', 'refs/remotes/other/HEAD', 'refs/remotes/other/main')
+    if explicit_remote == 'url':
+        git(consumer, 'remote', 'add', 'origin', 'https://example.test/origin.git')
     (consumer / 'new.tf').write_text('# new branch\n')
     git(consumer, 'add', '.')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'branch change')
@@ -695,7 +697,8 @@ def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypa
 
     monkeypatch.setattr(runner.subprocess, 'run', run)
     assert runner.scan(f'refs/heads/topic {oid} refs/heads/topic {ZERO}\n', [('trivy-iac-full', [])], 'sh',
-                       remote_name='origin' if explicit_remote else None) == 0
+                       remote_name='https://example.test/origin.git' if explicit_remote == 'url' else
+                                   'origin' if explicit_remote else None) == 0
     assert received == [b'new.tf']
 
 
@@ -789,6 +792,103 @@ def test_changed_snapshot_keeps_unchanged_policy_in_custom_directory(consumer, p
     monkeypatch.setattr(runner.subprocess, 'run', run)
     assert runner.scan(f'ref {oid} ref {base}\n', [('checkov', [])], 'sh') == 0
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('finding', [False, True])
+def test_real_tflint_keeps_module_context_and_filters_unchanged_findings(consumer, package, tmp_path, shell, finding):
+    if not shutil.which('tflint'):
+        pytest.skip('TFLint unavailable')
+    trusted = tmp_path / 'context-rules.hcl'
+    trusted.write_text('config { disabled_by_default = true }\n'
+                       'rule "terraform_unused_declarations" { enabled = true }\n')
+    plugins = tmp_path / 'context-plugins'
+    plugins.mkdir()
+    folder = consumer / 'module space'
+    folder.mkdir()
+    (folder / 'variables.tf').write_text('variable "used" { type = string }\n')
+    (folder / 'main.tf').write_text('output "used" { value = var.used }\n')
+    (folder / 'old.tf').write_text('variable "existing_unused" { type = string }\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote module')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    (folder / 'variables.tf').write_text('variable "used" {\n type = string\n description = "Updated description"\n}\n' +
+                                        ('variable "new_unused" { type = string }\n' if finding else ''))
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'variable description')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    # Looking at the live module would make the used variable look unused again.
+    (folder / 'main.tf').write_text('# unrelated worktree\n')
+    env = dict(clean_env(), SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(plugins))
+    result = subprocess.run(hook(package, shell, 'tflint'), cwd=consumer, env=env, text=True,
+                            capture_output=True, encoding='utf-8', timeout=90,
+                            input=f'ref {oid} ref {base}\n')
+    assert result.returncode == int(finding), result.stdout + result.stderr
+    if finding:
+        assert 'new_unused' in result.stdout
+        assert 'existing_unused' not in result.stdout
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('name', ['checkov', 'checkov-strict', 'tflint', 'trivy-iac-full', 'snyk-iac'])
+def test_json_only_push_scans_pushed_json_bytes(consumer, package, scanner, tmp_path, shell, name):
+    policies = consumer / '.scanning/configs'
+    policies.mkdir(parents=True)
+    (policies / '.checkov.yaml').write_text('quiet: true\n')
+    (consumer / 'main.tf').write_text('# unchanged module\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remote module')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    pushed = '{"finding": true}\n'
+    (consumer / 'changed.tf.json').write_text(pushed)
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'json finding')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    (consumer / 'changed.tf.json').write_text('{"finding": false}\n')
+    env, trace = scanner
+    env['SNYK_TOKEN'] = 'fixture'
+    (tmp_path / 'bin/mock.py').write_text('''import json, os, pathlib, sys
+if '--init' in sys.argv: sys.exit(0)
+sources = {p.name: p.read_text() for p in pathlib.Path('.').rglob('*.tf.json')}
+with open(os.environ['TRACE'], 'a') as output: output.write(json.dumps(sources) + '\\n')
+finding = any(json.loads(content).get('finding') for content in sources.values())
+print(json.dumps({'results': {'failed_checks': [{'severity':'HIGH'}] if finding else []},
+ 'issues': [{'rule': {'severity': 'error'}}] if finding else [],
+ 'Results': [{'Misconfigurations': [{'ID':'fixture', 'Severity':'HIGH'}]}] if finding else [],
+ 'infrastructureAsCodeIssues': [{'severity':'high'}] if finding else []}))
+sys.exit((2 if any(arg.startswith('--chdir') for arg in sys.argv) else 1) if finding else 0)
+''')
+    result = subprocess.run(hook(package, shell, name), cwd=consumer, env=env, text=True,
+                            capture_output=True, encoding='utf-8', input=f'ref {oid} ref {base}\n')
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert json.loads(trace.read_text().splitlines()[-1]) == {'changed.tf.json': pushed}
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_direct_wrapper_consumes_git_remote_arguments(consumer, package, scanner, shell):
+    policies = consumer / '.scanning/configs'
+    policies.mkdir(parents=True)
+    (policies / '.checkov.yaml').write_text('quiet: true\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'destination default')
+    base = git(consumer, 'rev-parse', 'HEAD')
+    git(consumer, 'update-ref', 'refs/remotes/origin/main', base)
+    git(consumer, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    (consumer / 'new.tf').write_text('# pushed clean source\n')
+    git(consumer, 'add', '.')
+    git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'new branch')
+    oid = git(consumer, 'rev-parse', 'HEAD')
+    # The tip exists on another remote: an all-remotes fallback scans nothing,
+    # while the destination's default branch correctly selects new.tf.
+    git(consumer, 'update-ref', 'refs/remotes/other/main', oid)
+    git(consumer, 'symbolic-ref', 'refs/remotes/other/HEAD', 'refs/remotes/other/main')
+    env, trace = scanner
+    result = subprocess.run(hook(package, shell, 'checkov') + ['origin', 'https://example.test/origin.git'],
+                            cwd=consumer, env=env, text=True, capture_output=True,
+                            input=f'ref {oid} ref {ZERO}\n')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.exists(), result.stdout + result.stderr
+    assert json.loads(trace.read_text()) == {'new.tf': '# pushed clean source\n'}
 
 
 BAD_SCAN_CONFIGS = [

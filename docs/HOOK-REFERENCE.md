@@ -43,7 +43,9 @@ All hooks use a dual-wrapper architecture:
 Commit scanners select staged files from the index. Transaction-bound push
 scanners select changed files from each isolated pushed tree, alongside required
 tracked policy. Terraform directory scans exclude unchanged source files, including
-siblings and nested files of other IaC types. A changed
+siblings and nested files of other IaC types. Both `.tf` and `.tf.json` changes
+trigger IaC scanning. TFLint reads the complete pushed tree for module context and
+uses per-directory file filters to report findings only in changed sources. A changed
 `.cs`/`.csproj` input triggers a build with the complete pushed solution for context.
 Hooks publish available
 JSON reports to `.scanning/last-scan.json`; an incomplete scan can block without

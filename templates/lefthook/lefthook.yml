@@ -75,4 +75,4 @@ pre-push:
     scan-push-objects:
       # A single reader retains every ref. Never filter on the current index.
       use_stdin: true
-      run: bash hooks/dispatcher.sh pre-push --remote {1} --hooks checkov,tflint,dotnet-build
+      run: bash hooks/dispatcher.sh pre-push --remote '{1}' --hooks checkov,tflint,dotnet-build

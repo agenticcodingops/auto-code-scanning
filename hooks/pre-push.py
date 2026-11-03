@@ -98,8 +98,13 @@ def changed_paths(local: str, remote: str, remote_name: str | None = None) -> li
                     '--full-tree', local).split(b'\0') if name]
         # Use the remote's advertised default branch when it is tracked locally.
         defaults = git('for-each-ref', '--format=%(refname)', 'refs/remotes').decode().splitlines()
-        defaults = [ref for ref in defaults if ref.endswith('/HEAD') and
-                    (remote_name is None or ref == f'refs/remotes/{remote_name}/HEAD')]
+        defaults = [ref for ref in defaults if ref.endswith('/HEAD')]
+        if remote_name is not None:
+            names = {remote_name}
+            for name in git('remote').decode().splitlines():
+                if git('remote', 'get-url', name).decode().strip() == remote_name:
+                    names.add(name)
+            defaults = [ref for ref in defaults if any(ref == f'refs/remotes/{name}/HEAD' for name in names)]
         if len(defaults) == 1:
             try:
                 base = git('merge-base', local, defaults[0]).decode().strip()
@@ -246,9 +251,9 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
             snapshot.mkdir()
             selected = set(changed_paths(oid, remote, remote_name))
             # Policy is read from the pushed tip even when it did not change.
-            policy = {'scan-config.yaml', '.snyk', str(PurePosixPath(policy_dir) / '.checkov.yaml'),
-                      str(PurePosixPath(policy_dir) / '.trivyignore')}
-            available = materialize(oid, snapshot, selected | policy)
+            required_policy = {'scan-config.yaml', '.snyk', str(PurePosixPath(policy_dir) / '.checkov.yaml'),
+                               str(PurePosixPath(policy_dir) / '.trivyignore')}
+            available = materialize(oid, snapshot, selected | required_policy)
             names = [name for name in available if name in selected]
             config = {}
             if (snapshot / 'scan-config.yaml').is_file():
@@ -268,7 +273,7 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
             for hook, extra in hooks:
                 if hook not in HOOKS:
                     raise ValueError('Unknown pre-push scanner')
-                extensions = ('.cs', '.csproj') if hook == 'dotnet-build' else ('.tf',)
+                extensions = ('.cs', '.csproj') if hook == 'dotnet-build' else ('.tf', '.tf.json')
                 if not any(name.lower().endswith(extensions) for name in names):
                     continue
                 clear_report(report)
@@ -299,13 +304,14 @@ def scan(records: str, hooks: list[tuple[str, list[str]]], shell: str, *, from_g
                         path = PurePosixPath(configured.replace('\\', '/'))
                         if path.is_absolute() or '..' in path.parts or ':' in configured:
                             raise ValueError('Build paths must remain inside the pushed snapshot')
-                    # Builds need the complete solution, but only a changed C#
-                    # input triggers one. Never borrow dependencies from the worktree.
-                    build_snapshot = temporary / 'build'
-                    if not build_snapshot.exists():
-                        build_snapshot.mkdir()
-                        materialize(oid, build_snapshot)
-                    hook_snapshot = build_snapshot
+                if hook in ('dotnet-build', 'tflint'):
+                    # Builds and module linting need unchanged inputs as context.
+                    # TFLint filters findings to the transaction's selected files.
+                    complete = temporary / 'complete'
+                    if not complete.exists():
+                        complete.mkdir()
+                        materialize(oid, complete)
+                    hook_snapshot = complete
                 else:
                     hook_snapshot = snapshot
                 snapshot_report = hook_snapshot / '.scanning/last-scan.json'
@@ -475,8 +481,14 @@ def main() -> int:
             # legacy chaining. Only its config is overridden in this invocation.
             return subprocess.run([bash(), '-c', source, original, *extra],
                                   input=records, text=True, env=env).returncode
+    remote_name = args.remote
+    if len(extra) == 2 and all(not value.startswith('-') for value in extra):
+        # Directly installed shell wrappers receive Git's remote name and URL.
+        # Consume them here rather than forwarding them as scanner options.
+        remote_name = remote_name or extra[0]
+        extra = []
     return scan(records, [(h, extra) for h in args.hooks.split(',')], args.shell,
-                from_git=args.stdin_from_git, remote_name=args.remote)
+                from_git=args.stdin_from_git, remote_name=remote_name)
 
 
 if __name__ == '__main__':
