@@ -373,8 +373,8 @@ languages:
 # ============================================================================
 ci:
   # GitHub Actions workflow file(s) that run scanning in CI. App-code consumers use
-  # code-security-scan.yml; Terraform/IaC consumers use terraform-security-scan.yml
-  # (or the reusable reusable-scan.yml). Informational pointer to a real workflow.
+  # code-security-scan.yml; Terraform/IaC consumers call reusable-scan.yml.
+  # Informational pointer to a real workflow.
   workflow_file: ".github/workflows/code-security-scan.yml"
 
   # Upload results to GitHub Security tab

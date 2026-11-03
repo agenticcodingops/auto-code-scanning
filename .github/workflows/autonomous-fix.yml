@@ -12,8 +12,9 @@
 #                        command cannot be influenced by the PR's own diff.
 #   JOB analyze        : untrusted input | READ-ONLY token, no push creds. The model
 #                        credentials reach ONLY the agent step, whose tools cannot run
-#                        build, test or package commands, and whose start-up config files
-#                        come from the base commit -> produces a PATCH ARTIFACT + digest.
+#                        build, test or package commands. A workflow-owned tool guard confines
+#                        file access to the checkout outside .git; a secret scan precedes
+#                        publication of the PATCH ARTIFACT + digest.
 #   JOB verify         : runs the base-sourced build_verify_cmd on the patched code in a
 #                        job with NO secrets and NO Actions cache access (cache-mode: none).
 #                        It hands the push job nothing but its result, so project code
@@ -300,8 +301,8 @@ jobs:
         # The agent CLI reads these from the working directory when it starts, and even
         # a base-branch copy can run hooks or MCP servers that execute files of the PR
         # head (a hook that calls scripts/…, an `npx` server that reads the PR's .npmrc).
-        # Remove them; the agent step also loads user-level settings only, with hooks
-        # off and only the action's own MCP servers. The capture step keeps these paths
+        # Remove them; the agent step also loads user-level settings only, with the workflow tool guard
+        # and only the action's own MCP servers. The capture step keeps these paths
         # out of the patch.
         if: steps.precheck.outputs.capped != 'true'
         run: |
@@ -309,6 +310,226 @@ jobs:
           for p in .claude .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
             rm -rf -- "${p}"
           done
+          # Keep cleanup out of the proposed patch, without allowing the agent to change this list.
+          find "$GITHUB_WORKSPACE" -name .git -prune -o \( -type l -o -name .claude -o -name .mcp.json \) -print0 > "$RUNNER_TEMP/autofix-removed-paths"
+          find "$GITHUB_WORKSPACE" -name .git -prune -o -type l -exec rm -f -- {} +
+          find "$GITHUB_WORKSPACE" -name .git -prune -o \( -name .claude -o -name .mcp.json \) -prune -exec rm -rf -- {} +
+          left="$(find "$GITHUB_WORKSPACE" -name .git -prune -o \( -type l -o -name .claude -o -name .mcp.json \) -print -quit)"
+          if [ -n "$left" ]; then
+            echo "::error::the checkout still holds a link or agent configuration"; exit 1
+          fi
+
+      - name: Write the fix tool guard
+        if: steps.precheck.outputs.capped != 'true'
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/fix-tool-guard.js" <<'GUARD'
+          if (require.main === module) setTimeout(() => finish(2, "the guard timed out."), 10000);
+
+          const fs = require("fs");
+          const path = require("path");
+
+          const FILE_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
+          const SHELL_TOOLS = ["Bash", "Monitor", "PowerShell"];
+          const READ_TOOLS = { Read: ["file_path"], LS: ["path"], Grep: [], Glob: [] };
+          const READ_PATTERNS = { Glob: ["pattern"], Grep: ["glob"] };
+
+          // Both separators, so a test on Windows reads a path as the runner does. \x5c is the backslash.
+          const parts = (p) => p.split(/[\x5c/]+/);
+          const inGit = (rel) => parts(rel).some((s) => s.toLowerCase() === ".git");
+          function within(child, parent) {
+            const rel = path.relative(parent, child);
+            return rel === "" || (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel));
+          }
+
+          // The real path of p: the longest leading part that exists, with every link in it resolved, followed by
+          // the rest as written. Null when a part exists but cannot be resolved, such as a loop of links.
+          function realOf(p) {
+            const rest = [];
+            for (let head = p; ; ) {
+              try {
+                return path.join(fs.realpathSync.native(head), ...rest);
+              } catch (e) {
+                if (e.code !== "ENOENT" && e.code !== "ENOTDIR") return null;
+                const parent = path.dirname(head);
+                if (parent === head) return null;
+                rest.unshift(path.basename(head));
+                head = parent;
+              }
+            }
+          }
+
+          // Null if a read tool may use this path, or the reason it may not. Resolving the path the way the file
+          // system will is the point: an absolute path, a .. segment, a ~ or a link in the checkout that points out
+          // of it would otherwise reach the runner's files, and .git holds the job's git credentials. A .. segment
+          // is refused outright, because the system applies it after following a link and path.resolve before.
+          function readTarget(tool, p, ctx) {
+            const refuse = "the fix may access only files in the checkout, " + ctx.ws + ", and not in its .git; " +
+              JSON.stringify(p) + " is not one (use a path relative to the checkout, with no .. and no links out of it).";
+            if (typeof p !== "string" || p === "" || /[\x00-\x1f\x7f]/.test(p)) return refuse;
+            if (p.startsWith("~") || parts(p).includes("..")) return refuse;
+            const ws = path.resolve(ctx.ws);
+            const abs = path.resolve(ws, p);
+            const real = realOf(abs);
+            const realWs = realOf(ws);
+            if (real && realWs && within(abs, ws) && !inGit(path.relative(ws, abs)) &&
+                within(real, realWs) && !inGit(path.relative(realWs, real))) {
+              return null;
+            }
+            return refuse;
+          }
+
+          // The brace alternatives of a pattern, expanded the way a glob engine expands them (innermost group first),
+          // or null if a brace is unbalanced or there are too many alternatives to check.
+          function alternatives(p) {
+            const todo = [p];
+            const done = [];
+            while (todo.length) {
+              const s = todo.pop();
+              const close = s.indexOf("}");
+              const open = close < 0 ? -1 : s.lastIndexOf("{", close);
+              if (close < 0 && !s.includes("{")) {
+                done.push(s);
+              } else if (open < 0) {
+                return null;
+              } else {
+                for (const alt of s.slice(open + 1, close).split(",")) todo.push(s.slice(0, open) + alt + s.slice(close + 1));
+              }
+              if (todo.length + done.length > 256) return null;
+            }
+            return done;
+          }
+
+          // A brace-free pattern as a regular expression, case-insensitive, with the widest reading of each wildcard:
+          // * and ? match any name character, including a leading dot, and ** matches across directories.
+          function globRegex(alt) {
+            let re = "";
+            for (let i = 0; i < alt.length; i++) {
+              const c = alt[i];
+              if (c === "*" && alt[i + 1] === "*") {
+                re += ".*";
+                i++;
+              } else if (c === "*") {
+                re += "[^/]*";
+              } else if (c === "?") {
+                re += "[^/]";
+              } else {
+                re += /[A-Za-z0-9_/-]/.test(c) ? c : "\x5c" + c;
+              }
+            }
+            return new RegExp("^" + re + "$", "i");
+          }
+
+          // What a content search must never reach: the .git directory and the file in it that holds git credentials.
+          const GIT_PATHS = [".git", ".git/config"];
+
+          // Null if a file pattern stays below its search root and out of .git, or the reason it does not. The
+          // pattern is checked as the glob engine will read it, not as written: every brace alternative must be
+          // relative and free of .. (a literal "." then a wildcard counts, since it can match ".."). Character
+          // classes, extglobs and backslashes are refused outright, so no spelling hides a name from these checks.
+          // A Grep glob selects files whose content is returned, so it must not be able to match .git or
+          // .git/config under any reading of its wildcards. A Glob pattern returns names only, and a later Read of
+          // a listed file is checked by its resolved path, so for Glob a literal .git segment is what is refused.
+          // A Grep glob that starts with ! only excludes files, so only its form is checked.
+          function readPattern(tool, p) {
+            if (p === undefined) return null;
+            const refuse = "the pattern " + JSON.stringify(p) + " must be relative and stay out of .git: no root, ~, " +
+              "drive or .. in any brace alternative, and no character class, extglob or backslash" +
+              (tool === "Grep" ? "; a Grep glob also may not match .git under any reading of its wildcards." : ".");
+            if (typeof p !== "string" || /[\x00-\x1f\x7f\x5b\x5d\x5c()]/.test(p)) return refuse;
+            const negated = tool === "Grep" && p.startsWith("!");
+            const alts = alternatives(negated ? p.slice(1) : p);
+            if (!alts) return refuse;
+            for (const alt of alts) {
+              if (/^(?:[/~]|[A-Za-z]:)/.test(alt)) return refuse;
+              const segs = alt.split("/");
+              if (segs.some((s) => s.toLowerCase() === ".git" || (s.startsWith(".") && globRegex(s).test("..")))) {
+                return refuse;
+              }
+              if (tool === "Grep" && !negated && GIT_PATHS.some((g) => globRegex(alt).test(g))) return refuse;
+            }
+            return null;
+          }
+
+          function decideRead(tool, input, ctx) {
+            // The named fields, and any other field whose name says it holds a path, so a field a later CLI adds
+            // is checked too.
+            const keys = new Set(READ_TOOLS[tool]);
+            for (const key of Object.keys(input)) {
+              if (/path|file|dir/i.test(key)) keys.add(key);
+            }
+            for (const key of keys) {
+              const value = input[key];
+              if (value === undefined && !READ_TOOLS[tool].includes(key)) continue;
+              for (const p of Array.isArray(value) ? value : [value]) {
+                const why = readTarget(tool, p, ctx);
+                if (why) return why;
+              }
+            }
+            for (const key of READ_PATTERNS[tool] || []) {
+              const why = readPattern(tool, input[key]);
+              if (why) return why;
+            }
+            return null;
+          }
+
+          // Returns null to let the call go on to the normal permission check, or the reason to block it.
+          function decide(tool, input, ctx) {
+            if (FILE_TOOLS.includes(tool)) {
+              // Reuse the read boundary for every write target, including new files and future path fields.
+              const keys = new Set(["file_path", "notebook_path"]);
+              for (const key of Object.keys(input)) if (/path|file|dir/i.test(key)) keys.add(key);
+              const targets = [...keys].filter((key) => input[key] !== undefined);
+              if (!targets.length) return "a write must name its target.";
+              for (const key of targets) {
+                for (const p of Array.isArray(input[key]) ? input[key] : [input[key]]) {
+                  const why = readTarget(tool, p, ctx);
+                  if (why) return why;
+                }
+              }
+              return null;
+            }
+            if (Object.prototype.hasOwnProperty.call(READ_TOOLS, tool)) return decideRead(tool, input, ctx);
+            if (!SHELL_TOOLS.includes(tool)) return "the fix may not use the " + tool + " tool.";
+            // Exact commands for this PR only. No flags, filters, expansions or shell syntax.
+            const commands = [
+              "gh pr diff " + ctx.pr,
+              "gh pr view " + ctx.pr,
+              "gh api repos/" + ctx.repo + "/pulls/" + ctx.pr + "/comments",
+              "gh api repos/" + ctx.repo + "/issues/" + ctx.pr + "/comments",
+            ];
+            return commands.includes(input.command) ? null : "only the four PR read commands in the prompt are allowed.";
+          }
+
+          function finish(code, why) {
+            if (why) process.stderr.write("Blocked: " + why + "\n");
+            process.exit(code);
+          }
+
+          if (require.main === module) {
+            const [pr, repo, ws] = process.argv.slice(2);
+            if (!/^[0-9]+$/.test(pr || "") || !/^[\w.-]+\/[\w.-]+$/.test(repo || "") || !ws) {
+              finish(2, "the guard was started without its arguments.");
+            }
+            let raw = "";
+            process.stdin.setEncoding("utf8");
+            process.stdin.on("data", (chunk) => (raw += chunk));
+            process.stdin.on("end", () => {
+              let event;
+              try {
+                event = JSON.parse(raw);
+              } catch (e) {
+                finish(2, "the hook input could not be read.");
+              }
+              const why = decide(event.tool_name, event.tool_input || {}, { pr, repo, ws });
+              if (why) finish(2, why);
+              finish(0);
+            });
+          } else {
+            module.exports = { decide };
+          }
+          GUARD
+          node --check "$RUNNER_TEMP/fix-tool-guard.js"
 
       - name: Install a checksum-verified Bun for the agent (no Actions cache)
         id: bun
@@ -343,8 +564,20 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}   # READ-ONLY; no AUTOFIX_TOKEN here
           path_to_bun_executable: ${{ steps.bun.outputs.path }}
-          # Written to the runner's user-level settings: no hook runs in this session.
-          settings: '{"disableAllHooks": true}'
+          # The workflow owns the only tool hook; project settings cannot disable it.
+          settings: |
+            {
+              "hooks": {
+                "PreToolUse": [{
+                  "matcher": "*",
+                  "hooks": [{
+                    "type": "command",
+                    "timeout": 30,
+                    "command": "node '${{ runner.temp }}/fix-tool-guard.js' ${{ steps.ctx.outputs.pr }} ${{ github.repository }} '${{ github.workspace }}' || exit 2"
+                  }]
+                }]
+              }
+            }
           additional_permissions: |
             actions: read
           prompt: |
@@ -399,6 +632,11 @@ jobs:
           for p in .claude .claude-pr .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
             git reset -q -- "${p}" 2>/dev/null || true
           done
+          if [ -f "$RUNNER_TEMP/autofix-removed-paths" ]; then
+            while IFS= read -r -d '' p; do
+              git reset -q -- "$p"
+            done < "$RUNNER_TEMP/autofix-removed-paths"
+          fi
           git diff --cached --binary > autofix.patch || true
           if [ -s autofix.patch ]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
@@ -427,8 +665,42 @@ jobs:
           echo "gated=${gated}" >> "$GITHUB_OUTPUT"
           echo "reason=${reason}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload vetted patch
+      - name: Install the checksum-verified patch scanner
         if: steps.capture.outputs.has_changes == 'true' && steps.gate.outputs.gated != 'true'
+        env:
+          TRIVY_VERSION: "0.71.0"
+          TRIVY_SHA256: "30a3d22b23f88c233f1658f562fb477cae3b3e8b4761109d515b7698daf85814"
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/autofix-trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/trivy.tar.gz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  $dir/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$dir/trivy.tar.gz" -C "$dir" trivy
+
+      - name: Secret-scan the patch before publication
+        id: patch_secrets
+        if: steps.capture.outputs.has_changes == 'true' && steps.gate.outputs.gated != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          scan_dir="$(mktemp -d "${RUNNER_TEMP}/autofix-patch-scan.XXXXXX")"
+          trap 'rm -rf -- "$scan_dir"' EXIT
+          mkdir "$scan_dir/payload"
+          cp -- "$GITHUB_WORKSPACE/autofix.patch" "$scan_dir/payload/autofix.patch"
+          # No checkout configuration, ignore file, cache or report may control this scan.
+          cd "$scan_dir"
+          if ! "${RUNNER_TEMP}/autofix-trivy/trivy" fs "$scan_dir/payload" \
+            --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet \
+            --cache-dir "$scan_dir/cache" --format json --output "$scan_dir/report.json" \
+            > "$scan_dir/scan.log" 2>&1; then
+            echo "::error::patch secret scan failed; no patch will be published"; exit 1
+          fi
+          test -s "$scan_dir/report.json"
+
+      - name: Upload vetted patch
+        if: steps.capture.outputs.has_changes == 'true' && steps.gate.outputs.gated != 'true' && steps.patch_secrets.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: autofix-patch

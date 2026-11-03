@@ -437,7 +437,8 @@ def test_agent_loads_no_repository_config(wf):
     args = agent["with"]["claude_args"]
     assert "--setting-sources user" in args, "load user-level settings only, never the project's"
     assert "--strict-mcp-config" in args, "start only the action's own MCP servers"
-    assert '"disableAllHooks": true' in agent["with"]["settings"]
+    assert '"PreToolUse"' in agent["with"]["settings"]
+    assert "disableAllHooks" not in agent["with"]["settings"]
 
 
 def _effective_cache_mode(wf, job_name):
