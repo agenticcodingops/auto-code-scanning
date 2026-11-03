@@ -226,7 +226,7 @@ Edit `.pre-commit-config.yaml` and uncomment the `snyk-iac` block:
 
 ```yaml
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.0.1  # x-release-please-version
+    rev: v3.0.2  # x-release-please-version
     hooks:
       # ... existing hooks ...
       # Uncomment below to enable Snyk IaC scanning
@@ -270,11 +270,11 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.1 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.2 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"
-      scanning-repo-ref: "v3.0.1" # x-release-please-version
+      scanning-repo-ref: "v3.0.2" # x-release-please-version
       enable-snyk: true
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

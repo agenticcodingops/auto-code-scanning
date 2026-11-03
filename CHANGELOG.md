@@ -8,6 +8,14 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.1...v3.0.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **scan:** honour module inline skips and grant private upload access ([#78](https://github.com/agenticcodingops/auto-code-scanning/issues/78)) ([2060d45](https://github.com/agenticcodingops/auto-code-scanning/commit/2060d451d04a73bb7191f4c421eb5d5b46b97e79))
+* **scan:** scope push selection to destination and restore on-demand builds ([#79](https://github.com/agenticcodingops/auto-code-scanning/issues/79)) ([ad52cd7](https://github.com/agenticcodingops/auto-code-scanning/commit/ad52cd7f29fe10be9a1ed91f0736e2dacca8cb38))
+
 ## [3.0.1](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.0...v3.0.1) (2026-11-03)
 
 
