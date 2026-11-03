@@ -87,3 +87,29 @@ def test_the_snyk_job_installs_an_exact_version():
     assert installs, "the Snyk install was not found; the search no longer matches"
     for name, spec in installs:
         assert re.fullmatch(r"@\d+\.\d+\.\d+", spec), f"{name}: `npm install -g snyk{spec}` is not an exact version"
+
+
+def _steps(workflow):
+    for job in (workflow.get("jobs") or {}).values():
+        yield from job.get("steps") or []
+
+
+def test_trivy_comes_from_the_verified_release():
+    """setup-trivy's installer downloads from get.trivy.dev, which stopped resolving, and verifies nothing we pin.
+
+    Every workflow installs the pinned GitHub release and checks its SHA-256 instead, one version everywhere, and
+    every trivy-action step skips its own installer.
+    """
+    installs = set()
+    for path in WORKFLOWS:
+        for step in _steps(_load(path)):
+            uses = step.get("uses", "")
+            assert not uses.startswith("aquasecurity/setup-trivy@"), f"{path.name}: {uses}"
+            if uses.startswith("aquasecurity/trivy-action@"):
+                assert (step.get("with") or {}).get("skip-setup-trivy") == "true", f"{path.name}: {step.get('name')}"
+            env = step.get("env") or {}
+            if "TRIVY_SHA256" in env:
+                assert re.fullmatch(r"[0-9a-f]{64}", env["TRIVY_SHA256"]), path.name
+                assert "sha256sum -c" in step.get("run", ""), path.name
+                installs.add((env["TRIVY_VERSION"], env["TRIVY_SHA256"]))
+    assert len(installs) == 1, installs
