@@ -24,10 +24,16 @@ def step(name):
 @pytest.fixture
 def guard(tmp_path):
     source = step("Write the fix tool guard")["run"]
-    script = re.search(r"<<'GUARD'\n(.*?)\nGUARD", source, re.S)
-    assert script, "the guard must be embedded in the trusted workflow"
-    path = tmp_path / "guard.js"
-    path.write_text(script[1], encoding="utf-8")
+    script = tmp_path / "install-guard.sh"
+    script.write_text(source, encoding="utf-8", newline="\n")
+    install = subprocess.run(
+        [shutil.which("bash"), bash_path(script)], cwd=tmp_path,
+        env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path)},
+        text=True, capture_output=True,
+    )
+    assert install.returncode == 0, install.stderr
+    path = tmp_path / "fix-tool-guard.js"
+    assert path.is_file(), "the workflow must install the guard at the hook's path"
     ws = tmp_path / "checkout"
     ws.mkdir()
     (ws / ".git").mkdir()
