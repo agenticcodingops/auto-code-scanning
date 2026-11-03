@@ -1,0 +1,93 @@
+[
+  {
+    "check_type": "terraform",
+    "results": {
+      "failed_checks": [],
+      "skipped_checks": [
+        {
+          "check_id": "CKV_TF_1",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed local module"
+          },
+          "file_path": "\\main.tf",
+          "file_line_range": [
+            1,
+            4
+          ],
+          "resource": "plain",
+          "caller_file_path": null,
+          "caller_file_line_range": null
+        },
+        {
+          "check_id": "CKV_TF_1",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed local module"
+          },
+          "file_path": "\\main.tf",
+          "file_line_range": [
+            6,
+            10
+          ],
+          "resource": "each[\"green\"]",
+          "caller_file_path": null,
+          "caller_file_line_range": null
+        },
+        {
+          "check_id": "CKV_TF_1",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed local module"
+          },
+          "file_path": "\\main.tf",
+          "file_line_range": [
+            12,
+            16
+          ],
+          "resource": "counted[0]",
+          "caller_file_path": null,
+          "caller_file_line_range": null
+        },
+        {
+          "check_id": "CKV_TF_1",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed local module"
+          },
+          "file_path": "\\main.tf",
+          "file_line_range": [
+            6,
+            10
+          ],
+          "resource": "each[\"blue\"]",
+          "caller_file_path": null,
+          "caller_file_line_range": null
+        },
+        {
+          "check_id": "CKV_TF_1",
+          "check_result": {
+            "result": "SKIPPED",
+            "suppress_comment": "Reviewed local module"
+          },
+          "file_path": "\\main.tf",
+          "file_line_range": [
+            12,
+            16
+          ],
+          "resource": "counted[1]",
+          "caller_file_path": null,
+          "caller_file_line_range": null
+        }
+      ]
+    },
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "skipped": 5,
+      "parsing_errors": 0,
+      "resource_count": 5,
+      "checkov_version": "3.3.19"
+    }
+  }
+]

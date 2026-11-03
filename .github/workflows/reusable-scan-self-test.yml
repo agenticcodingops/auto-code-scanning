@@ -161,16 +161,16 @@ jobs:
       - name: Commit trusted inline approvals and edit the current fixture
         run: |
           cp -R tests/fixtures/checkov-inline-trust .inline-trust-fixture
-          git add -f .inline-trust-fixture/main.tf
+          git add -f .inline-trust-fixture
           git -c user.name=Fixture -c user.email=fixture@example.test commit -qm "trusted fixture"
           echo "TRUSTED_POLICY_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           python3 << 'PYTHON_SCRIPT'
           from pathlib import Path
-          path = Path('.inline-trust-fixture/main.tf')
-          text = path.read_text().replace('Original fixture exception', 'Edited fixture exception')
-          text = text.replace('resource "azurerm_key_vault" "new" {',
-                              'resource "azurerm_key_vault" "new" {\n  #checkov:skip=CKV_AZURE_110:New fixture exception')
-          path.write_text(text)
+          for path in Path('.inline-trust-fixture').rglob('*.tf'):
+              text = path.read_text().replace('Original fixture exception', 'Edited fixture exception')
+              text = text.replace('resource "azurerm_key_vault" "new" {',
+                                  'resource "azurerm_key_vault" "new" {\n  #checkov:skip=CKV_AZURE_110:New fixture exception')
+              path.write_text(text)
           PYTHON_SCRIPT
 
       - name: Scan trusted, edited and new inline skips
@@ -193,21 +193,39 @@ jobs:
         run: |
           python3 << 'PYTHON_SCRIPT'
           import json
+          import sys
           from pathlib import Path
+          from urllib.parse import unquote
+          sys.path.insert(0, 'scripts')
+          from scan_policy import scanner_path
           data = json.loads(Path('inline-trust-results.json').read_text())
           reports = data if isinstance(data, list) else [data]
           checks = [check for report in reports for check in report['results']['skipped_checks']
                     if check['check_id'] == 'CKV_AZURE_110']
-          assert {c['resource'] for c in checks} == {
-              'azurerm_key_vault.unchanged', 'azurerm_key_vault.edited', 'azurerm_key_vault.new'}
+          assert {'azurerm_key_vault.unchanged', 'azurerm_key_vault.edited',
+                  'azurerm_key_vault.new'} <= {c['resource'] for c in checks}
+          nested = [c for c in checks if c['file_path'].replace('\\', '/') == '/modules/b/main.tf']
+          assert nested and all(c['caller_file_path'] for c in nested), nested
+          # The scanner reports both outer instance keys through the intermediate caller.
+          assert any('outer["blue"]' in c['resource'] for c in nested), nested
+          assert any('outer["green"]' in c['resource'] for c in nested), nested
+          module_skips = [c for report in reports for c in report['results']['skipped_checks']
+                          if c['check_id'] == 'CKV_TF_1']
+          assert module_skips, 'Module-block skips must be exercised'
           sarif = json.loads(Path('inline-trust-results.sarif').read_text())
           results = [r for run in sarif['runs'] for r in run['results'] if r['ruleId'] == 'CKV_AZURE_110']
-          expected = {tuple(c['file_line_range']) for c in checks if c['resource'] != 'azurerm_key_vault.unchanged'}
-          actual = {(r['locations'][0]['physicalLocation']['region']['startLine'],
+          def json_location(check):
+              return (scanner_path(check['file_path'], 'checkov', Path.cwd(), '.inline-trust-fixture'),
+                      *check['file_line_range'])
+          expected = {json_location(c) for c in checks if not c['resource'].endswith('.unchanged')}
+          actual = {(scanner_path(unquote(r['locations'][0]['physicalLocation']['artifactLocation']['uri']),
+                                  'checkov', Path.cwd(), '.inline-trust-fixture'),
+                     r['locations'][0]['physicalLocation']['region']['startLine'],
                      r['locations'][0]['physicalLocation']['region']['endLine']) for r in results}
-          assert len(results) == 2 and actual == expected, (actual, expected)
+          assert actual == expected, (actual, expected)
           assert all(not r.get('suppressions') and r['level'] == 'error' for r in results)
-          print('Committed unchanged skip honoured; edited and new skips remain active errors')
+          assert not any(r['ruleId'] == 'CKV_TF_1' for run in sarif['runs'] for r in run['results'])
+          print('Root and nested unchanged skips honoured; edited and new skips remain active errors')
           PYTHON_SCRIPT
 
   scan:
@@ -215,6 +233,7 @@ jobs:
     # must grant them even though both jobs are switched off below.
     permissions:
       contents: read
+      actions: read
       security-events: write
       pull-requests: write
     uses: ./.github/workflows/reusable-scan.yml

@@ -14,6 +14,7 @@
 #         cloud-provider: "aws"
 #       permissions:
 #         contents: read
+#         actions: read
 #         security-events: write
 #         pull-requests: write
 # ============================================================================
@@ -735,6 +736,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
       security-events: write
     needs: [scan-trivy, scan-checkov, scan-snyk, aggregate]
     if: always() && inputs.upload-sarif

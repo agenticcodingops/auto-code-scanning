@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   security-events: write   # upload SARIF to code scanning
   pull-requests: write     # PR annotations
 

@@ -99,7 +99,7 @@ jobs:
   code-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.1 # x-release-please-version
     with: { category-prefix: "scan-", fail-on-findings: true }   # languages auto-detected
-    permissions: { contents: read, security-events: write, pull-requests: write }
+    permissions: { contents: read, actions: read, security-events: write, pull-requests: write }
 ```
 
 ---

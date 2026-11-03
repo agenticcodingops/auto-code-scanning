@@ -174,47 +174,86 @@ def git_source_prefix(source_root):
     return None
 
 
-def module_resource_address(resource, source_file, source_root, scan_directory, read_trusted, list_trusted, module_cache):
+def module_resource_address(resource, source_file, source_root, scan_directory, read_trusted, list_trusted, module_cache,
+                            caller_file=None):
     """Resolve local module instances only through matching trusted source chains.
 
     A new/renamed call address or changed module source cannot borrow a declaration's
     approval. Dynamic, remote and ambiguous sources retain the finding.
     """
     match = re.fullmatch(r'(?P<modules>(?:module\.[\w-]+(?:\[[^\]]+\])?\.)+)'
-                         r'(?P<resource>(?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
+                         r'(?P<resource>(?:data\.)?[\w-]+\.[\w-]+|[\w-]+)(?:\[[^\]]+\])?', resource)
     if not match:
+        # Module policies use a bare call name, including evaluated instance keys.
+        call = re.fullmatch(r'([\w-]+)(?:\[[^\]]+\])?', resource)
+        if call:
+            return 'module.' + call[1]
         declaration = re.fullmatch(r'((?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
         return declaration[1] if declaration else resource
-    current_dir = (source_root / scan_directory).resolve()
-    trusted_dir = current_dir
-    for name in re.findall(r'module\.([\w-]+)(?:\[[^\]]+\])?\.', match['modules']):
-        sources = []
-        for directory, trusted in ((current_dir, False), (trusted_dir, True)):
-            directory.relative_to(source_root)
-            key = directory, trusted
-            if key not in module_cache:
-                modules = {}
-                paths = (source_root / relative for relative in list_trusted(directory)) if trusted else directory.glob('*.tf')
-                for path in paths:
-                    path.resolve().relative_to(source_root)
-                    relative = path.relative_to(source_root).as_posix()
-                    content = read_trusted(relative) if trusted else path.read_text(encoding='utf-8')
-                    found = {}
-                    terraform_inline_skips(content or '', module_sources=found)
-                    for label, target in found.items():
-                        modules[label] = None if label in modules else target
-                module_cache[key] = modules
-            modules = module_cache[key]
-            source = modules.get(name)
-            if not isinstance(source, str) or not source.startswith(('./', '../')):
-                return None
-            target = (directory / source).resolve()
-            target.relative_to(source_root)
-            sources.append(target)
-        current_dir, trusted_dir = sources
-        if current_dir != trusted_dir:
+
+    def module_target(directory, trusted, name):
+        directory.relative_to(source_root)
+        key = directory, trusted
+        if key not in module_cache:
+            modules = {}
+            paths = (source_root / relative for relative in list_trusted(directory)) if trusted else directory.glob('*.tf')
+            for path in paths:
+                path.resolve().relative_to(source_root)
+                relative = path.relative_to(source_root).as_posix()
+                content = read_trusted(relative) if trusted else path.read_text(encoding='utf-8')
+                found = {}
+                terraform_inline_skips(content or '', module_sources=found)
+                for label, target in found.items():
+                    modules[label] = None if label in modules else target
+            module_cache[key] = modules
+        modules = module_cache[key]
+        source = modules.get(name)
+        if not isinstance(source, str) or not source.startswith(('./', '../')):
             return None
-    return match['resource'] if source_file.parent == current_dir else None
+        target = (directory / source).resolve()
+        target.relative_to(source_root)
+        return target
+
+    scan_root = (source_root / scan_directory).resolve()
+    scan_root.relative_to(source_root)
+    names = re.findall(r'module\.([\w-]+)(?:\[[^\]]+\])?\.', match['modules'])
+    # A directory scan can discover root modules below its starting directory.
+    # The reported immediate caller anchors the last hop, while the full address
+    # still requires every preceding call/source to exist in both trees.
+    if caller_file is not None:
+        caller_file.relative_to(source_root)
+        if caller_file.suffix != '.tf' or not caller_file.is_file():
+            return None
+        caller_key = 'caller', caller_file
+        if caller_key not in module_cache:
+            caller_sources = {}
+            terraform_inline_skips(caller_file.read_text(encoding='utf-8'), module_sources=caller_sources)
+            module_cache[caller_key] = caller_sources
+        if names[-1] not in module_cache[caller_key]:
+            return None
+        if 'roots' not in module_cache:
+            module_cache['roots'] = {path.parent.resolve() for path in scan_root.rglob('*.tf')}
+        roots = module_cache['roots']
+    else:
+        roots = {scan_root}
+    resolved = []
+    for root in roots:
+        directory = root
+        for index, name in enumerate(names):
+            if index == len(names) - 1 and caller_file is not None and caller_file.parent != directory:
+                break
+            current = module_target(directory, False, name)
+            trusted = module_target(directory, True, name)
+            if current is None or current != trusted:
+                break
+            directory = current
+        else:
+            if directory == source_file.parent:
+                resolved.append(root)
+    declaration = match['resource']
+    if '.' not in declaration:
+        declaration = 'module.' + declaration
+    return declaration if len(resolved) == 1 else None
 
 
 def checkov_checks(results, source_root, policy_root=None, scan_directory='.', allow_inline=False,
@@ -292,8 +331,12 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
         current, trusted = cache[relative]
         resource = check.get('resource', '')
         try:
+            caller = check.get('caller_file_path')
+            caller_file = ((source_root / scanner_path(caller, 'checkov', source_root, scan_directory)).resolve()
+                           if caller else None)
             resource = module_resource_address(resource, (source_root / relative).resolve(),
-                                               source_root, scan_directory, read_trusted, list_trusted, module_cache)
+                                               source_root, scan_directory, read_trusted, list_trusted, module_cache,
+                                               caller_file=caller_file)
         except (OSError, ValueError, UnicodeError, subprocess.CalledProcessError):
             resource = None
         current_reasons = {reason for rule, reason in current.get(resource) or set()

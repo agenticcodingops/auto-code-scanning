@@ -334,6 +334,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   security-events: write   # upload SARIF
   pull-requests: write     # PR annotations
 

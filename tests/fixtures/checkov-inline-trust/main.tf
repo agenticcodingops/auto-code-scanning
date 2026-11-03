@@ -15,3 +15,14 @@ resource "azurerm_key_vault" "new" {
   name = "newvault"
   sku_name = "standard"
 }
+
+module "plain" {
+  #checkov:skip=CKV_TF_1:Reviewed local module
+  source = "./modules/b"
+}
+
+module "counted" {
+  #checkov:skip=CKV_TF_1:Reviewed local module
+  source = "./modules/b"
+  count = 2
+}

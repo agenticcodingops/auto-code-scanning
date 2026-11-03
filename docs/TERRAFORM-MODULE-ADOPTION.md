@@ -125,6 +125,7 @@ jobs:
     # The called workflow cannot raise these; it needs all three.
     permissions:
       contents: read
+      actions: read
       security-events: write
       pull-requests: write
     uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.1 # x-release-please-version

@@ -451,6 +451,7 @@ jobs:
       severity: "CRITICAL,HIGH"
     permissions:
       contents: read
+      actions: read
       security-events: write    # For SARIF upload
       pull-requests: write      # For PR comments
 ```
