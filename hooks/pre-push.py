@@ -96,15 +96,17 @@ def changed_paths(local: str, remote: str, remote_name: str | None = None) -> li
         if git('cat-file', '-t', local + '^{}').strip() == b'tree':
             return [os.fsdecode(name) for name in git('ls-tree', '-rz', '--name-only',
                     '--full-tree', local).split(b'\0') if name]
-        # Use the remote's advertised default branch when it is tracked locally.
-        defaults = git('for-each-ref', '--format=%(refname)', 'refs/remotes').decode().splitlines()
-        defaults = [ref for ref in defaults if ref.endswith('/HEAD')]
+        # Only the destination's refs can establish what it already holds.
+        # An unknown destination must conservatively scan all reachable commits.
+        tracking = git('for-each-ref', '--format=%(refname)', 'refs/remotes').decode().splitlines()
+        names = set()
         if remote_name is not None:
             names = {remote_name}
             for name in git('remote').decode().splitlines():
                 if git('remote', 'get-url', name).decode().strip() == remote_name:
                     names.add(name)
-            defaults = [ref for ref in defaults if any(ref == f'refs/remotes/{name}/HEAD' for name in names)]
+        tracking = [ref for ref in tracking if any(ref.startswith(f'refs/remotes/{name}/') for name in names)]
+        defaults = [ref for ref in tracking if any(ref == f'refs/remotes/{name}/HEAD' for name in names)]
         if len(defaults) == 1:
             try:
                 base = git('merge-base', local, defaults[0]).decode().strip()
@@ -113,9 +115,9 @@ def changed_paths(local: str, remote: str, remote_name: str | None = None) -> li
                     raise
             else:
                 return diff_paths(base, local)
-        # Without a usable default/merge base, only commits absent from every
-        # remote-tracking ref contribute paths. No remote refs means all commits.
-        commits = git('rev-list', local, '--not', '--remotes').decode().splitlines()
+        # Without a usable default/merge base, exclude just the destination's
+        # tracked commits. With no destination refs, include all ancestry.
+        commits = git('rev-list', local, *(['--not', *tracking] if tracking else [])).decode().splitlines()
         names = set()
         for commit in commits:
             names.update(filter(None, git('diff-tree', '--root', '-r', '-m', '--no-commit-id',

@@ -703,7 +703,8 @@ def test_new_branch_selects_only_files_not_on_remote(consumer, package, monkeypa
     assert runner.scan(f'refs/heads/topic {oid} refs/heads/topic {ZERO}\n', [('trivy-iac-full', [])], 'sh',
                        remote_name='https://example.test/origin.git' if explicit_remote == 'url' else
                                    'origin' if explicit_remote else None) == 0
-    assert received == [b'new.tf']
+    assert set(received) == ({b'new.tf'} if explicit_remote else
+                             {b'App.cs', b'App.sln', b'old.tf', b'new.tf'})
 
 
 def test_same_tip_with_different_remote_bases_keeps_both_ranges(consumer, package, monkeypatch):

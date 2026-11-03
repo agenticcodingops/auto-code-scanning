@@ -77,16 +77,37 @@ function Invoke-TerraformScan {
 }
 
 function Invoke-CSharpScan {
-    if (-not (Test-Tool 'dotnet')) { return }
-    # Reuse the shared dotnet-build hook so config (solution/working_dir) drives it.
-    $hook = Join-Path $PSScriptRoot '..\hooks\dotnet-build.sh'
-    $env:SCAN_HOOK_ID = 'dotnet-build'
-    $disp = Join-Path $PSScriptRoot '..\hooks\dotnet-build.ps1'
-    if (Test-Path $disp) {
-        $out = & pwsh -NoProfile -ExecutionPolicy Bypass -File $disp 2>&1
-        $csText = ($out -join "`n")
-        Add-Result -Tool 'dotnet build (Roslyn)' -ExitCode $LASTEXITCODE -Issues (Get-IssueLines $csText) -OutputTail ($csText.Substring([Math]::Max(0, $csText.Length - 3000)))
+    $code = 1
+    $csText = ''
+    try {
+        $workingDir = Read-ScanConfigValue -Key 'languages.csharp.build.working_dir' -Default '.'
+        $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
+        if (-not (Test-Path -LiteralPath $workingDir -PathType Container)) {
+            throw "Build working directory not found: $workingDir"
+        }
+        # Discovery returns an absolute path; configured paths are relative to
+        # working_dir, just as they are in the push build hook.
+        if (-not $solution) { $solution = Find-DotnetSolution -WorkingDir $workingDir }
+        Push-Location -LiteralPath $workingDir -ErrorAction Stop
+        try {
+            if (-not $solution -or -not (Test-Path -LiteralPath $solution -PathType Leaf)) {
+                throw 'No solution found; configure languages.csharp.build.solution'
+            }
+            if (-not (Test-Tool 'dotnet')) { throw 'dotnet not found; build cannot start' }
+            # This path scans the live working tree. Push hooks still require
+            # a complete Git transaction and their materialised snapshot.
+            $global:LASTEXITCODE = $null
+            $out = & dotnet build $solution /p:AnalysisMode=AllEnabledByDefault --nologo 2>&1
+            if ($null -eq $LASTEXITCODE) { throw 'Build did not return an exit code' }
+            $code = $LASTEXITCODE
+            $csText = ($out -join "`n")
+        } finally {
+            Pop-Location
+        }
+    } catch {
+        $csText = $_.Exception.Message
     }
+    Add-Result -Tool 'dotnet build (Roslyn)' -ExitCode $code -Issues (Get-IssueLines $csText) -OutputTail ($csText.Substring([Math]::Max(0, $csText.Length - 3000)))
 }
 
 function Invoke-TypeScriptScan {
