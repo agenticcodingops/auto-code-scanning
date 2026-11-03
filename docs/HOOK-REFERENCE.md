@@ -272,6 +272,11 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Behavior**: Runs when the push changes `.cs`/`.csproj` files. Builds the complete pushed solution and surfaces
   the first ~40 analyzer/build error/warning lines. Build or analyzer errors and
   a missing solution block by default (exit 1).
+- **Trust**: Runs the project's own build logic with the developer's permissions
+  and environment. Use local build hooks only in repositories the developer
+  already trusts. The source snapshot provides version fidelity, not host
+  isolation; CI is the authoritative security boundary. See
+  [the security model](SECURITY-MODEL.md#local-build-hooks-require-a-trusted-repository).
 
 ### TypeScript / JavaScript
 
