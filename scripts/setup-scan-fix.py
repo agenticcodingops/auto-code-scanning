@@ -69,13 +69,20 @@ def main(argv) -> int:
 
     def install_step(command, label):
         try:
-            result = subprocess.run(command, cwd=repo, check=False)
-            if result.returncode != 0:
-                raise RuntimeError(f"exit code {result.returncode}")
-        except (OSError, RuntimeError) as exc:
+            result = subprocess.run(command, cwd=repo, check=True, text=True, capture_output=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            if isinstance(exc, subprocess.CalledProcessError):
+                if exc.stdout:
+                    print(exc.stdout, end="")
+                if exc.stderr:
+                    print(exc.stderr, end="", file=sys.stderr)
             failed_steps.append(label)
             warn(f"FAILED: {label}: {exc}. Resolve the error above and re-run setup.")
         else:
+            if result.stdout:
+                print(result.stdout, end="")
+            if result.stderr:
+                print(result.stderr, end="", file=sys.stderr)
             ok(label)
 
     langs = args.languages
@@ -116,8 +123,7 @@ def main(argv) -> int:
     if args.hooks_runner == "lefthook":
         copy(PLATFORM_ROOT / "templates/lefthook/lefthook.yml", repo / "lefthook.yml")
         if tools["lefthook"]:
-            subprocess.run([tools["lefthook"], "install"], cwd=repo, check=False)
-            ok("lefthook installed")
+            install_step([tools["lefthook"], "install"], "lefthook installation")
         else:
             warn("lefthook not on PATH. Install it (choco/go/brew), then 'lefthook install'")
     else:
@@ -190,7 +196,7 @@ def main(argv) -> int:
     step("Verify install")
     verify = PLATFORM_ROOT / "scripts/verify-scanning.ps1"
     if tools["pwsh"] and verify.exists():
-        subprocess.run([tools["pwsh"], "-NoProfile", "-File", str(verify)], cwd=repo, check=False)
+        install_step([tools["pwsh"], "-NoProfile", "-File", str(verify)], "scan verification")
     else:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 

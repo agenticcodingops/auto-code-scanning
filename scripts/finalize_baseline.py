@@ -1,13 +1,13 @@
 """Write a schema 2.0 baseline with the same identity used by the gate."""
+import argparse
 import json
 from pathlib import Path
-import sys
 from safe_io import write_text
 from scan_policy import checkov_checks, occurrence_fingerprint, scanner_path
 from scan_reports import validate_report
 
 
-def finalize(data, root):
+def finalize(data, root, policy_root=None, base_commit=None):
     data["schema_version"] = "2.0"
     for report in data.pop("scanner_reports", []):
         validate_report(report["report"], report["tool"])
@@ -18,7 +18,8 @@ def finalize(data, root):
             documents = [documents]
         directory = report["scan_directory"]
         for document in documents:
-            for check in checkov_checks(document["results"], root, scan_directory=directory):
+            for check in checkov_checks(document["results"], root, policy_root=policy_root,
+                                        scan_directory=directory, base_commit=base_commit):
                 lines = check.get("file_line_range") or [0]
                 data["entries"].append(dict(
                     rule_id=check["check_id"], file=check["file_path"], tool="checkov",
@@ -37,6 +38,14 @@ def finalize(data, root):
 
 
 if __name__ == "__main__":
-    source, destination, root = sys.argv[1:]
-    data = json.loads(Path(source).read_text(encoding="utf-8-sig"))
-    write_text(destination, json.dumps(finalize(data, root), indent=2) + "\n")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source")
+    parser.add_argument("destination")
+    parser.add_argument("root")
+    trust = parser.add_mutually_exclusive_group()
+    trust.add_argument("--policy-root")
+    trust.add_argument("--base-commit")
+    args = parser.parse_args()
+    data = json.loads(Path(args.source).read_text(encoding="utf-8-sig"))
+    write_text(args.destination, json.dumps(finalize(data, args.root, args.policy_root, args.base_commit),
+                                            indent=2) + "\n")

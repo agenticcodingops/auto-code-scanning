@@ -33,6 +33,13 @@
 .PARAMETER Force
     Overwrite existing baseline without prompting.
 
+.PARAMETER PolicyRoot
+    Separate trusted base checkout used by the gate to approve inline skips.
+
+.PARAMETER BaseCommit
+    Explicit trusted base commit used when a separate policy checkout is unavailable.
+    Without either trusted input, local remote-default policy selection is retained.
+
 .EXAMPLE
     .\create-baseline.ps1
     Creates baseline for all tools in the current directory.
@@ -65,10 +72,19 @@ param(
 
     [string]$MonorepoScope = "",
 
+    [ValidateNotNullOrEmpty()]
+    [string]$PolicyRoot,
+
+    [ValidateNotNullOrEmpty()]
+    [string]$BaseCommit,
+
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($PolicyRoot -and $BaseCommit) { throw 'Supply either PolicyRoot or BaseCommit, not both' }
+if ($PolicyRoot) { $PolicyRoot = (Resolve-Path -LiteralPath $PolicyRoot -ErrorAction Stop).Path }
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
 $sourceRoot = git rev-parse --show-toplevel
@@ -308,7 +324,10 @@ $pending = New-TemporaryFile
 try {
     Assert-SafeWritePath $pending
     $baseline | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $pending -Encoding UTF8
-    & $python "$PSScriptRoot/finalize_baseline.py" $pending $metadataFile $sourceRoot
+    $trustedInputs = @()
+    if ($PolicyRoot) { $trustedInputs += @('--policy-root', $PolicyRoot) }
+    if ($BaseCommit) { $trustedInputs += @('--base-commit', $BaseCommit) }
+    & $python "$PSScriptRoot/finalize_baseline.py" $pending $metadataFile $sourceRoot @trustedInputs
     if ($LASTEXITCODE -ne 0) { throw 'Baseline identity validation failed' }
 } finally { Remove-Item -LiteralPath $pending -ErrorAction SilentlyContinue }
 $dedupedEntries = @((Get-Content -LiteralPath $metadataFile -Raw | ConvertFrom-Json).entries)

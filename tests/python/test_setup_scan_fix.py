@@ -28,21 +28,11 @@ def test_python_setup_vendors_schemas(tmp_path: Path, monkeypatch):
         assert name in (setup_scan_fix.PLATFORM_ROOT / 'scripts/setup-scan-fix.ps1').read_text()
 
 
-def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):
+def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path, monkeypatch):
     """The copied validator finds its schema and enforces it in strict mode."""
-    setup = subprocess.run(
-        [
-            sys.executable,
-            str(repo_root / "scripts/setup-scan-fix.py"),
-            "--repo-path",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=300,
-    )
-    assert setup.returncode == 0, setup.stdout + setup.stderr
+    # Schema validation does not depend on installed runners or host verification.
+    monkeypatch.setattr(setup_scan_fix, "resolve_tool", lambda *_args: None)
+    assert setup_scan_fix.main(["setup-scan-fix.py", "--repo-path", str(tmp_path)]) == 0
 
     validator = tmp_path / "scripts/validate-scan-config.py"
     environment = {**os.environ, "STRICT": "1"}
