@@ -48,7 +48,7 @@ if (($scanExit -ne 0) -or (Test-Path $findingsPath)) {
             [Console]::Error.WriteLine("  (could not parse $findingsPath)")
         }
     }
-    [Console]::Error.WriteLine("Resolve these (move secrets to env vars / a vault), then finish.")
+    [Console]::Error.WriteLine("Resolve the reported findings or build/configuration errors, then finish.")
     exit 2
 }
 exit 0
