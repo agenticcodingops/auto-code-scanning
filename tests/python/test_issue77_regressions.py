@@ -108,7 +108,7 @@ def run_csharp(tmp_path, package, mode, build_exit=0):
     if mode == 'configured':
         # A solution discovery would pick first must not override configuration.
         (folder / 'Aardvark.sln').write_text('not the configured solution')
-    config = {'languages': {'csharp': {'build': {
+    config = {'languages': {'csharp': {'enabled': True, 'build': {
         'working_dir': 'absent' if mode == 'bad-working-dir' else str(folder.relative_to(tmp_path)),
         'solution': '' if mode in ('discovered', 'root-discovered', 'missing-discovered') else 'Chosen.sln',
     }}}}
@@ -130,3 +130,77 @@ def run_csharp(tmp_path, package, mode, build_exit=0):
     result = subprocess.run([pwsh, '-NoProfile', '-File', str(bootstrap), str(package / 'scripts/scan-and-fix.ps1')],
                             cwd=tmp_path, env=env, text=True, capture_output=True, timeout=60)
     return result, trace
+
+
+@pytest.mark.parametrize('scan_type', ['csharp', 'all'])
+@pytest.mark.parametrize('dotnet_available', [False, True])
+@pytest.mark.parametrize('config,project,expected', [
+    (None, None, 0),
+    ('{}', None, 0),
+    ('languages:\n  csharp:\n    enabled: true\n', None, 1),
+    (None, 'src/deep/nested/app.csproj', 1),
+    (None, 'app.sln', 1),
+    (None, 'app.slnx', 1),
+    ('languages:\n  csharp:\n    enabled: false\n', 'app.sln', 0),
+    *[(None, f'{folder}/nested/app.csproj', 0)
+      for folder in ('.git', 'bin', 'obj', 'node_modules')],
+    ('languages:\n  csharp:\n    enabled: "false"\n', 'app.sln', 1),
+])
+def test_csharp_eligibility(tmp_path, package, scan_type, dotnet_available, config, project, expected):
+    pwsh = shutil.which('pwsh')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    if config is not None:
+        (tmp_path / 'scan-config.yaml').write_text(config)
+    if project:
+        source = tmp_path / project
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('fixture')
+    # Isolate every scanner from locally installed tools. A C# build must never
+    # run for skipped cases; otherwise a failing mock keeps this test offline.
+    (package / 'hooks/semgrep-typescript.ps1').write_text('exit 0\n')
+    bootstrap = tmp_path / 'eligibility.ps1'
+    bootstrap.write_text(
+        'function trivy { $global:LASTEXITCODE = 0 }\n'
+        'function semgrep { $global:LASTEXITCODE = 0 }\n'
+        'function dotnet { "ERROR: fixture build failure"; $global:LASTEXITCODE = 7 }\n'
+        + ('' if dotnet_available else
+           'function Get-Command { param($Name)\n'
+           ' if ($Name -eq "dotnet") { return $null }\n'
+           ' Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue\n}\n')
+        + '& $args[0] -ScanType $args[1] -AutoFix\nexit $LASTEXITCODE\n')
+    env = {key: value for key, value in os.environ.items() if not key.startswith(('GIT_', 'SCAN_'))}
+    result = subprocess.run([pwsh, '-NoProfile', '-File', str(bootstrap),
+                             str(package / 'scripts/scan-and-fix.ps1'), scan_type],
+                            cwd=tmp_path, env=env, text=True, capture_output=True, timeout=60)
+    assert result.returncode == expected, result.stdout + result.stderr
+    report_path = tmp_path / '.claude/scan-findings.json'
+    if expected == 0:
+        assert 'skipping C#' in result.stdout
+        assert 'dotnet build (Roslyn)' not in result.stdout
+        assert not report_path.exists()
+    elif config and '"false"' in config:
+        assert 'must be a boolean' in result.stderr
+    else:
+        report = json.loads(report_path.read_text(encoding='utf-8-sig'))
+        finding, = [item for item in report['findings'] if not item['passed']]
+        assert finding['tool'] == 'dotnet build (Roslyn)'
+        assert ('dotnet not found' if project and project.endswith(('.sln', '.slnx')) and not dotnet_available
+                else 'fixture build failure' if project and project.endswith(('.sln', '.slnx'))
+                else 'No solution found') in finding['outputTail']
+
+
+def test_stop_hook_csharp_failure_has_relevant_remediation(package):
+    pwsh = shutil.which('pwsh')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    (package / 'scan-config.yaml').write_text('languages:\n  csharp:\n    enabled: true\n')
+    env = {key: value for key, value in os.environ.items() if not key.startswith(('GIT_', 'SCAN_'))}
+    env['CC_STOP_SCAN_TYPE'] = 'csharp'
+    stop_hook = os.path.join(os.path.dirname(__file__), '../../templates/claude/hooks/stop-scan.ps1')
+    result = subprocess.run([pwsh, '-NoProfile', '-File', stop_hook], input='{}', cwd=package,
+                            env=env, text=True, capture_output=True, timeout=60)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert 'dotnet build (Roslyn)' in result.stderr
+    assert 'build/configuration errors' in result.stderr
+    assert 'vault' not in result.stderr

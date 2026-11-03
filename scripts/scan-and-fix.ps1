@@ -9,7 +9,11 @@
   per-repo .claude hooks call into it. It fails open on missing tools (so a
   developer without trivy/semgrep is never hard-blocked) but fails CLOSED on
   real findings (non-zero exit) so the Stop hook can block "done".
-  C# builds also fail closed when no solution is available or a build cannot start.
+  C# scans run when languages.csharp.enabled is true or the working tree contains
+  .sln, .slnx or .csproj files (excluding .git, bin, obj and node_modules).
+  Explicit enabled: false always skips C#, including with -ScanType all.
+  When C# is in use, missing solutions/tools and builds that cannot start or fail
+  produce failed results.
 
 .PARAMETER ScanType
   secrets | semgrep | terraform | csharp | typescript | all
@@ -77,10 +81,39 @@ function Invoke-TerraformScan {
     Add-Result -Tool 'Trivy IaC' -ExitCode $code -Issues (Get-IssueLines $text) -OutputTail ($text.Substring([Math]::Max(0, $text.Length - 3000)))
 }
 
+function Test-CSharpInputs {
+    # Walk directories explicitly so excluded trees are never traversed. Do not
+    # follow directory links outside the working tree or into recursive cycles.
+    $pending = [System.Collections.Generic.Stack[string]]::new()
+    $pending.Push((Get-Location).Path)
+    while ($pending.Count -gt 0) {
+        foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop) {
+            if ($item.PSIsContainer) {
+                if ($item.Name -notin @('.git', 'bin', 'obj', 'node_modules') -and
+                    -not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                    $pending.Push($item.FullName)
+                }
+            } elseif ($item.Extension -in @('.sln', '.slnx', '.csproj')) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 function Invoke-CSharpScan {
     $code = 1
     $csText = ''
     try {
+        $enabled = Read-ScanConfigValue -Key 'languages.csharp.enabled' -Default ''
+        if ($enabled -eq 'false') {
+            Write-Host '[scan-and-fix] C# disabled in scan-config.yaml; skipping C#'
+            return
+        }
+        if ($enabled -ne 'true' -and -not (Test-CSharpInputs)) {
+            Write-Host '[scan-and-fix] No C# solution or project files found; skipping C#'
+            return
+        }
         $workingDir = Read-ScanConfigValue -Key 'languages.csharp.build.working_dir' -Default '.'
         $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
         if (-not (Test-Path -LiteralPath $workingDir -PathType Container)) {

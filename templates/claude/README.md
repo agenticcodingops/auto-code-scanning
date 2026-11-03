@@ -42,5 +42,12 @@ anything is committed.
 - `CC_STOP_SCAN_TYPE=secrets|semgrep|all` — choose the Stop gate scan (default `secrets`)
 - `SEMGREP_RULESET_CSHARP` / `SEMGREP_RULESET_TYPESCRIPT` — override the ruleset (custom rules)
 
+On Windows, `CC_STOP_SCAN_TYPE=all` and `scan-and-fix.ps1 -ScanType all` skip C#
+unless `languages.csharp.enabled: true` is set in `scan-config.yaml` or the working
+tree contains a `.sln`, `.slnx` or `.csproj` file. Detection excludes `.git`, `bin`,
+`obj` and `node_modules`. Explicit `languages.csharp.enabled: false` always skips
+C#, even with project files present. When C# is in use, a missing solution or
+`dotnet`, a build that cannot start, or a failed build makes the scan fail.
+
 > Keep `.claude/settings.json` and `.claude/hooks/` in the **consumer** repo. They are
 > in `fix_loop.gated_paths`, so the autonomous fix-loop can never modify them.
