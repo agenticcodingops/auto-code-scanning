@@ -1664,6 +1664,10 @@ def test_powershell_push_scanners_run_manifest_without_git(
         # must remain absent from the child process's executable search path.
         (tmp_path / 'bin/bash').symlink_to(shutil.which('bash'))
         (tmp_path / 'bin/python').symlink_to(sys.executable)
+    else:
+        # Policy validation needs Python while Git must remain absent.
+        (tmp_path / 'bin/python.cmd').write_text(
+            f'@"{sys.executable}" %*\n', encoding='utf-8')
     env.update(PATH=str(tmp_path / 'bin'), SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
                SCANNER_EXIT=str(scanner_exit), SNYK_TOKEN='fixture')
     command = ("if (Get-Command git -ErrorAction SilentlyContinue) { throw 'git still available' }; "

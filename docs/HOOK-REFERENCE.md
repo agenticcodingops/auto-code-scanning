@@ -70,9 +70,11 @@ context, so any symlink or submodule in that tree blocks them, even if unchanged
 Local Checkov entrypoints accept only passive configuration: `framework`,
 `skip-framework`, `skip-check`, `skip-path`, `deep-analysis`, `evaluate-variables`,
 `quiet`, `compact`, `skip-download`, `download-external-modules` (false only), and
-standard `output` formats. Output format selection is owned by the wrapper.
-Unknown keys, extension loading, module downloads, output paths, and extra hook
-arguments are rejected before launch. The scanner always receives an explicit
+standard `output` formats. Output format selection is owned by the wrapper. A
+string `output-file-path`, which earlier setup releases wrote into consumer configs,
+is accepted and dropped, because the wrapper also owns the output location.
+Unknown keys, extension loading, module downloads, and extra hook arguments are
+rejected before launch. The scanner always receives an explicit
 temporary config so automatic configuration discovery cannot change the policy.
 `scripts/scan.py --policy-root` reads Checkov policy from that checkout's
 `.scanning/configs/.checkov.yaml`, ignoring consumer policy; a missing policy uses

@@ -19,6 +19,10 @@ def passive_policy(source=None):
     booleans = {'deep-analysis', 'evaluate-variables', 'skip-download',
                 'download-external-modules', 'quiet', 'compact'}
     lists = {'framework', 'skip-framework', 'skip-check', 'skip-path', 'output'}
+    # Configs written by earlier setup releases carry output-file-path. The caller owns
+    # output, so drop it rather than rejecting every existing consumer config.
+    if isinstance(data.get('output-file-path'), str):
+        data.pop('output-file-path')
     for key, value in data.items():
         if key in booleans and type(value) is bool:
             if key == 'download-external-modules' and value:

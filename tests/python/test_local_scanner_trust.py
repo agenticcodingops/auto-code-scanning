@@ -37,7 +37,7 @@ def consumer(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('content', ['external-checks-dir: example', 'external-checks-git: example',
-                                   'external-modules-download-path: example', 'output-file-path: example',
+                                   'external-modules-download-path: example', 'output-file-path: [example]',
                                    'future-option: example', 'download-external-modules: true',
                                    'skip-check: {invalid: mapping}', 'skip-check: [', '[]'])
 def test_driver_rejects_nonpassive_policy_before_launch(consumer, content, monkeypatch):
@@ -51,6 +51,20 @@ def test_driver_rejects_nonpassive_policy_before_launch(consumer, content, monke
     monkeypatch.setattr(scan, 'run_cmd', run)
     assert scan.run_checkov(consumer, config_file=policy)[1] is True
     assert launched == []
+
+
+def test_driver_accepts_and_drops_legacy_output_path(consumer, monkeypatch):
+    # Earlier setup releases wrote output-file-path into consumer configs.
+    import scan
+    policy = consumer / 'policy.yaml'
+    policy.write_text('output-file-path: .scan-results\nskip-check: [CKV_AWS_19]\n', encoding='utf-8')
+    seen = []
+    def run(cmd, **kwargs):
+        seen.append(Path(cmd[cmd.index('--config-file') + 1]).read_text(encoding='utf-8'))
+        return 0, '{"results":{"failed_checks":[],"skipped_checks":[]}}', ''
+    monkeypatch.setattr(scan, 'run_cmd', run)
+    assert scan.run_checkov(consumer, config_file=policy)[1] is False
+    assert len(seen) == 1 and 'CKV_AWS_19' in seen[0] and 'output-file-path' not in seen[0]
 
 
 def test_driver_policy_root_selects_policy_and_disables_discovery(consumer, tmp_path, monkeypatch):
