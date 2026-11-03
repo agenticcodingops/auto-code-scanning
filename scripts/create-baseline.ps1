@@ -17,7 +17,8 @@
     Which scanning tool to baseline. Default: all
 
 .PARAMETER OutputDir
-    Directory to store baseline files. Default: .scan-baseline
+    Directory to store baseline files. Default: .scan-baseline at the repository
+    root. Explicit relative paths are resolved from the invocation directory.
 
 .PARAMETER TerraformDir
     Directory containing Terraform code to scan. Default: .
@@ -70,6 +71,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
+$sourceRoot = git rev-parse --show-toplevel
+if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
+if (-not $PSBoundParameters.ContainsKey('OutputDir')) {
+    $OutputDir = Join-Path $sourceRoot '.scan-baseline'
+}
 Assert-SafeTree $OutputDir
 
 # Create output directory
@@ -298,8 +304,6 @@ $baseline.entries = $allEntries
 . "$PSScriptRoot/../hooks/lib/common.ps1"
 $python = Find-WorkingPython
 if (-not $python) { throw 'Baseline creation requires Python' }
-$sourceRoot = git rev-parse --show-toplevel
-if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
 # Scanner directories are relative to the invocation, while identities are
 # repository-relative. Pass absolute contexts to the shared normalizer.
 foreach ($entry in $allEntries) {

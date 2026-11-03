@@ -89,8 +89,8 @@ function ConvertFrom-GitleaksReport {
         }
         $rows = New-Object System.Collections.Generic.List[object]
         foreach ($item in @($data)) {
-            if ($null -eq $item -or -not $item.RuleID) {
-                return @{ Ok = $false; Unparsed = $false; Rows = @() }
+            if ($null -eq $item -or -not ($item.RuleID -is [string]) -or -not $item.RuleID) {
+                return @{ Ok = $false; Unparsed = $true; Rows = @() }
             }
             $start = 0
             if ($null -ne $item.StartLine) { $start = [int]$item.StartLine }
@@ -126,7 +126,7 @@ function ConvertFrom-GitleaksReport {
         $rows = New-Object System.Collections.Generic.List[object]
         foreach ($item in $doc.RootElement.EnumerateArray()) {
             if ($item.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) {
-                return @{ Ok = $false; Unparsed = $false; Rows = @() }
+                return @{ Ok = $false; Unparsed = $true; Rows = @() }
             }
             $rule = ''
             $path = ''
@@ -146,7 +146,7 @@ function ConvertFrom-GitleaksReport {
                     $end = $prop.Value.GetInt32()
                 }
             }
-            if (-not $rule) { return @{ Ok = $false; Unparsed = $false; Rows = @() } }
+            if (-not $rule) { return @{ Ok = $false; Unparsed = $true; Rows = @() } }
             if ($end -eq 0) { $end = $start }
             $rows.Add([pscustomobject]@{
                 RuleId      = $rule
@@ -197,10 +197,11 @@ if (-not $parsed.Ok) {
 }
 
 $rows = @($parsed.Rows | Where-Object { $null -ne $_ })
-if ($exitCode -gt 1 -or ($exitCode -ne 0 -and $rows.Count -eq 0)) {
+if ($exitCode -ne 0 -and $rows.Count -eq 0) {
     Write-HookWarn "gitleaks exited $exitCode without a complete valid scan"
     exit (Get-HookExitCode -ToolExitCode 2)
 }
+# Known findings take precedence over the explicit infrastructure-error override.
 $durationMs = Stop-ScanTimer
 if ($rows.Count -eq 0) {
     Write-GitleaksPass -DurationMs $durationMs

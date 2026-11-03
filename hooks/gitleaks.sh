@@ -179,12 +179,22 @@ else
     fi
 fi
 
+# Array-shaped corruption may contain findings. Like an unparsed findings
+# array, it must block even when infrastructure errors are explicitly tolerated.
+if [[ ${parse_status} -ne 0 && "${report_compact}" == \[* ]]; then
+    hook_error 'Gitleaks findings report could not be validated; commit blocked'
+    exit 1
+fi
+
 # Normalize ambiguous exit 1 without findings to an infrastructure error.
-if [[ ${parse_status} -ne 0 || ${exit_code} -gt 1 || ( ${exit_code} -ne 0 && "${total_high:-0}" -eq 0 ) ]]; then
+if [[ ${parse_status} -ne 0 || ( ${exit_code} -ne 0 && "${total_high:-0}" -eq 0 ) ]]; then
     hook_warn "gitleaks exited ${exit_code} without a complete valid scan"
     handle_exit_code 2
     exit $?
 fi
+
+# A valid nonempty report always blocks, even if the tool also failed and the
+# adopter explicitly tolerates infrastructure errors. Never discard known leaks.
 
 duration_ms="$(stop_timer)"
 

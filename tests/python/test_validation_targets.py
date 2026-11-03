@@ -806,8 +806,8 @@ def test_push_link_boundary_by_tool_context(consumer, package, scanner, monkeypa
     monkeypatch.setenv('SCAN_TFLINT_CONFIG', env['SCAN_TFLINT_CONFIG'])
     monkeypatch.setenv('SCAN_TFLINT_PLUGIN_DIR', env['SCAN_TFLINT_PLUGIN_DIR'])
     (consumer / '.scanning/configs').mkdir(parents=True)
-    (consumer / '.scanning/configs/.checkov.yaml').write_text('quiet: true\n')
-    (consumer / 'main.tf').write_text('# before\n')
+    (consumer / '.scanning/configs/.checkov.yaml').write_text('quiet: true\n', encoding='utf-8')
+    (consumer / 'main.tf').write_text('# before\n', encoding='utf-8')
     git(consumer, 'add', '.')
     oid = git(consumer, 'rev-parse', 'HEAD')
     if kind == 'symlink':
@@ -819,8 +819,8 @@ def test_push_link_boundary_by_tool_context(consumer, package, scanner, monkeypa
         git(consumer, 'update-index', '--add', '--cacheinfo', f'{mode},{target},unrelated-link')
     git(consumer, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'base with source')
     base = git(consumer, 'rev-parse', 'HEAD')
-    (consumer / 'main.tf').write_text('# changed\n')
-    (consumer / 'App.cs').write_text('// changed\n')
+    (consumer / 'main.tf').write_text('# changed\n', encoding='utf-8')
+    (consumer / 'App.cs').write_text('// changed\n', encoding='utf-8')
     git(consumer, 'add', 'main.tf', 'App.cs')
     if changed:
         git(consumer, 'update-index', '--add', '--cacheinfo', f'{mode},{target},changed-link.tf')
@@ -834,7 +834,7 @@ def test_push_link_boundary_by_tool_context(consumer, package, scanner, monkeypa
     def run(command, *args, **kwargs):
         if command[0] != 'fixture':
             return real_run(command, *args, **kwargs)
-        assert (kwargs['cwd'] / 'main.tf').read_text() == '# changed\n'
+        assert (kwargs['cwd'] / 'main.tf').read_text(encoding='utf-8') == '# changed\n'
         calls.append(command)
         return subprocess.CompletedProcess(command, 0)
     monkeypatch.setattr(runner.subprocess, 'run', run)
@@ -1676,17 +1676,60 @@ def test_powershell_push_scanners_run_manifest_without_git(
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('report,code', [('', 1), ('{}', 1), ('[', 1), ('[]', 2), ('[null]', 0), ('[]', 1)])
 def test_gitleaks_incomplete_scan_blocks(consumer, package, scanner, shell, report, code):
+    result = run_gitleaks_fixture(consumer, package, scanner, shell, report, code)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'PASS:' not in result.stdout
+
+
+def run_gitleaks_fixture(consumer, package, scanner, shell, report, code):
     env, _ = scanner
     bin_dir = Path(env['PATH'].split(os.pathsep)[0])
     mock = bin_dir / 'gitleaks.py'
-    mock.write_text('import os,sys\nprint(os.environ["LEAK_REPORT"])\nsys.exit(int(os.environ["LEAK_EXIT"]))\n')
-    (bin_dir / 'gitleaks').write_text(f'#!/usr/bin/env bash\nexec python "{mock.as_posix()}"\n', newline='\n')
+    mock.write_text('import os,sys\nprint(os.environ["LEAK_REPORT"])\nsys.exit(int(os.environ["LEAK_EXIT"]))\n', encoding='utf-8')
+    (bin_dir / 'gitleaks').write_text(f'#!/usr/bin/env bash\nexec python "{mock.as_posix()}"\n', newline='\n', encoding='utf-8')
     (bin_dir / 'gitleaks').chmod(0o755)
-    (bin_dir / 'gitleaks.cmd').write_text(f'@"{sys.executable}" "{mock}"\n')
-    (consumer / 'App.cs').write_text('staged change\n')
+    (bin_dir / 'gitleaks.cmd').write_text(f'@"{sys.executable}" "{mock}"\n', encoding='utf-8')
+    (consumer / 'App.cs').write_text('staged change\n', encoding='utf-8')
     git(consumer, 'add', 'App.cs')
     env.update(LEAK_REPORT=report, LEAK_EXIT=str(code))
-    result = subprocess.run(hook(package, shell, 'gitleaks'), cwd=consumer, env=env, capture_output=True, text=True)
+    return subprocess.run(hook(package, shell, 'gitleaks'), cwd=consumer, env=env, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize('report,ok,count', [('[]', True, 0), ('[ \n ]', True, 0),
+    ('[null]', False, 0), ('[', False, 0), ('[{"RuleID":"fixture-rule","File":"App.cs"}]', True, 1)])
+def test_legacy_secret_parser_distinguishes_empty_arrays_from_invalid_items(tmp_path, package, report, ok, count):
+    executable = shutil.which('powershell')
+    if not executable:
+        pytest.skip('legacy shell unavailable')
+    source = (package / 'hooks/gitleaks.ps1').read_text(encoding='utf-8')
+    parser = 'function ConvertFrom-GitleaksReport' + source.split('function ConvertFrom-GitleaksReport', 1)[1].split('function Write-GitleaksPass', 1)[0]
+    command = parser + '\n$p = ConvertFrom-GitleaksReport $env:PARSER_REPORT; @{ok=$p.Ok; count=$p.Rows.Count} | ConvertTo-Json -Compress'
+    env = dict(clean_env(), PARSER_REPORT=report)
+    # Do not let an invoking modern shell hide the legacy built-in modules.
+    env['PSModulePath'] = str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/Modules')
+    result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == dict(ok=ok, count=count)
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('code', [2, 3])
+@pytest.mark.parametrize('allow_errors', ['0', '1'])
+def test_gitleaks_known_findings_block_even_with_tool_error_opt_in(consumer, package, scanner, shell, code, allow_errors):
+    scanner[0]['SCAN_ALLOW_TOOL_ERRORS'] = allow_errors
+    report = json.dumps([dict(RuleID='fixture-rule', File='App.cs', StartLine=1, EndLine=1)])
+    result = run_gitleaks_fixture(consumer, package, scanner, shell, report, code)
+    assert result.returncode == 1, result.stdout + result.stderr
+    data = json.loads((consumer / '.scanning/last-scan.json').read_text(encoding='utf-8'))
+    assert data['summary']['total_findings'] == 1
+    assert data['findings'][0]['rule_id'] == 'fixture-rule'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('report', ['[', '[null]', '[{}]', '[{"RuleID":42}]', '[{"RuleID":"fixture-rule"},null]'])
+def test_corrupted_findings_array_blocks_despite_tool_error_opt_in(consumer, package, scanner, shell, report):
+    scanner[0]['SCAN_ALLOW_TOOL_ERRORS'] = '1'
+    result = run_gitleaks_fixture(consumer, package, scanner, shell, report, 1)
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'PASS:' not in result.stdout
 
@@ -1695,15 +1738,18 @@ def test_gitleaks_incomplete_scan_blocks(consumer, package, scanner, shell, repo
 @pytest.mark.parametrize('kind', ['pass', 'findings'])
 def test_hook_report_conforms_to_schema(tmp_path, package, shell, kind):
     common = (package / f'hooks/lib/common.{shell}').as_posix()
+    executable = shutil.which('bash' if shell == 'sh' else 'pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
     if shell == 'sh':
         build = 'build_pass_json checkov . 1' if kind == 'pass' else "build_findings_json checkov . 1 '[]' 0 0 0 0"
-        command = [shutil.which('bash'), '-c', f'source "{common}"; {build}']
+        command = [executable, '-c', f'source "{common}"; {build}']
     else:
         build = 'Build-PassJson -Tool checkov' if kind == 'pass' else "Build-FindingsJson -Tool checkov -FindingsArray '[]'"
-        command = ['pwsh', '-NoProfile', '-Command', f". '{common}'; {build}"]
+        command = [executable, '-NoProfile', '-Command', f". '{common}'; {build}"]
     result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    jsonschema.validate(json.loads(result.stdout), json.loads((ROOT / 'schemas/last-scan.schema.json').read_text()))
+    jsonschema.validate(json.loads(result.stdout), json.loads((ROOT / 'schemas/last-scan.schema.json').read_text(encoding='utf-8')))
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='POSIX permission modes')
@@ -1711,7 +1757,7 @@ def test_hook_report_conforms_to_schema(tmp_path, package, shell, kind):
 def test_atomic_write_preserves_mode_or_umask(tmp_path, existing):
     target = tmp_path / 'output'
     if existing:
-        target.write_text('old')
+        target.write_text('old', encoding='utf-8')
         target.chmod(0o751)
     old = os.umask(0o027)
     try:
@@ -1721,9 +1767,35 @@ def test_atomic_write_preserves_mode_or_umask(tmp_path, existing):
     assert target.stat().st_mode & 0o777 == (0o751 if existing else 0o640)
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX permission modes')
+@pytest.mark.parametrize('existing', [False, True])
+def test_atomic_content_is_private_from_creation(tmp_path, monkeypatch, existing):
+    target = tmp_path / 'private-output'
+    if existing:
+        target.write_text('old', encoding='utf-8')
+        target.chmod(0o600)
+    original_open = os.open
+    readers = []
+    def observe(path, flags, mode=0o777, **kwargs):
+        fd = original_open(path, flags, mode, **kwargs)
+        # Simulate a reader retaining access during a permissive creation window.
+        if flags & os.O_CREAT and os.fstat(fd).st_mode & 0o077:
+            readers.append(original_open(path, os.O_RDONLY))
+        return fd
+    monkeypatch.setattr(os, 'open', observe)
+    old = os.umask(0o022)
+    try:
+        write_text(target, 'private-content')
+        assert all(os.read(fd, 100) == b'' for fd in readers)
+    finally:
+        os.umask(old)
+        for fd in readers:
+            os.close(fd)
+
+
 @pytest.mark.parametrize('section', ['bad', ['file'], 1, False, {'file': []}, {'file': None}])
 def test_malformed_suppression_config_is_a_policy_error(tmp_path, section):
-    (tmp_path / 'scan-config.yaml').write_text(json.dumps({'suppressions': section}))
+    (tmp_path / 'scan-config.yaml').write_text(json.dumps({'suppressions': section}), encoding='utf-8')
     with pytest.raises(ValueError, match='suppressions'):
         suppression_file(tmp_path)
 
@@ -1731,7 +1803,7 @@ def test_malformed_suppression_config_is_a_policy_error(tmp_path, section):
 @pytest.mark.parametrize('malformed', [False, True])
 def test_json_stdout_is_one_document_and_policy_error_marks_incomplete(tmp_path, monkeypatch, capsys, malformed):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / 'scan-config.yaml').write_text('suppressions: bad\n' if malformed else '{}\n')
+    (tmp_path / 'scan-config.yaml').write_text('suppressions: bad\n' if malformed else '{}\n', encoding='utf-8')
     monkeypatch.setattr(scan, 'run_trivy', lambda *a: ([], False))
     monkeypatch.setattr(sys, 'argv', ['scan.py', '.', '--tools', 'trivy', '--format', 'json'])
     with pytest.raises(SystemExit) as exited:
@@ -1744,6 +1816,9 @@ def test_json_stdout_is_one_document_and_policy_error_marks_incomplete(tmp_path,
 
 @pytest.mark.parametrize('autofix,code', [(False, 0), (True, 0), (False, 1), (True, 1)])
 def test_scan_and_fix_checks_output_only_when_writing(tmp_path, autofix, code):
+    executable = shutil.which('pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
     outside = tmp_path / 'outside'
     outside.mkdir()
     repo = tmp_path / 'repo'
@@ -1754,7 +1829,7 @@ def test_scan_and_fix_checks_output_only_when_writing(tmp_path, autofix, code):
     command = f"function trivy {{ $global:LASTEXITCODE={code} }}; & '{script}' -ScanType secrets"
     if autofix:
         command += ' -AutoFix'
-    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=repo, capture_output=True, text=True)
+    result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=repo, capture_output=True, text=True)
     assert result.returncode == (1 if code else 0), result.stdout + result.stderr
     if autofix and code:
         assert 'symlink or reparse point' in result.stderr
@@ -1765,12 +1840,15 @@ def test_scan_and_fix_checks_output_only_when_writing(tmp_path, autofix, code):
 
 @pytest.mark.parametrize('tool', ['all', 'trivy'])
 def test_baseline_all_skips_unconfigured_tflint_and_uses_current_directory(tmp_path, tool):
+    executable = shutil.which('pwsh')
+    if not executable:
+        pytest.skip('shell unavailable')
     repo = tmp_path / 'repo'
     folder = repo / 'infra'
     folder.mkdir(parents=True)
     git(repo, 'init', '-q')
     source = folder / 'main.tf'
-    source.write_text('resource "sample" "one" {}\n')
+    source.write_text('resource "sample" "one" {}\n', encoding='utf-8')
     script = (ROOT / 'scripts/create-baseline.ps1').as_posix()
     # Functions keep this regression independent of installed scanner versions.
     command = ("function trivy { $global:LASTEXITCODE=0; "
@@ -1779,23 +1857,26 @@ def test_baseline_all_skips_unconfigured_tflint_and_uses_current_directory(tmp_p
                f"& '{script}' -Tool {tool} -CloudProvider aws -Force")
     env = clean_env()
     env.pop('SCAN_TFLINT_CONFIG', None)
-    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=folder, env=env, capture_output=True, text=True)
+    result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=folder, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     if tool == 'all':
         assert 'Skipping tflint' in result.stdout
-    baseline = json.loads((folder / '.scan-baseline/baseline.json').read_text())
+    baseline = json.loads((repo / '.scan-baseline/baseline.json').read_text(encoding='utf-8'))
     assert baseline['entries'][0]['file'] == 'infra/main.tf'
     assert baseline['entries'][0]['fingerprint'].startswith('v1:')
 
 
 @pytest.mark.parametrize('target_location', ['external', 'consumer', 'snapshot'])
-def test_powershell_resolves_tool_links_before_boundary_check(tmp_path, target_location):
+@pytest.mark.parametrize('executable', ['pwsh', 'powershell'])
+def test_powershell_resolves_tool_links_before_boundary_check(tmp_path, target_location, executable):
+    if not shutil.which(executable):
+        pytest.skip('shell unavailable')
     for name in ('external', 'consumer', 'snapshot', 'links'):
         (tmp_path / name).mkdir()
-    (tmp_path / target_location / 'tool').write_text('tool')
+    (tmp_path / target_location / 'tool').write_text('tool', encoding='utf-8')
     directory_link(tmp_path / 'links/bin', tmp_path / target_location)
     common = (ROOT / 'hooks/lib/common.ps1').as_posix()
     command = f". '{common}'; Assert-ExternalPath '{(tmp_path / 'links/bin/tool').as_posix()}'"
     env = dict(clean_env(), SCAN_PUSH_SNAPSHOT='1', SCAN_CONSUMER_ROOT=str(tmp_path / 'consumer'))
-    result = subprocess.run(['pwsh', '-NoProfile', '-Command', command], cwd=tmp_path / 'snapshot', env=env, capture_output=True, text=True)
+    result = subprocess.run([shutil.which(executable), '-NoProfile', '-Command', command], cwd=tmp_path / 'snapshot', env=env, capture_output=True, text=True)
     assert result.returncode == (0 if target_location == 'external' else 1), result.stderr

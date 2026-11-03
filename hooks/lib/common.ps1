@@ -137,10 +137,22 @@ function Resolve-ExternalRealPath {
         while ($current) {
             $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
             if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                $target = $item.ResolveLinkTarget($true)
+                if ($item.PSObject.Methods['ResolveLinkTarget']) {
+                    $target = $item.ResolveLinkTarget($true)
+                    $target = if ($target) { $target.FullName } else { $null }
+                } else {
+                    # Windows PowerShell 5.1 exposes link targets as an adapted
+                    # property; .NET Framework has no ResolveLinkTarget method.
+                    $targets = @($item.Target)
+                    if ($targets.Count -ne 1) { throw 'Cannot resolve trusted path link' }
+                    $target = $targets[0]
+                    if ($target -and -not [IO.Path]::IsPathRooted($target)) {
+                        $target = Join-Path ([IO.Path]::GetDirectoryName($current)) $target
+                    }
+                }
                 if (-not $target) { throw 'Cannot resolve trusted path link' }
                 $suffix = $full.Substring($current.Length).TrimStart('/', '\')
-                $full = if ($suffix) { Join-Path $target.FullName $suffix } else { $target.FullName }
+                $full = [IO.Path]::GetFullPath($(if ($suffix) { Join-Path $target $suffix } else { $target }))
                 $resolved = $true
                 break
             }

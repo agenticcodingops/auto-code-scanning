@@ -248,9 +248,15 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
         result = subprocess.run(['git', '-C', str(source_root), 'ls-tree', '-r', '-z',
                                  '--name-only', '--full-tree', base_commit, '--', ':(top)' + git_directory],
                                 check=True, capture_output=True)
-        names = [name.decode('utf-8') for name in result.stdout.split(b'\0') if name]
-        return [name[len(prefix):] for name in names if
-                Path(name).suffix == '.tf' and Path(name).parent == Path(git_directory or '.')]
+        # Git -z preserves raw filenames. Unrelated paths must not invalidate
+        # approval merely because their names cannot be decoded as UTF-8.
+        directory_bytes = git_directory.rstrip('/').encode('utf-8')
+        names = []
+        for raw in result.stdout.split(b'\0'):
+            parent, _, filename = raw.rpartition(b'/')
+            if parent == directory_bytes and filename.endswith(b'.tf') and len(filename) > 3:
+                names.append(raw.decode('utf-8')[len(prefix):])
+        return names
     def read_trusted(relative):
         """Read the corresponding repository path from the trusted base only."""
         git_relative = (prefix or '') + relative

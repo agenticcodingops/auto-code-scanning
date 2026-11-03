@@ -148,7 +148,10 @@ Generate current fingerprints with
 `python scripts/scan.py --skip-baseline --skip-suppressions --format json`, review
 the occurrences and their justification, and copy the approved fingerprints into
 the registry. Regenerate baselines with `scripts/create-baseline.ps1 -Force`;
-baseline creation now uses the same identity as local scans and CI. The baseline
+baseline creation now uses the same identity as local scans and CI. Invocations
+from a subdirectory scan relative to that directory, while the default output
+goes to the repository's `.scan-baseline` so the policy loader can find it.
+Explicit output paths retain their invocation-relative meaning. The baseline
 keeps a separate entry for each occurrence. Existing broad keys cannot be
 automatically converted into an occurrence approval.
 

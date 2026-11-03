@@ -291,6 +291,10 @@ unless the adopter explicitly sets `SCAN_ALLOW_TOOL_ERRORS=1`. That local overri
 warns and never writes a clean pass report. Raw reports and stderr are not printed,
 so configuration errors cannot expose staged credentials.
 
+Known findings and array-shaped corruption always block, including with the
+tool-error override enabled. The override applies only to infrastructure errors
+without a usable or potentially corrupted findings array.
+
 An empty JSON array passes only with exit 0. Parsed findings block. A nonempty
 array that cannot be parsed also blocks without printing credential fields.
 The integration test covers broken configuration with and without a parser,

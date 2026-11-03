@@ -117,9 +117,10 @@ def test_local_default_reads_remote_base_not_pr_tip(tmp_path):
     assert checkov_checks(results, tmp_path) == []
 
 
-@pytest.mark.parametrize('backend', ['checkout', 'objects'])
+@pytest.mark.parametrize('backend,unrelated', [('checkout', b''), ('objects', b''),
+    ('objects', b'notes-\xff.txt'), ('objects', b'nested/notes-\xff.tf')])
 @pytest.mark.parametrize('nested', [False, True])
-def test_renamed_module_call_file_keeps_trusted_approval(tmp_path, backend, nested):
+def test_renamed_module_call_file_keeps_trusted_approval(tmp_path, backend, unrelated, nested):
     from scan_policy import checkov_checks
     def git(*args):
         return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True).strip()
@@ -129,13 +130,18 @@ def test_renamed_module_call_file_keeps_trusted_approval(tmp_path, backend, nest
     root = tmp_path / 'infra' if nested else tmp_path
     module = root / 'modules/database'
     module.mkdir(parents=True)
-    (module / 'main.tf').write_text(SOURCE)
-    (root / 'main.tf').write_text('module "database" { source = "./modules/database" }\n')
+    (module / 'main.tf').write_text(SOURCE, encoding='utf-8')
+    (root / 'main.tf').write_text('module "database" { source = "./modules/database" }\n', encoding='utf-8')
     git('add', '.')
+    if unrelated:
+        blob = subprocess.check_output(['git', '-C', str(tmp_path), 'hash-object', '-w', '--stdin'], input=b'notes')
+        record = b'100644 ' + blob.strip() + b'\t' + unrelated + b'\0'
+        subprocess.run(['git', '-C', str(tmp_path), 'update-index', '-z', '--index-info'], input=record, check=True)
     git('commit', '-qm', 'trusted base')
     base = git('rev-parse', 'HEAD')
     checkout = tmp_path / 'trusted'
-    subprocess.run(['git', 'clone', '-q', str(tmp_path), str(checkout)], check=True)
+    if backend == 'checkout':
+        subprocess.run(['git', 'clone', '-q', str(tmp_path), str(checkout)], check=True)
     (root / 'main.tf').rename(root / 'calls.tf')
     check = dict(check_id='CKV_AZURE_53', file_path='/modules/database/main.tf',
                  resource='module.database.azurerm_mysql_server.example')
