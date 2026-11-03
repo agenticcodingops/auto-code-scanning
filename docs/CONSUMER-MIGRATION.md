@@ -1,5 +1,37 @@
 # Runbook: Migrate an Inline Scan or Fix Loop to the Platform
 
+## Trusted base inline skip migration
+
+Re-vendor `scripts/scan.py` and `scripts/scan_policy.py` together and upgrade the
+reusable scan to a release containing the trusted-base inline skip fix. Existing
+Terraform `#checkov:skip=<ID>:<reason>` comments are honoured when the same ID and
+justification remain on the same resource in the same file as at the trusted
+base commit. They do not need schema-2.0 registry entries. Line shifts or unrelated
+resource edits do not invalidate these reviewed skips.
+
+Files containing syntax the inline matcher cannot fully model fail closed: if
+either the trusted base or current version contains a heredoc inside a quoted
+template's interpolation, no inline skip from that file is honoured. Heredocs
+containing template openers (`${` or `%{`, even escaped openers) are also rejected
+conservatively, covering heredocs nested inside another heredoc's interpolation.
+All skipped checks in these files remain unapproved findings and need schema-2.0
+registry approvals in base policy, even when their comments are unchanged.
+Unchanged skips in ordinary files continue to be honoured.
+
+A PR adding or changing a skip, its reason, check ID, resource or file still
+reports a finding and needs a schema-2.0 occurrence approval in base policy.
+Deleting a skip restores the active check; an old base skip cannot hide a failure.
+Keep `allow-inline-checkov-skips` at its default `false` to enforce this boundary.
+
+For identical local and CI decisions, pass `python scripts/scan.py <directory>
+--policy-root <separate-base-checkout>` using the exact PR base commit. With no
+explicit policy checkout, the local inline matcher reads the current
+`origin/HEAD` (or `origin/main`) commit from Git objects. Fetch that remote branch
+first; an older fork point cannot restore a skip removed on the current base.
+If no base is available, skips remain active. See
+[suppression governance](SUPPRESSION-GOVERNANCE.md#scan-policy-and-occurrence-approval-migration)
+for the complete rule and the separate registry migration.
+
 ## Push-object and staged-config validation migration
 
 Re-vendor `hooks/`, `scripts/validate-scan-config.py` and `schemas/` together.
@@ -124,8 +156,9 @@ still apply. HIGH and CRITICAL always require `approved_by`; registry settings
 can add approval levels but cannot remove that floor. Severity is required and
 approval must cover the actual finding severity. Expiry is capped at 180 days.
 
-Source inline skips are not independent approvals. Inline IaC skips remain in
-the gate and report; app-code scans disable inline suppression comments. To
+Source inline skips require the trusted-base comparison described above:
+unchanged base-approved skips are honoured in supported files; all others
+remain in the gate and report. App-code scans disable inline suppression comments. To
 retain source inline policy for the policy scanner during migration, trusted
 IaC callers can explicitly set `allow-inline-checkov-skips: true` (default
 `false`). Explicit caller skip lists and the platform's reviewed cloud

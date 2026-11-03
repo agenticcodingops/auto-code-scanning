@@ -125,7 +125,7 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | `checkov-render-iter-count` | string | no | `""` | Positive integer. Exports `RENDER_EDGES_DUPLICATE_ITER_COUNT` for the Checkov action step only. Empty leaves it unset; invalid values fail setup. | `reusable-scan.yml:70-74`; `scripts/checkov-consumer-options.py` |
 | `apply-baseline` | boolean | no | `true` | Marks findings listed in `.scan-baseline/baseline.json` as baselined. | `reusable-scan.yml:75-79`, `571`, `777-791` |
 | `allow-legacy-exceptions` | boolean | no | `false` | Explicit schema 1.0 migration opt-in. | `scan_policy.py` |
-| `allow-inline-checkov-skips` | boolean | no | `false` | Honor source inline skips only when explicitly requested by the trusted caller. | `aggregate_scan.py` |
+| `allow-inline-checkov-skips` | boolean | no | `false` | Honour all source inline skips when explicitly requested by the trusted caller. The default honours only unchanged skips already on the same resource in trusted base policy. | `scan_policy.py` |
 | `enable-snyk` | boolean | no | `false` | Runs the Snyk IaC job. Needs the `SNYK_TOKEN` secret. The job installs `snyk@1.1307.4` from npm (an exact version; before this it installed whatever npm called latest, up to and including v2.3.2). | `reusable-scan.yml:80-84`, `497`, `507-508` |
 | `upload-metrics` | boolean | no | `true` | Uploads the artifact `scan-metrics-<cloud-provider>-<run_id>`, kept for 90 days. | `reusable-scan.yml:85-89`, `1092`, `1137-1142` |
 
@@ -233,9 +233,13 @@ successful aggregate, even with `fail-on-findings: false`.
 
 The platform's reviewed cloud config and explicit caller skip lists remain in
 effect. Scanner ignore/configuration files in the source checkout are materialized
-from the exact base SHA before scans. Inline Checkov skips remain active findings
-and visible SARIF records by default. `allow-inline-checkov-skips: true` explicitly
-restores source-inline compatibility in trusted IaC callers.
+from the exact base SHA before scans. Inline Terraform skips are honoured when
+the same check ID and justification already exist on the same resource in the
+same file at that trusted base. New or edited skips remain active findings and
+visible SARIF records until approved through schema-2.0 base policy. Deleted
+skips cannot hide failed checks. `allow-inline-checkov-skips: true` explicitly
+honours all source skips in trusted IaC callers. See
+[suppression governance](SUPPRESSION-GOVERNANCE.md#scan-policy-and-occurrence-approval-migration).
 
 #### Suppressions and baseline
 

@@ -4,7 +4,7 @@ import os
 import hashlib
 import sys
 from datetime import datetime, timezone
-from scan_policy import apply_exceptions, scanner_path
+from scan_policy import apply_exceptions, scanner_path, checkov_checks
 from scan_reports import load_report
 from pathlib import Path
 
@@ -61,9 +61,9 @@ checkov_results = checkov_data if isinstance(checkov_data, list) else [checkov_d
 for result in checkov_results:
     # Checkov nests the check lists under "results".
     checks = result.get("results") or {}
-    pending = checks.get("failed_checks", [])
-    if os.environ.get("ALLOW_INLINE_CHECKOV_SKIPS") != "true":
-        pending = pending + checks.get("skipped_checks", [])
+    pending = checkov_checks(checks, '.', os.environ.get('POLICY_ROOT', '.scan-policy'),
+                             os.environ.get('TERRAFORM_DIRECTORY', '.'),
+                             allow_inline=os.environ.get('ALLOW_INLINE_CHECKOV_SKIPS') == 'true')
     for check in pending:
         check_id = check.get("check_id", "")
         remediation_url = f"https://docs.checkov.io/docs/{check_id}" if check_id.startswith("CKV_") else None

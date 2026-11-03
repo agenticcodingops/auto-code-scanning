@@ -90,6 +90,25 @@ jobs:
           soft_fail: true
           download_external_modules: false
 
+      - name: Verify skipped JSON and SARIF line ranges agree
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          with open('consumer-results.json', encoding='utf-8') as stream:
+              data = json.load(stream)
+          documents = data if isinstance(data, list) else [data]
+          skipped = next(check for document in documents
+                         for check in document['results']['skipped_checks']
+                         if check['check_id'] == 'CKV_AZURE_110')
+          with open('consumer-results.sarif', encoding='utf-8') as stream:
+              sarif = json.load(stream)
+          result = next(result for run in sarif['runs'] for result in run['results']
+                        if result['ruleId'] == 'CKV_AZURE_110' and result.get('suppressions'))
+          region = result['locations'][0]['physicalLocation']['region']
+          assert [region['startLine'], region['endLine']] == skipped['file_line_range']
+          print('Pinned scanner JSON and SARIF skip ranges agree')
+          PYTHON_SCRIPT
+
       - name: Filter SARIF before verification
         run: ALLOW_INLINE_CHECKOV_SKIPS=true python3 scripts/checkov-consumer-options.py filter-sarif consumer-results.sarif
 
