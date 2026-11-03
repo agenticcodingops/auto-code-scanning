@@ -47,10 +47,16 @@ App-code scans continue to disable inline suppression comments.
 
 Local `scripts/scan.py` uses the same matcher. Supply `--policy-root` with a
 separate checkout of the exact trusted base for PR parity. Without it, inline
-approval is read from Git objects at the merge base of `HEAD` and `origin/HEAD`
-(falling back to `origin/main`); fetch the remote default branch first. If no
+approval is read from Git objects at the current `origin/HEAD` commit
+(falling back to `origin/main`); fetch the remote default branch first. An older
+merge base cannot restore a skip removed from the current base. If no
 base can be resolved, inline skips stay active. Other policy files keep their
 existing local defaults. Unsupported inline formats stay active.
+
+Local module instances are matched to their source declarations only when the
+same module call names and local source directories exist in base. New/renamed
+calls or changed sources cannot borrow a declaration's approval. Remote or
+dynamic module sources and ambiguous definitions remain active.
 
 To retain all source inline policy during a reviewed migration, trusted
 IaC callers can explicitly set `allow-inline-checkov-skips: true` (default

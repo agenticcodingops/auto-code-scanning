@@ -17,8 +17,11 @@ FINGERPRINT = re.compile(r"^v1:[0-9a-f]{64}$")
 
 # Tokenize only enough HCL to associate real comments with top-level definitions.
 # Strings and heredocs are opaque: text in them must never authorize a skip.
-HCL_TOKEN = re.compile(
-    r'<<-?(?P<tag>[A-Za-z_][\w-]*)[^\n]*\n.*?^[ \t]*(?P=tag)[ \t]*(?=\n|$)'
+HCL_HEREDOC_PATTERN = (r'<<(?P<indented>-)?(?P<tag>[^\W\d][\w-]*)[^\n]*\n'
+                       r'.*?^(?(indented)[ \t]*)(?P=tag)[ \t]*(?=\n|$)')
+HCL_HEREDOC = re.compile(HCL_HEREDOC_PATTERN, re.MULTILINE | re.DOTALL)
+HCL_COMMENT = re.compile(r'\#[^\n]*|//[^\n]*|/\*.*?\*/', re.DOTALL)
+HCL_TOKEN = re.compile(HCL_HEREDOC_PATTERN +
     r'|"(?:\\.|[^"\\])*"|\#[^\n]*|//[^\n]*|/\*.*?\*/|[\w-]+|[^\s]',
     re.MULTILINE | re.DOTALL)
 INLINE_SKIP = re.compile(r'^(?:\#|//)\s*checkov:skip=([A-Za-z0-9_]+)(?::(.*))?$')
@@ -29,10 +32,20 @@ def hcl_string_end(text, start):
     position, expressions = start + 1, []
     while position < len(text):
         character = text[position]
+        if expressions:
+            opaque = HCL_HEREDOC.match(text, position) or HCL_COMMENT.match(text, position)
+            if opaque:
+                position = opaque.end()
+                continue
+            if text.startswith('<<', position):
+                return len(text)  # unknown or unterminated literal cannot grant approval
         if character == '\\':
             position += 2
             continue
         if not expressions:
+            if text[position:position + 3] in ('$${', '%%{'):
+                position += 3
+                continue
             if character == '"':
                 return position + 1
             if text[position:position + 2] in ('${', '%{'):
@@ -52,7 +65,7 @@ def hcl_string_end(text, start):
     return len(text)
 
 
-def terraform_inline_skips(text):
+def terraform_inline_skips(text, module_sources=None):
     """Index (check ID, justification) by definition address, never by line number.
 
     Unknown/ambiguous definitions cannot grant approval. This intentionally does
@@ -61,10 +74,15 @@ def terraform_inline_skips(text):
     definitions, header = {}, []
     text = text.replace('\r\n', '\n')
     depth, address, skips, consumed = 0, None, set(), 0
+    module_source, source_state, source_count = None, 0, 0
     for match in HCL_TOKEN.finditer(text):
         if match.start() < consumed:
             continue
         token = match.group()
+        if token == '<' and text.startswith('<<', match.start()):
+            if module_sources is not None:
+                module_sources.clear()
+            return {}
         if token.startswith('"'):
             consumed = hcl_string_end(text, match.start())
             token = text[match.start():consumed]
@@ -76,13 +94,17 @@ def terraform_inline_skips(text):
         if token == '{':
             if depth == 0:
                 address, skips = None, set()
-                if len(header) == 3 and header[0] in ('resource', 'data'):
+                module_source, source_state, source_count = None, 0, 0
+                if ((len(header) == 3 and header[0] in ('resource', 'data')) or
+                        (len(header) == 2 and header[0] == 'module')):
                     try:
                         labels = [json.loads(label) for label in header[1:]]
                         if all(isinstance(label, str) for label in labels):
                             address = '.'.join(labels)
                             if header[0] == 'data':
                                 address = 'data.' + address
+                            elif header[0] == 'module':
+                                address = 'module.' + address
                     except ValueError:
                         pass
                 header = []
@@ -94,17 +116,36 @@ def terraform_inline_skips(text):
             if depth == 0 and address:
                 # Duplicate addresses are invalid and must not share approval.
                 definitions[address] = None if address in definitions else skips
+                if module_sources is not None and address.startswith('module.'):
+                    name = address[len('module.'):]
+                    module_sources[name] = (module_source if source_count == 1 and name not in module_sources else None)
                 address = None
         elif depth == 0:
             header.append(token)
+        elif depth == 1 and address and address.startswith('module.'):
+            if token == 'source':
+                source_state = 1
+            elif source_state == 1 and token == '=':
+                source_state = 2
+            elif source_state == 2:
+                source_count += 1
+                try:
+                    module_source = json.loads(token)
+                except ValueError:
+                    module_source = None
+                source_state = 0
+            else:
+                source_state = 0
+    if depth and module_sources is not None:
+        module_sources.clear()
     return {} if depth else definitions
 
 
 def local_inline_base(source_root):
-    """Use the merge base with the remote default branch, never the PR tip."""
+    """Use the current remote default commit, never the PR tip or an older fork."""
     try:
         for ref in ('refs/remotes/origin/HEAD', 'refs/remotes/origin/main'):
-            result = subprocess.run(['git', '-C', str(source_root), 'merge-base', 'HEAD', ref],
+            result = subprocess.run(['git', '-C', str(source_root), 'rev-parse', '--verify', ref + '^{commit}'],
                                     capture_output=True, text=True)
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -113,12 +154,66 @@ def local_inline_base(source_root):
     return None
 
 
+def git_source_prefix(source_root):
+    """Git object paths stay repository-relative even with a nested policy root."""
+    try:
+        result = subprocess.run(['git', '-C', str(source_root), 'rev-parse', '--show-prefix'],
+                                capture_output=True)
+        if result.returncode == 0:
+            return result.stdout.decode('utf-8').rstrip('\r\n')
+    except (OSError, UnicodeError):
+        pass
+    return None
+
+
+def module_resource_address(resource, source_file, source_root, scan_directory, read_trusted, module_cache):
+    """Resolve local module instances only through matching trusted source chains.
+
+    A new/renamed call or changed module source cannot borrow a declaration's
+    approval. Dynamic, remote and ambiguous sources retain the finding.
+    """
+    match = re.fullmatch(r'(?P<modules>(?:module\.[\w-]+(?:\[[^\]]+\])?\.)+)'
+                         r'(?P<resource>(?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
+    if not match:
+        declaration = re.fullmatch(r'((?:data\.)?[\w-]+\.[\w-]+)(?:\[[^\]]+\])?', resource)
+        return declaration[1] if declaration else resource
+    current_dir = (source_root / scan_directory).resolve()
+    trusted_dir = current_dir
+    for name in re.findall(r'module\.([\w-]+)(?:\[[^\]]+\])?\.', match['modules']):
+        sources = []
+        for directory, trusted in ((current_dir, False), (trusted_dir, True)):
+            directory.relative_to(source_root)
+            key = directory, trusted
+            if key not in module_cache:
+                modules = {}
+                for path in directory.glob('*.tf'):
+                    path.resolve().relative_to(source_root)
+                    relative = path.relative_to(source_root).as_posix()
+                    content = read_trusted(relative) if trusted else path.read_text(encoding='utf-8')
+                    found = {}
+                    terraform_inline_skips(content or '', module_sources=found)
+                    for label, target in found.items():
+                        modules[label] = None if label in modules else target
+                module_cache[key] = modules
+            modules = module_cache[key]
+            source = modules.get(name)
+            if not isinstance(source, str) or not source.startswith(('./', '../')):
+                return None
+            target = (directory / source).resolve()
+            target.relative_to(source_root)
+            sources.append(target)
+        current_dir, trusted_dir = sources
+        if current_dir != trusted_dir:
+            return None
+    return match['resource'] if source_file.parent == current_dir else None
+
+
 def checkov_checks(results, source_root, policy_root=None, scan_directory='.', allow_inline=False,
                    base_commit=None):
     """Keep failed/new skips; honour only identical trusted-base inline skips.
 
     CI supplies a separate base checkout. Local scans without that checkout read
-    the merge base from Git objects so worktree/PR edits cannot approve themselves.
+    the remote default tip from Git objects so worktree/PR edits cannot approve themselves.
     Missing source/base identity fails closed by retaining the skipped finding.
     """
     pending = list(results.get('failed_checks', []))
@@ -129,7 +224,27 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
         return pending
     if policy_root is None and base_commit is None:
         base_commit = local_inline_base(source_root)
-    cache = {}
+    prefix = git_source_prefix(source_root)
+    trusted_cache = {}
+    def read_trusted(relative):
+        """Read the corresponding repository path from the trusted base only."""
+        git_relative = (prefix or '') + relative
+        if relative in trusted_cache:
+            return trusted_cache[relative]
+        content = None
+        if policy_root is not None:
+            base_root = Path(policy_root).resolve()
+            base = (base_root / git_relative).resolve()
+            base.relative_to(base_root)
+            content = base.read_text(encoding='utf-8') if base.is_file() else None
+        elif base_commit and prefix is not None:
+            result = subprocess.run(['git', '-C', str(source_root), 'show',
+                                     f'{base_commit}:{git_relative}'], capture_output=True)
+            if result.returncode == 0:
+                content = result.stdout.decode('utf-8')
+        trusted_cache[relative] = content
+        return content
+    cache, module_cache = {}, {}
     for check in results.get('skipped_checks', []):
         relative = scanner_path(check.get('file_path', ''), 'checkov', source_root, scan_directory)
         if relative not in cache:
@@ -139,21 +254,17 @@ def checkov_checks(results, source_root, policy_root=None, scan_directory='.', a
                 source.relative_to(source_root)
                 if source.suffix == '.tf':
                     current = terraform_inline_skips(source.read_text(encoding='utf-8'))
-                    if policy_root is not None:
-                        base_root = Path(policy_root).resolve()
-                        base = (base_root / relative).resolve()
-                        base.relative_to(base_root)
-                        trusted = terraform_inline_skips(base.read_text(encoding='utf-8'))
-                    elif base_commit:
-                        result = subprocess.run(['git', '-C', str(source_root), 'show',
-                                                 f'{base_commit}:{relative}'], capture_output=True)
-                        if result.returncode == 0:
-                            trusted = terraform_inline_skips(result.stdout.decode('utf-8'))
+                    trusted = terraform_inline_skips(read_trusted(relative) or '')
             except (OSError, ValueError, UnicodeError):
                 pass
             cache[relative] = current, trusted
         current, trusted = cache[relative]
         resource = check.get('resource', '')
+        try:
+            resource = module_resource_address(resource, (source_root / relative).resolve(),
+                                               source_root, scan_directory, read_trusted, module_cache)
+        except (OSError, ValueError, UnicodeError):
+            resource = None
         current_reasons = {reason for rule, reason in current.get(resource) or set()
                            if rule == check.get('check_id')}
         trusted_reasons = {reason for rule, reason in trusted.get(resource) or set()

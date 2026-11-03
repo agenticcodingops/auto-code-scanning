@@ -477,6 +477,7 @@ def build_report(findings, scan_dir, tools_executed, duration_ms, auto_fix, fix_
 
 
 def main():
+    """Run selected scanners and gate their complete, policy-filtered reports."""
     parser = argparse.ArgumentParser(
         description="Terraform security scanning interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,

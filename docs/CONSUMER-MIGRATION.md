@@ -16,8 +16,9 @@ Keep `allow-inline-checkov-skips` at its default `false` to enforce this boundar
 
 For identical local and CI decisions, pass `python scripts/scan.py <directory>
 --policy-root <separate-base-checkout>` using the exact PR base commit. With no
-explicit policy checkout, the local inline matcher reads the merge base with
-`origin/HEAD` (or `origin/main`) from Git objects. Fetch that remote branch first.
+explicit policy checkout, the local inline matcher reads the current
+`origin/HEAD` (or `origin/main`) commit from Git objects. Fetch that remote branch
+first; an older fork point cannot restore a skip removed on the current base.
 If no base is available, skips remain active. See
 [suppression governance](SUPPRESSION-GOVERNANCE.md#scan-policy-and-occurrence-approval-migration)
 for the complete rule and the separate registry migration.

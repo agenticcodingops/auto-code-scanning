@@ -72,15 +72,14 @@ def approved_inline_locations(report, source_root, scan_directory, base_commit):
     return locations
 
 
-def filter_sarif(sarif, allow_inline=None, approved_locations=()):
+def filter_sarif(sarif, allow_inline=None, approved_locations=(), source_root='.', scan_directory='.'):
+    """Remove approved skipped records; keep failed records independent.
+
+    Checkov 3.3.19 labels skips with SARIF suppressions. Recognise explicit
+    skip/status properties too, and normalize paths against the scan directory.
+    """
     if allow_inline is None:
         allow_inline = os.environ.get("ALLOW_INLINE_CHECKOV_SKIPS") == "true"
-    """Checkov 3.3.19 labels skipped records with SARIF suppressions.
-
-    Remove them rather than relying on code scanning to honour suppressions.
-    Also recognise explicit skip/status properties from other report producers.
-    Failed results at the same rule or location remain independent.
-    """
     removed = 0
     for run in sarif["runs"]:
         results = run.get("results", [])
@@ -101,7 +100,11 @@ def filter_sarif(sarif, allow_inline=None, approved_locations=()):
                 locations = result.get('locations') or []
                 location = locations[0].get('physicalLocation', {}) if len(locations) == 1 else {}
                 region = location.get('region') or {}
-                key = (result.get('ruleId'), unquote((location.get('artifactLocation') or {}).get('uri', '')),
+                uri = unquote((location.get('artifactLocation') or {}).get('uri', ''))
+                if approved_locations:
+                    from scan_policy import scanner_path
+                    uri = scanner_path(uri, 'checkov', source_root, scan_directory)
+                key = (result.get('ruleId'), uri,
                        region.get('startLine'), region.get('endLine'))
                 if allow_inline or key in approved_locations:
                     removed += 1
@@ -145,6 +148,7 @@ def prepare(config):
 
 
 def main():
+    """Prepare caller options or filter scanner output before publication."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("prepare").add_argument("config", type=Path)
@@ -163,7 +167,8 @@ def main():
                 report = json.loads(args.checkov_report.read_text(encoding='utf-8'))
                 approved = approved_inline_locations(report, Path.cwd(),
                     os.environ.get('TERRAFORM_DIRECTORY', '.'), os.environ.get('TRUSTED_POLICY_SHA', ''))
-            removed = filter_sarif(sarif, approved_locations=approved)
+            removed = filter_sarif(sarif, approved_locations=approved, source_root=Path.cwd(),
+                                   scan_directory=os.environ.get('TERRAFORM_DIRECTORY', '.'))
             # Leave an unfiltered file untouched if parsing or filtering fails.
             temporary = args.sarif.with_suffix(".sarif.tmp")
             assert_safe_path(args.sarif)
