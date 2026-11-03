@@ -264,11 +264,18 @@ jobs:
           path: .scanning-repo
           persist-credentials: false
 
+      - name: Isolate the workflow helpers from the PR checkout
+        # checkout requires a workspace-relative destination. Move its entire tree
+        # outside the agent's file boundary before giving the agent any credentials.
+        run: |
+          set -euo pipefail
+          mv -- .scanning-repo "${RUNNER_TEMP}/autofix-scanning-repo"
+
       - name: Download trusted base config (for the gate)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: trusted-config
-          path: .trusted
+          path: ${{ runner.temp }}/autofix-trusted-config
 
       - name: Ensure PyYAML (gate must fail closed, not silently)
         # -I: never import a module from the PR checkout in the working directory.
@@ -622,12 +629,8 @@ jobs:
         run: |
           git reset --soft "${HEAD_SHA}" 2>/dev/null || true
           git add -A
-          # Exclude this workflow's OWN checkouts/artifacts from the captured patch:
-          # .scanning-repo (the pinned platform scripts) and .trusted (the base-config
-          # artifact) are created in the workspace BEFORE the agent runs, so `git add -A`
-          # would otherwise stage them and the path gate would reject `.scanning-repo`
-          # as outside the allowlist — blocking every fix. The agent config files were
-          # swapped for the base versions above; that swap is not part of the fix.
+          # Reserved paths and removed agent configuration are not part of the fix.
+          # Trusted helpers and policy live outside this checkout under RUNNER_TEMP.
           git reset -q -- .fix-attempts autofix.patch .scanning-repo .trusted 2>/dev/null || true
           for p in .claude .claude-pr .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
             git reset -q -- "${p}" 2>/dev/null || true
@@ -650,13 +653,14 @@ jobs:
         if: steps.capture.outputs.has_changes == 'true'
         env:
           # Allowlist/gated come from the trusted base config artifact, NOT the PR head.
-          TRUSTED_CONFIG: .trusted/trusted-scan-config.yaml
+          TRUSTED_CONFIG: ${{ runner.temp }}/autofix-trusted-config/trusted-scan-config.yaml
+          TRUSTED_SCRIPTS: ${{ runner.temp }}/autofix-scanning-repo
         run: |
           gated=false
           reason=""
           changed="$(git diff --cached --name-only)"
           if [ -n "${changed}" ]; then
-            if ! out="$(printf '%s\n' "${changed}" | "${RUNNER_TEMP}/autofix-py/bin/python" -I .scanning-repo/scripts/check-fix-allowlist.py --config "${TRUSTED_CONFIG}")"; then
+            if ! out="$(printf '%s\n' "${changed}" | "${RUNNER_TEMP}/autofix-py/bin/python" -I "${TRUSTED_SCRIPTS}/scripts/check-fix-allowlist.py" --config "${TRUSTED_CONFIG}")"; then
               gated=true
               reason="${out#GATED: }"
             fi

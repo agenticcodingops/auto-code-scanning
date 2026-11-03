@@ -187,7 +187,12 @@ def test_push_injects_token_into_url_not_config(raw):
 
 def test_gate_uses_trusted_base_config(wf, raw):
     # Both analyze and apply gates must read the trusted base config artifact.
-    assert raw.count("TRUSTED_CONFIG: .trusted/trusted-scan-config.yaml") == 2
+    assert _require_step(wf["jobs"]["analyze"], "Safety gate")["env"]["TRUSTED_CONFIG"] == (
+        "${{ runner.temp }}/autofix-trusted-config/trusted-scan-config.yaml"
+    )
+    assert _require_step(wf["jobs"]["apply-and-push"], "Re-enforce allowlist gate")["env"]["TRUSTED_CONFIG"] == (
+        ".trusted/trusted-scan-config.yaml"
+    )
     assert "name: trusted-config" in raw
     # The gate must NOT read inputs.config_path (the PR-head file) anymore.
     for job in ("analyze", "apply-and-push"):

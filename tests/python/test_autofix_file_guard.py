@@ -21,13 +21,50 @@ def step(name):
     return next(s for s in analyze() if name in s.get("name", ""))
 
 
+def bash_executable(platform=None):
+    """Match bash_path's drive syntax: Git Bash on Windows, never WSL."""
+    if (platform or os.name) == "nt":
+        git = shutil.which("git")
+        if git:
+            for relative in ("../bin/bash.exe", "../../bin/bash.exe", "../usr/bin/bash.exe"):
+                candidate = (Path(git).parent / relative).resolve()
+                if candidate.is_file():
+                    return str(candidate)
+        return None
+    return shutil.which("bash")
+
+
 @pytest.fixture
-def guard(tmp_path):
+def bash():
+    executable = bash_executable()
+    if not executable:
+        pytest.skip("a compatible Bash is required (Git Bash on Windows)")
+    return executable
+
+
+def test_windows_shell_selection_ignores_a_wsl_launcher(tmp_path, monkeypatch):
+    git = tmp_path / "Git/cmd/git.exe"
+    git.parent.mkdir(parents=True)
+    git.touch()
+    expected = tmp_path / "Git/bin/bash.exe"
+    expected.parent.mkdir()
+    expected.touch()
+    monkeypatch.setattr(shutil, "which", lambda name: str(git) if name == "git" else "wsl/bash.exe")
+    assert bash_executable("nt") == str(expected.resolve())
+
+
+def test_windows_shell_selection_requires_git_bash(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: None if name == "git" else "wsl/bash.exe")
+    assert bash_executable("nt") is None
+
+
+@pytest.fixture
+def guard(tmp_path, bash):
     source = step("Write the fix tool guard")["run"]
     script = tmp_path / "install-guard.sh"
     script.write_text(source, encoding="utf-8", newline="\n")
     install = subprocess.run(
-        [shutil.which("bash"), bash_path(script)], cwd=tmp_path,
+        [bash, bash_path(script)], cwd=tmp_path,
         env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path)},
         text=True, capture_output=True,
     )
@@ -50,6 +87,55 @@ def guard(tmp_path):
         return proc.returncode
 
     return call, ws
+
+
+def workflow_path(value, ws, runner_temp):
+    return Path(value.replace("${{ runner.temp }}", str(runner_temp)).replace(
+        "${{ github.workspace }}", str(ws))) if "${{" in value else ws / value
+
+
+@pytest.mark.parametrize("target_name", ["helper", "config"])
+def test_workflow_gate_inputs_are_unwritable_by_agent(guard, tmp_path, bash, target_name):
+    call, ws = guard
+    checkout = step("Checkout shared scanning scripts")["with"]
+    scripts = workflow_path(checkout["path"], ws, tmp_path)
+    helper = scripts / "scripts/check-fix-allowlist.py"
+    helper.parent.mkdir(parents=True)
+    helper.write_text("trusted helper\n", encoding="utf-8")
+    # Execute the relocation when present, while still probing the old layout on older revisions.
+    relocation = next((s for s in analyze() if "Isolate the workflow helpers" in s.get("name", "")), None)
+    if relocation:
+        result = subprocess.run([bash, "-e", "-o", "pipefail", "-c", relocation["run"]], cwd=ws,
+                                env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path)},
+                                text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        scripts = workflow_path(step("Safety gate")["env"]["TRUSTED_SCRIPTS"], ws, tmp_path)
+        helper = scripts / "scripts/check-fix-allowlist.py"
+    config_dir = workflow_path(step("Download trusted base config")["with"]["path"], ws, tmp_path)
+    config_dir.mkdir(parents=True)
+    config = config_dir / "trusted-scan-config.yaml"
+    config.write_text("trusted config\n", encoding="utf-8")
+    assert helper.read_text(encoding="utf-8") == "trusted helper\n"
+    target = {"helper": helper, "config": config}[target_name]
+    for tool in ("Edit", "Write", "MultiEdit"):
+        assert call(tool, {"file_path": str(target)}) == 2
+    gate = step("Safety gate")
+    assert workflow_path(gate["env"]["TRUSTED_CONFIG"], ws, tmp_path) == config
+    assert '"${TRUSTED_SCRIPTS}/scripts/check-fix-allowlist.py"' in gate["run"]
+    assert scripts.is_relative_to(tmp_path) and not scripts.is_relative_to(ws)
+    assert config.is_relative_to(tmp_path) and not config.is_relative_to(ws)
+    assert analyze().index(relocation) < analyze().index(step("Run Claude Code"))
+
+
+@pytest.mark.parametrize("relative", ["fix-tool-guard.js", "autofix-removed-paths",
+                                     "autofix-py/bin/python", "settings.json", "new-helper"])
+def test_all_runner_temp_files_are_outside_write_boundary(guard, tmp_path, relative):
+    call, ws = guard
+    target = tmp_path / relative
+    for spelling in (str(target), "../" + relative, "src/../../" + relative):
+        for tool in ("Write", "Edit", "MultiEdit"):
+            assert call(tool, {"file_path": spelling}) == 2
+    assert call("Write", {"file_path": str(ws / "src/new-file")}) == 0
 
 
 @pytest.mark.parametrize("tool,key", [("Read", "file_path"), ("Edit", "file_path"),
@@ -149,7 +235,7 @@ def bash_path(path):
 
 
 @pytest.mark.parametrize("status", [0, 1, 2, 127])
-def test_patch_scan_fails_closed_on_scanner_failure(tmp_path, status):
+def test_patch_scan_fails_closed_on_scanner_failure(tmp_path, status, bash):
     scan = step("Secret-scan the patch before publication")
     binary_dir = tmp_path / "autofix-trivy"
     binary_dir.mkdir()
@@ -157,13 +243,13 @@ def test_patch_scan_fails_closed_on_scanner_failure(tmp_path, status):
     shim.write_text(f"#!/bin/sh\nexit {status}\n", encoding="utf-8")
     shim.chmod(0o755)
     (tmp_path / "autofix.patch").write_text("safe patch\n", encoding="utf-8")
-    result = subprocess.run([shutil.which("bash"), "-c", scan["run"]], cwd=tmp_path,
+    result = subprocess.run([bash, "-c", scan["run"]], cwd=tmp_path,
                             env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path),
                                  "GITHUB_WORKSPACE": bash_path(tmp_path)}, capture_output=True, text=True)
     assert result.returncode != 0
 
 
-def test_patch_scan_detects_a_planted_secret_with_checkout_policy_ignored(tmp_path):
+def test_patch_scan_detects_a_planted_secret_with_checkout_policy_ignored(tmp_path, bash):
     trivy = shutil.which("trivy")
     if not trivy:
         pytest.skip("Trivy is required for the scanner integration test")
@@ -181,13 +267,13 @@ def test_patch_scan_detects_a_planted_secret_with_checkout_policy_ignored(tmp_pa
     shim = binary_dir / "trivy"
     shim.write_text("#!/bin/sh\nexec '" + bash_path(trivy) + "' \"$@\"\n", encoding="utf-8")
     shim.chmod(0o755)
-    result = subprocess.run([shutil.which("bash"), "-c", scan["run"]], cwd=tmp_path,
+    result = subprocess.run([bash, "-c", scan["run"]], cwd=tmp_path,
                             env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path),
                                  "GITHUB_WORKSPACE": bash_path(checkout)}, capture_output=True, text=True)
     assert result.returncode != 0
     assert token not in result.stdout + result.stderr
     (checkout / "autofix.patch").write_text("+answer = 42\n", encoding="utf-8")
-    clean = subprocess.run([shutil.which("bash"), "-c", scan["run"]], cwd=tmp_path,
+    clean = subprocess.run([bash, "-c", scan["run"]], cwd=tmp_path,
                            env={**os.environ, "RUNNER_TEMP": bash_path(tmp_path),
                                 "GITHUB_WORKSPACE": bash_path(checkout)}, capture_output=True, text=True)
     assert clean.returncode == 0, clean.stderr
@@ -200,7 +286,7 @@ def test_only_the_supported_terraform_scan_workflows_remain():
     assert (workflows / "reusable-scan-self-test.yml").is_file()
 
 
-def test_agent_cleanup_does_not_become_part_of_the_patch(tmp_path):
+def test_agent_cleanup_does_not_become_part_of_the_patch(tmp_path, bash):
     ws = tmp_path / "checkout"
     ws.mkdir()
     config = ws / "src/.claude"
@@ -219,13 +305,28 @@ def test_agent_cleanup_does_not_become_part_of_the_patch(tmp_path):
     git("add", ".")
     git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "base")
     env["HEAD_SHA"] = git("rev-parse", "HEAD").strip()
-    cleanup = subprocess.run([shutil.which("bash"), "-c", step("Remove the agent config files")["run"]],
+    cleanup = subprocess.run([bash, "-c", step("Remove the agent config files")["run"]],
                              cwd=ws, env=env, capture_output=True, text=True)
     assert cleanup.returncode == 0, cleanup.stderr
     assert not config.exists()
     assert not (ws / "src/.mcp.json").exists()
     code.write_text("answer = 2\n", encoding="utf-8")
-    capture = subprocess.run([shutil.which("bash"), "-c", step("Capture fix")["run"]],
+    capture = subprocess.run([bash, "-c", step("Capture fix")["run"]],
                              cwd=ws, env=env, capture_output=True, text=True)
     assert capture.returncode == 0, capture.stderr
     assert git("diff", "--cached", "--name-only").splitlines() == ["src/code.py"]
+
+
+def test_required_check_metadata_names_current_jobs():
+    config = yaml.safe_load((ROOT / "scan-config.yaml").read_text(encoding="utf-8"))
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    checks = set()
+    for job in ci["jobs"].values():
+        name = job["name"]
+        if "${{ matrix.cloud }}" in name:
+            checks.update(name.replace("${{ matrix.cloud }}", cloud)
+                          for cloud in job["strategy"]["matrix"]["cloud"])
+        else:
+            checks.add(name)
+    required = config["ci"]["required_checks"]
+    assert required and set(required) <= checks
