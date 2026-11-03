@@ -8,7 +8,7 @@ Upgrade hooks and scripts together.
 
 Use this reference when writing or reviewing a caller workflow.
 
-The current release is `v3.0.0`. <!-- x-release-please-version -->
+The current release is `v3.0.1`. <!-- x-release-please-version -->
 
 Each `file:line` reference on this page refers to the source in this revision.
 Workflow file names such as `reusable-scan.yml` and `autonomous-fix.yml` are

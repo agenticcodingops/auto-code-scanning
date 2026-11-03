@@ -8,6 +8,15 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.0...v3.0.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **hooks:** scan only files changed by each pushed ref ([#72](https://github.com/agenticcodingops/auto-code-scanning/issues/72)) ([e8b2686](https://github.com/agenticcodingops/auto-code-scanning/commit/e8b26862659be015cb46d23e841858cf567a3698))
+* **scan:** harden local scan boundaries and trusted approvals ([#75](https://github.com/agenticcodingops/auto-code-scanning/issues/75)) ([3b82810](https://github.com/agenticcodingops/auto-code-scanning/commit/3b8281012c5bef8bfcb15f520a77d7661d7c8fc9))
+* **scan:** honour unchanged inline skips from trusted base ([#71](https://github.com/agenticcodingops/auto-code-scanning/issues/71)) ([905a823](https://github.com/agenticcodingops/auto-code-scanning/commit/905a8237f1c44f20d46a6c2ad482e857ba196176))
+
 ## [3.0.0](https://github.com/agenticcodingops/auto-code-scanning/compare/v2.3.6...v3.0.0) (2026-11-02)
 
 
