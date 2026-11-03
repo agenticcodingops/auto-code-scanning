@@ -16,24 +16,48 @@ if [[ ${#files[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Respect a project .sqlfluff config (a CLI --dialect would OVERRIDE it); only force a
-# default dialect when no config is present.
-sqlfluff_cmd=(sqlfluff lint)
-dialect_note="from .sqlfluff"
-if [[ ! -f .sqlfluff ]]; then
-    sqlfluff_cmd+=(--dialect ansi)
-    dialect_note="ansi (default; no .sqlfluff)"
-fi
+# A CLI dialect overrides nested configs too. Batch configured files separately
+# so unconfigured siblings keep the default without overriding project settings.
+configured_files=()
+default_files=()
+for file in "${files[@]}"; do
+    directory="$(dirname -- "$file")"
+    configured=0
+    while :; do
+        if [[ -f "$directory/.sqlfluff" ]]; then configured=1; break; fi
+        [[ "$directory" != . ]] || break
+        directory="$(dirname -- "$directory")"
+    done
+    if [[ "$configured" == 1 ]]; then configured_files+=("$file"); else default_files+=("$file"); fi
+done
 
 start_timer
-hook_log "Linting... (${#files[@]} SQL files, dialect=${dialect_note})"
-[[ $# -gt 0 ]] && sqlfluff_cmd+=("$@")
-sqlfluff_cmd+=(-- "${files[@]}")
-
-set +e
-output="$("${sqlfluff_cmd[@]}" 2>&1)"
-exit_code=$?
-set -e
+hook_log "Linting... (${#files[@]} SQL files, project dialects or ansi default)"
+output=''
+exit_code=0
+for group in configured default; do
+    sqlfluff_cmd=(sqlfluff lint)
+    if [[ "$group" == configured ]]; then
+        [[ ${#configured_files[@]} -gt 0 ]] || continue
+        selected_files=("${configured_files[@]}")
+    else
+        [[ ${#default_files[@]} -gt 0 ]] || continue
+        selected_files=("${default_files[@]}")
+        sqlfluff_cmd+=(--dialect ansi)
+    fi
+    [[ $# -gt 0 ]] && sqlfluff_cmd+=("$@")
+    sqlfluff_cmd+=(-- "${selected_files[@]}")
+    set +e
+    group_output="$("${sqlfluff_cmd[@]}" 2>&1)"
+    group_exit=$?
+    set -e
+    output+="${group_output}"$'\n'
+    if [[ $group_exit -eq 1 ]]; then
+        exit_code=1
+    elif [[ $group_exit -ne 0 ]]; then
+        handle_exit_code "$group_exit"
+    fi
+done
 
 duration_ms="$(stop_timer)"
 

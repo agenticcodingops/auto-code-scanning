@@ -14,7 +14,7 @@ function Invoke-PushSnapshot {
     $py = Find-WorkingPython
     if (-not $py) { throw 'Python is required for push snapshots' }
     $runner = Join-Path (Split-Path -Parent $HookPath) 'pre-push.py'
-    & $py $runner --shell ps1 --hooks ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
+    & $py -I $runner --shell ps1 --hooks ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
     exit $LASTEXITCODE
 }
 
@@ -24,12 +24,18 @@ function Invoke-StagedSnapshot {
     $py = Find-WorkingPython
     if (-not $py) { throw 'Python is required for index snapshots' }
     $runner = Join-Path (Split-Path -Parent $HookPath) 'pre-commit.py'
-    & $py $runner --shell ps1 ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
+    & $py -I $runner --shell ps1 ([IO.Path]::GetFileNameWithoutExtension($HookPath)) @HookArguments
     exit $LASTEXITCODE
 }
 
 function Invoke-PassiveCheckov {
     param([string[]]$Arguments, [object[]]$ExtraArgs)
+    # Consume only Git's conventional remote pair in the explicit legacy mode.
+    if ($env:SCAN_LEGACY_PUSH_STATE -eq '1' -and $env:SCAN_PUSH_SNAPSHOT -ne '1' -and
+        @($ExtraArgs).Count -eq 2 -and $ExtraArgs[0] -and $ExtraArgs[1] -and
+        -not ([string]$ExtraArgs[0]).StartsWith('-') -and -not ([string]$ExtraArgs[1]).StartsWith('-')) {
+        $ExtraArgs = @()
+    }
     if ($ExtraArgs) { throw 'Checkov extra arguments are disabled' }
     $py = Find-WorkingPython
     if (-not $py) { throw 'Python is required for passive Checkov policy' }

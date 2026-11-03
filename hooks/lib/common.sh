@@ -15,7 +15,7 @@ run_push_snapshot() {
     [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_LEGACY_PUSH_STATE:-0}" == 1 ]] && return 0
     local py
     py="$(find_python)" || { hook_error 'Python is required for push snapshots'; exit 1; }
-    "$py" "${SCRIPT_DIR}/pre-push.py" --shell sh --hooks "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
+    "$py" -I "${SCRIPT_DIR}/pre-push.py" --shell sh --hooks "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
     exit $?
 }
 
@@ -24,12 +24,17 @@ run_staged_snapshot() {
     [[ "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]] && return 0
     local py
     py="$(find_python)" || { hook_error 'Python is required for index snapshots'; exit 1; }
-    "$py" "${SCRIPT_DIR}/pre-commit.py" --shell sh "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
+    "$py" -I "${SCRIPT_DIR}/pre-commit.py" --shell sh "$(basename "${BASH_SOURCE[1]}" .sh)" "$@"
     exit $?
 }
 
 prepare_checkov_policy() {
     local py source
+    # Direct legacy Git hooks receive the remote name and URL, never tool flags.
+    if [[ "${SCAN_LEGACY_PUSH_STATE:-0}" == 1 && "${SCAN_PUSH_SNAPSHOT:-0}" != 1 && $# -eq 2 &&
+          -n "$1" && "$1" != -* && -n "$2" && "$2" != -* ]]; then
+        set --
+    fi
     [[ $# -eq 0 ]] || { hook_error 'Checkov extra arguments are disabled'; exit 1; }
     py="$(find_python)" || { hook_error 'Python is required for passive Checkov policy'; exit 1; }
     source="$(resolve_config '.checkov.yaml' 2>/dev/null || true)"

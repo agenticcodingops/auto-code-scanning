@@ -324,3 +324,149 @@ def test_commit_iac_snapshot_limits_sources_to_selected_changes(consumer, monkey
         return subprocess.CompletedProcess(command, 0)
     monkeypatch.setattr(runner.subprocess, 'run', run)
     assert runner.scan('trivy-iac-critical', [], 'sh') == 0
+
+
+@pytest.fixture
+def passive_probe(tmp_path):
+    """Record scanner operands and the passive files visible in its snapshot."""
+    binary = tmp_path / 'probe-bin'
+    binary.mkdir()
+    trace = tmp_path / 'probe.jsonl'
+    probe = binary / 'probe.py'
+    probe.write_text('''import json, os, pathlib, sys
+root = pathlib.Path.cwd()
+files = {p.relative_to(root).as_posix(): p.read_text(encoding='utf-8')
+         for p in root.rglob('*') if p.is_file() and '.git' not in p.parts}
+with open(os.environ['TRACE'], 'a', encoding='utf-8') as output:
+    output.write(json.dumps({'args':sys.argv[1:], 'files':files}) + '\\n')
+if '--output' in sys.argv:
+    pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text('{"results":[]}')
+print('{"Results":[]}')
+sys.exit(int(os.environ.get('PROBE_EXIT', '0')))
+''', encoding='utf-8')
+    for tool in ('sqlfluff', 'semgrep', 'trivy'):
+        target = binary / tool
+        target.write_text(f'#!/usr/bin/env bash\nexec "{Path(sys.executable).as_posix()}" -I "{probe.as_posix()}" "$@"\n',
+                          encoding='utf-8', newline='\n')
+        target.chmod(0o755)
+        (binary / f'{tool}.cmd').write_text(f'@"{sys.executable}" -I "{probe}" %*\n', encoding='utf-8')
+    return dict(os.environ, PATH=str(binary) + os.pathsep + os.environ['PATH'], TRACE=str(trace)), trace
+
+
+def wrapper_command(package, shell, hook):
+    runner = load_runner('review_shell', 'pre-push.py')
+    _, executable = runner.select_shell(shell)
+    return ([executable, '-NoProfile', '-File'] if shell == 'ps1' else [executable]) + [
+        str(package / f'hooks/{hook}.{shell}')]
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('hook,source', [('sqlfluff', 'query.sql'), ('semgrep-csharp', 'App.cs'),
+                                       ('semgrep-typescript', 'app.ts'), ('trivy-iac-critical', 'main.tf')])
+def test_snapshot_launcher_ignores_inherited_pythonpath(consumer, package, passive_probe, shell, hook, source):
+    (consumer / source).write_text('staged source\n', encoding='utf-8')
+    git(consumer, 'add', source)
+    marker = consumer / 'import-marker'
+    (consumer / 'argparse.py').write_text(
+        f'from pathlib import Path\nPath({str(marker)!r}).write_text("imported")\nraise SystemExit(0)\n',
+        encoding='utf-8')
+    env, trace = passive_probe
+    env['PYTHONPATH'] = str(consumer)
+    result = subprocess.run(wrapper_command(package, shell, hook), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert not marker.exists(), result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.exists(), result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_push_launcher_isolates_imports_before_transaction_validation(consumer, package, shell):
+    marker = consumer / 'import-marker'
+    (consumer / 'argparse.py').write_text(
+        f'from pathlib import Path\nPath({str(marker)!r}).write_text("imported")\nraise SystemExit(0)\n',
+        encoding='utf-8')
+    result = subprocess.run(wrapper_command(package, shell, 'checkov'), cwd=consumer,
+                            env=dict(os.environ, PYTHONPATH=str(consumer)), input='invalid transaction\n',
+                            capture_output=True, text=True)
+    assert not marker.exists(), result.stdout + result.stderr
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'scan incomplete' in result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('root_config', [False, True])
+def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package, passive_probe, shell, root_config):
+    staged = {'plain.sql': 'select 1;\n', 'sql/models/query.sql': 'select 2;\n',
+              'sql/generated/query.sql': 'select 3;\n',
+              'sql/.sqlfluff': '[sqlfluff]\ndialect = postgres\n',
+              'sql/models/.sqlfluff': '[sqlfluff]\ndialect = tsql\n',
+              '.sqlfluffignore': 'sql/generated/\n', 'sql/.sqlfluffignore': 'generated/\n'}
+    if root_config:
+        staged['.sqlfluff'] = '[sqlfluff]\ndialect = sqlite\n'
+    for name, content in staged.items():
+        target = consumer / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding='utf-8')
+    # Unrelated config and executable project inputs must not expand the snapshot.
+    (consumer / 'other').mkdir()
+    (consumer / 'other/.sqlfluff').write_text('[sqlfluff]\ndialect = mysql\n')
+    (consumer / 'setup.py').write_text('raise SystemExit("not a scanner input")\n')
+    git(consumer, 'add', '.')
+    for name in staged:
+        if '.sqlfluff' in name:
+            (consumer / name).write_text('unstaged policy\n', encoding='utf-8')
+    env, trace = passive_probe
+    result = subprocess.run(wrapper_command(package, shell, 'sqlfluff'), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [json.loads(line) for line in trace.read_text(encoding='utf-8').splitlines()]
+    assert len(calls) == (1 if root_config else 2)
+    operands = []
+    for call in calls:
+        for name, content in staged.items():
+            assert call['files'][name] == content
+        assert 'other/.sqlfluff' not in call['files']
+        assert 'setup.py' not in call['files']
+        args = call['args']
+        selected = args[args.index('--') + 1:]
+        operands.extend(selected)
+        for name in selected:
+            assert ('--dialect' in args) == (name == 'plain.sql' and not root_config)
+    assert sorted(operands) == sorted(name for name in staged if name.endswith('.sql'))
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('tool_exit', [1, 2])
+def test_sql_default_dialect_group_preserves_blocking_status(consumer, package, passive_probe, shell, tool_exit):
+    (consumer / 'query.sql').write_text('select 1;\n')
+    git(consumer, 'add', '.')
+    env, trace = passive_probe
+    env['PROBE_EXIT'] = str(tool_exit)
+    result = subprocess.run(wrapper_command(package, shell, 'sqlfluff'), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert trace.exists(), result.stdout + result.stderr
+    assert result.returncode == 1, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('hook', ['checkov', 'checkov-strict'])
+@pytest.mark.parametrize('arguments,accepted', [
+    (['origin', 'https://example.test/repo.git'], True),
+    (['--external-checks-dir', 'example'], False),
+    (['origin', 'https://example.test/repo.git', '--external-checks-dir', 'example'], False),
+    (['origin'], False),
+])
+def test_legacy_push_consumes_only_remote_pair(consumer, package, scanner, shell, hook, arguments, accepted):
+    (consumer / 'main.tf').write_text('# selected source\n', encoding='utf-8')
+    git(consumer, 'add', '.')
+    env, trace = scanner
+    env['SCAN_LEGACY_PUSH_STATE'] = '1'
+    result = subprocess.run(wrapper_command(package, shell, hook) + arguments,
+                            cwd=consumer, env=env, capture_output=True, text=True)
+    if accepted:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert trace.exists(), result.stdout + result.stderr
+    else:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'Checkov extra arguments are disabled' in result.stdout + result.stderr
+        assert not trace.exists()

@@ -328,7 +328,10 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Purpose**: SQL linting (staged `.sql` files)
 - **Stage**: pre-commit
 - **Tool**: `sqlfluff lint`
-- **Dialect**: `ansi` (default)
+- **Dialect**: Applicable staged `.sqlfluff` configuration; `ansi` for files without one.
+- **Configuration**: Staged `.sqlfluff` and `.sqlfluffignore` files in each selected
+  file's directory and ancestors are preserved. Configured and default-dialect
+  files are linted in separate batches so nested dialects are respected.
 - **Behavior**: Lint issues -> exit 1; tool errors block by default (shared local opt-in applies).
 
 ### Config Validation

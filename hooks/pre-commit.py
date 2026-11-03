@@ -74,6 +74,12 @@ def scan(hook, arguments, shell):
     policy_dir = push.policy_directory(root)
     policy = {'scan-config.yaml', '.sqlfluff', '.semgrepignore', '.gitignore',
               str(PurePosixPath(policy_dir) / '.trivyignore')}
+    if hook == 'sqlfluff':
+        # Preserve only passive config/ignore files on each selected file's
+        # ancestor chain. Materialization still rejects links and special modes.
+        for name in selected:
+            for parent in PurePosixPath(name).parents:
+                policy.update(str(parent / filename) for filename in ('.sqlfluff', '.sqlfluffignore'))
     rules, rule_environment = rule_inputs(root, tree, hook)
     policy.update(rules)
     implementation, executable = push.select_shell(shell)
