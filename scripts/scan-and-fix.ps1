@@ -119,6 +119,13 @@ function Invoke-CSharpScan {
         }
         $workingDir = Read-ScanConfigValue -Key 'languages.csharp.build.working_dir' -Default '.'
         $solution = Read-ScanConfigValue -Key 'languages.csharp.build.solution' -Default ''
+        # The push build hook rejects the same configured paths; keep both runners consistent.
+        foreach ($configured in @($workingDir, $solution)) {
+            $normalised = $configured.Replace('\', '/')
+            if ($normalised.StartsWith('/') -or $configured.Contains(':') -or ($normalised -split '/') -contains '..') {
+                throw "Build paths must remain inside the working tree: $configured"
+            }
+        }
         if (-not (Test-Path -LiteralPath $workingDir -PathType Container)) {
             throw "Build working directory not found: $workingDir"
         }

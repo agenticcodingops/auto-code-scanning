@@ -134,6 +134,18 @@ def test_on_demand_csharp_builds_working_tree(tmp_path, package, mode, build_exi
     assert ('PASS' if build_exit == 0 else 'FAIL') in result.stdout
 
 
+@pytest.mark.parametrize('mode', ['escape-working-dir', 'absolute-working-dir', 'escape-solution'])
+def test_on_demand_csharp_rejects_paths_outside_working_tree(tmp_path, package, mode):
+    # Each configured path names a real solution, so only the containment check stops the build.
+    result, trace = run_csharp(tmp_path, package, mode)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not trace.exists()
+    report = json.loads((tmp_path / '.claude/scan-findings.json').read_text(encoding='utf-8-sig'))
+    finding, = report['findings']
+    assert finding['passed'] is False
+    assert 'must remain inside the working tree' in finding['outputTail']
+
+
 @pytest.mark.parametrize('mode', ['missing-configured', 'missing-discovered', 'bad-working-dir', 'cannot-start'])
 def test_on_demand_csharp_reports_incomplete_build(tmp_path, package, mode):
     result, trace = run_csharp(tmp_path, package, mode)
@@ -169,6 +181,14 @@ def run_csharp(tmp_path, package, mode, build_exit=0):
         # No opt-in or configured paths: both eligibility and solution discovery
         # must reach this solution beyond the old depth-three discovery boundary.
         config = {}
+    build = config.get('languages', {}).get('csharp', {}).get('build', {})
+    if mode == 'escape-working-dir':
+        build['working_dir'] = f'../{tmp_path.name}/source space'
+    elif mode == 'absolute-working-dir':
+        build['working_dir'] = str(folder)
+    elif mode == 'escape-solution':
+        (tmp_path / 'Chosen.sln').write_text('solution outside working_dir')
+        build['solution'] = '../Chosen.sln'
     # JSON is YAML too; keep this harness independent of a PowerShell YAML module.
     (tmp_path / 'scan-config.yaml').write_text(json.dumps(config))
     trace = tmp_path / 'build-trace'
