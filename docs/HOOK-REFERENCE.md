@@ -44,10 +44,13 @@ All hooks use a dual-wrapper architecture:
    - Windows (PowerShell available): `hooks/<hook-id>.ps1`
 4. Shared functions are loaded from `hooks/lib/common.sh` (Bash) or `hooks/lib/common.ps1` (PowerShell)
 
-Semgrep, Trivy's pre-commit IaC scanner and SQLFluff run in temporary trees exported
+Semgrep and Trivy's pre-commit IaC scanner run in temporary trees exported
 from the index, including their tracked policy inputs. Unstaged edits do not change
 the bytes they inspect. Export errors block; temporary trees are removed after
 reports are published. Formatters retain their existing worktree behavior.
+SQLFluff lints the staged file names in the working tree because it is a style
+linter, not a security gate; project configuration, macros and templates remain
+available in their original locations.
 Parallel scanners capture private index copies. Repository-local Semgrep rule
 overrides (files or directories) are exported from that same index version.
 The pre-commit Terraform snapshot contains selected changed IaC files and policy,
@@ -332,15 +335,13 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Purpose**: SQL linting (staged `.sql` files)
 - **Stage**: pre-commit
 - **Tool**: `sqlfluff lint`
-- **Dialect**: Applicable staged SQLFluff configuration; `ansi` for files without one.
-- **Configuration**: Staged `.sqlfluff`, `pyproject.toml`, `setup.cfg`, `tox.ini`,
-  `pep8.ini` and `.sqlfluffignore` files in each selected file's directory and
-  ancestors are preserved. Configured and default-dialect files are linted in
-  separate batches so nested dialects are respected.
+- **Dialect**: Project configuration when a root `.sqlfluff` exists; otherwise
+  the hook supplies `--dialect ansi`, as in v3.0.2.
+- **Configuration**: SQLFluff reads the working tree with the project's own
+  configuration, ignore files, macro paths and template paths. The hook runs once
+  for all staged SQL file names. The scan-config `args` field is ignored; direct
+  hook arguments are forwarded.
 - **Behavior**: Lint issues -> exit 1; tool errors block by default (shared local opt-in applies).
-- **Reporting**: All batches finish before reporting. `.scanning/last-scan.json`
-  retains each batch's output and exit code; `scan_complete` is false when any
-  batch has a tool error. Allowing tool errors never allows lint findings.
 
 ### Config Validation
 
