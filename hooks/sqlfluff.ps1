@@ -31,7 +31,7 @@ foreach ($file in $files) {
             $path = Join-Path $directory $config
             $section = if ($config -eq 'pyproject.toml') { '^\s*\[tool\.sqlfluff(\.|\])' } else { '^\s*\[sqlfluff(:|\])' }
             if ((Test-Path -LiteralPath $path -PathType Leaf) -and
-                (Select-String -LiteralPath $path -Pattern $section -Quiet)) { $configured = $true }
+                (Select-String -LiteralPath $path -Pattern $section -CaseSensitive -Quiet)) { $configured = $true }
         }
         if ($configured) { break }
         if ($directory -eq '.') { break }

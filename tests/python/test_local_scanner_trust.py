@@ -494,6 +494,23 @@ def test_sql_default_dialect_group_preserves_blocking_status(consumer, package, 
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('config_name', ['pyproject.toml', 'setup.cfg', 'tox.ini', 'pep8.ini'])
+def test_sql_unrelated_uppercase_sections_keep_default_dialect(consumer, package, passive_probe, shell, config_name):
+    section = 'tool.SQLFLUFF.core' if config_name == 'pyproject.toml' else 'SQLFLUFF'
+    (consumer / config_name).write_text(f'[{section}]\nvalue = "unrelated"\n', encoding='utf-8')
+    (consumer / 'query.sql').write_text('select 1;\n', encoding='utf-8')
+    git(consumer, 'add', '.')
+    env, trace = passive_probe
+    result = subprocess.run(wrapper_command(package, shell, 'sqlfluff'), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [json.loads(line) for line in trace.read_text(encoding='utf-8').splitlines()]
+    assert len(calls) == 1
+    assert '--dialect' in calls[0]['args']
+    assert calls[0]['args'][calls[0]['args'].index('--dialect') + 1] == 'ansi'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('hook', ['checkov', 'checkov-strict'])
 @pytest.mark.parametrize('arguments,accepted', [
     (['origin', 'https://example.test/repo.git'], True),
