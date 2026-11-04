@@ -330,7 +330,7 @@ def test_baseline_covers_untrusted_skip_using_gate_identity(tmp_path, monkeypatc
     source.write_text('resource "sample" "one" {\n  #checkov:skip=CKV_TEST_1:reviewed debt\n}\n', encoding="utf-8")
     check = dict(check_id='CKV_TEST_1', file_path='/main.tf', file_line_range=[1, 3],
                  resource='sample.one', suppress_comment='reviewed debt', severity='HIGH')
-    report = dict(results=dict(failed_checks=[], skipped_checks=[check]))
+    report = dict(results=dict(failed_checks=[], skipped_checks=[check]), summary=dict(skipped=1))
     raw = json.dumps([report] if array_report else report)
     env = clean_env()
     env['STUB_REPORT'] = raw

@@ -19,10 +19,9 @@ def finalize(data, root, policy_root=None, base_commit=None):
         directory = report["scan_directory"]
         for document in documents:
             summary = document.get("summary") or {}
-            if "skipped" in summary:
-                count = summary["skipped"]
-                if type(count) is not int or count != len(document["results"].get("skipped_checks", [])):
-                    raise ValueError("Baseline requires complete Checkov skipped records")
+            count = summary.get("skipped")
+            if type(count) is not int or count != len(document["results"].get("skipped_checks", [])):
+                raise ValueError("Baseline requires complete Checkov skipped records")
             for check in checkov_checks(document["results"], root, policy_root=policy_root,
                                         scan_directory=directory, base_commit=base_commit):
                 lines = check.get("file_line_range") or [0]

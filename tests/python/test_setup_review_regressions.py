@@ -134,7 +134,7 @@ def test_baseline_uses_explicit_approval_context(tmp_path, authority, approved, 
                  resource='sample.one', severity='HIGH')
     results = dict(failed_checks=[], skipped_checks=[check])
     env = clean_env()
-    env['STUB_REPORT'] = json.dumps(dict(results=results))
+    env['STUB_REPORT'] = json.dumps(dict(results=results, summary=dict(skipped=1)))
     option = (f'-PolicyRoot {ps_string(trusted)}' if authority == 'checkout' else
               f'-BaseCommit {base_commit}')
     directory = '-MonorepoScope infra' if scoped else '-TerraformDir infra'
@@ -192,7 +192,7 @@ def test_baseline_retains_skips_from_real_scanner_reports(tmp_path, report_sourc
              resource='aws_s3_bucket.sample', line=1, end_line=4), repo)
 
 
-@pytest.mark.parametrize('mode', ['missing', 'truncated', 'boolean', 'negative'])
+@pytest.mark.parametrize('mode', ['missing', 'missing-count', 'missing-summary', 'truncated', 'boolean', 'negative'])
 def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, mode):
     repo = tmp_path / 'repo'
     repo.mkdir()
@@ -200,7 +200,11 @@ def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, 
     (repo / 'main.tf').write_text(REAL_SKIP_SOURCE, encoding='utf-8')
     reports = json.loads((ROOT / 'tests/fixtures/checkov-baseline-reports.json').read_text(encoding='utf-8'))
     report = reports['quiet' if mode in ('missing', 'negative') else 'full']
-    if mode != 'missing':
+    if mode == 'missing-count':
+        del report['summary']['skipped']
+    elif mode == 'missing-summary':
+        del report['summary']
+    elif mode != 'missing':
         report['summary']['skipped'] = {'truncated': 2, 'boolean': True, 'negative': -1}[mode]
     existing = repo / '.scan-baseline/baseline.json'
     existing.parent.mkdir()

@@ -1860,7 +1860,7 @@ def test_baseline_all_skips_unconfigured_tflint_and_uses_current_directory(tmp_p
     # Functions keep this regression independent of installed scanner versions.
     command = ("function trivy { $global:LASTEXITCODE=0; "
                "'{\"Results\":[{\"Target\":\"main.tf\",\"Misconfigurations\":[{\"ID\":\"AVD-TEST-1\",\"Severity\":\"HIGH\",\"CauseMetadata\":{\"StartLine\":1,\"EndLine\":1}}]}]}' }; "
-               "function checkov { $global:LASTEXITCODE=0; '{\"results\":{\"failed_checks\":[]}}' }; function tflint { throw 'unconfigured scanner executed' }; "
+               "function checkov { $global:LASTEXITCODE=0; '{\"results\":{\"failed_checks\":[]},\"summary\":{\"skipped\":0}}' }; function tflint { throw 'unconfigured scanner executed' }; "
                f"& '{script}' -Tool {tool} -CloudProvider aws -Force")
     env = clean_env()
     env.pop('SCAN_TFLINT_CONFIG', None)
