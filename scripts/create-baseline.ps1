@@ -145,6 +145,20 @@ $baseline = @{
     scanner_reports = @()
 }
 
+function Find-BaselinePython {
+    # Verify before probing: even a version/capability probe executes the tool.
+    $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
+    foreach ($name in @('python', 'python3', 'py')) {
+        if (-not (Get-Command $name -CommandType Application -ErrorAction SilentlyContinue)) { continue }
+        $candidate = Resolve-VerifiedTool -Name $name -Label Python -AdditionalRoots (@($sourceRoot) + $scanDirs)
+        try {
+            & $candidate -E -P -c 'pass' 2>$null
+            if ($LASTEXITCODE -eq 0) { return $candidate }
+        } catch { }
+    }
+    throw 'Baseline creation requires Python 3.11 or later'
+}
+
 function New-TrivyBaseline {
     Write-Host "Creating Trivy baseline..." -ForegroundColor Cyan
 
@@ -206,8 +220,13 @@ function New-CheckovBaseline {
     $scanner = Resolve-VerifiedTool -Name checkov -Label checkov -AdditionalRoots (@($sourceRoot) + $scanDirs)
     $entries = @()
 
-    $policyFile = New-PassiveCheckovPolicy
+    $policyFile = New-TemporaryFile
     try {
+        Assert-SafeWritePath $policyFile
+        $source = Resolve-ScanConfig -Filename '.checkov.yaml'
+        $policy = & $python -E -P "$PSScriptRoot/../hooks/lib/checkov_policy.py" $source
+        if ($LASTEXITCODE -ne 0) { throw 'Checkov policy rejected; scan incomplete' }
+        [IO.File]::WriteAllText($policyFile, ($policy -join "`n"))
         foreach ($dir in $scanDirs) {
             $checkovJson = & $scanner -d $dir --framework terraform --output json --compact --config-file $policyFile 2>$null
             if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
@@ -315,6 +334,8 @@ if ($scopedDirs.Count -gt 0) {
 Write-Host ""
 
 # Collect baseline entries
+# Keep the verified absolute interpreter for policy generation and finalization.
+$python = Find-BaselinePython
 $allEntries = @()
 
 switch ($Tool) {
@@ -332,9 +353,6 @@ $baseline.entries = $allEntries
 
 # Finalize occurrence fingerprints using the shared SHA-256 implementation.
 # Do not deduplicate repeated occurrences: each approval has a bounded count.
-. "$PSScriptRoot/../hooks/lib/common.ps1"
-$python = Find-WorkingPython
-if (-not $python) { throw 'Baseline creation requires Python' }
 # Scanner directories are relative to the invocation, while identities are
 # repository-relative. Pass absolute contexts to the shared normalizer.
 foreach ($entry in $allEntries) {

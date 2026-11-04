@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -131,3 +132,53 @@ def test_baseline_relative_scan_path_uses_powershell_location(tmp_path, baseline
     assert result.returncode == 0, result.stdout + result.stderr
     assert Path(env['BASELINE_TRACE']).exists()
     assert json.loads(baseline.read_text(encoding='utf-8'))['schema_version'] == '2.0'
+
+
+@pytest.mark.parametrize('name', ['python', 'python3', 'py'])
+@pytest.mark.parametrize('boundary', ['repository', 'scanned', 'consumer', 'external'])
+def test_baseline_verifies_interpreter_before_any_probe(tmp_path, baseline_case, name, boundary):
+    repo, baseline, env = baseline_case
+    scanner_stub(tmp_path / 'scanner tools', 'checkov', env)
+    other = tmp_path / 'other checkout'
+    other.mkdir()
+    folder = {'repository': repo, 'scanned': other, 'consumer': other,
+              'external': tmp_path / 'external tools'}[boundary] / 'bin'
+    folder.mkdir(parents=True)
+    marker = tmp_path / 'python-calls.jsonl'
+    stub = folder / 'interpreter.py'
+    stub.write_text(
+        'import json, subprocess, sys\n'
+        f'with open({str(marker)!r}, "a", encoding="utf-8") as f:\n'
+        '    f.write(json.dumps(sys.argv[1:]) + "\\n")\n'
+        f'sys.exit(subprocess.call([{sys.executable!r}, *sys.argv[1:]]))\n', encoding='utf-8')
+    launcher = folder / (name + '.cmd' if os.name == 'nt' else name)
+    launcher.write_text(
+        f'@"{sys.executable}" "{stub}" %*\n@exit /b %errorlevel%\n' if os.name == 'nt' else
+        f'#!/bin/sh\nexec "{sys.executable}" "{stub}" "$@"\n', encoding='utf-8')
+    launcher.chmod(0o755)
+    env['PATH'] = str(folder) + os.pathsep + env['PATH']
+    env['SELECT_PYTHON'] = name
+    extra = ''
+    if boundary == 'scanned':
+        extra = f'-TerraformDir {ps_string(other)}'
+    elif boundary == 'consumer':
+        env.update(SCAN_INDEX_SNAPSHOT='1', SCAN_CONSUMER_ROOT=str(other))
+    # Hide earlier interpreter candidates so all three supported names are tested.
+    command = ('function Get-Command { param($Name, $CommandType, $ErrorAction) '
+               'if ($Name -in @("python", "python3", "py") -and $Name -ne $env:SELECT_PYTHON) { return }; '
+               'Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters }; '
+               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force {extra}')
+    result = powershell(command, repo, env=env)
+    if boundary == 'external':
+        assert result.returncode == 0, result.stdout + result.stderr
+        calls = [json.loads(line) for line in marker.read_text(encoding='utf-8').splitlines()]
+        assert calls[0] == ['-E', '-P', '-c', 'pass']
+        assert calls.count(['-E', '-P', '-c', 'pass']) == 1
+        assert any(any('checkov_policy.py' in arg for arg in call) for call in calls)
+        assert any(any('finalize_baseline.py' in arg for arg in call) for call in calls)
+    else:
+        assert not marker.exists(), 'Checkout-local Python was executed before verification'
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'must resolve outside' in result.stderr
+        assert not Path(env['BASELINE_TRACE']).exists()
+        assert baseline.read_text(encoding='utf-8') == 'reviewed baseline'

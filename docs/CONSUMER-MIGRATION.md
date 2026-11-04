@@ -184,6 +184,8 @@ explicit generated configuration. Executable policy options are rejected;
 automatic discovery cannot load another configuration. Install Checkov, Trivy
 and TFLint outside both the scanned directories and the consumer checkout:
 baseline creation rejects repository executables, including linked paths.
+Its Python interpreter is verified before any capability probe and reused by
+both policy generation and baseline finalization.
 
 During a reviewed migration only, the reusable IaC workflow's
 `allow-legacy-exceptions: true`, the local scanner's `--allow-legacy-exceptions`,
