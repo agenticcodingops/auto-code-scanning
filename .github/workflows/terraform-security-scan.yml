@@ -52,10 +52,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
+      - name: Install Trivy
+        # Download the pinned release from GitHub and verify its checksum. The install
+        # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
+        env:
+          TRIVY_VERSION: "0.75.0"
+          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${archive}"             "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/trivy-bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/trivy-bin" trivy
+          echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
+
       - name: Run Trivy IaC scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
-          version: "v0.75.0"
+          skip-setup-trivy: "true"
           scan-type: 'config'
           scan-ref: 'terraform'
           severity: 'CRITICAL,HIGH'
@@ -75,7 +90,7 @@ jobs:
       - name: Run Trivy secret scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
-          version: "v0.75.0"
+          skip-setup-trivy: "true"
           scan-type: 'fs'
           scanners: 'secret'
           severity: 'HIGH,CRITICAL'
