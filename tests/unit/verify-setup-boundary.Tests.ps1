@@ -147,4 +147,17 @@ Describe 'Verifier tool boundary' {
         Mock Get-Command { [pscustomobject]@{ Source = $script:toolPath } }
         Resolve-VerifiedTool -Name tflint -Label TFLint | Should -BeExactly $script:toolPath
     }
+
+    It 'Rejects an invoked checkout path even when the executable target is external' {
+        $inside = New-Item -ItemType File -Path (Join-Path $script:repo.FullName 'bin/python.exe') -Force
+        $outside = New-Item -ItemType File -Path (Join-Path $TestDrive 'base/python.exe') -Force
+        $script:toolPath = $inside.FullName
+        $script:targetPath = $outside.FullName
+        Mock Get-Command { [pscustomobject]@{ Source = $script:toolPath } }
+        Mock Resolve-ExternalRealPath {
+            if ($Path -eq $script:toolPath) { return $script:targetPath }
+            return [IO.Path]::GetFullPath($Path)
+        }
+        { Resolve-VerifiedTool -Name python -Label Python } | Should -Throw '*Python must resolve outside*'
+    }
 }

@@ -178,6 +178,18 @@ Explicit output paths retain their invocation-relative meaning. The baseline
 keeps a separate entry for each occurrence. Existing broad keys cannot be
 automatically converted into an occurrence approval.
 
+Baseline creation uses the hooks' passive Checkov policy from
+`.scanning/configs/.checkov.yaml` (or `SCAN_CONFIG_DIR`) and always supplies an
+explicit generated configuration. Executable policy options are rejected;
+automatic discovery cannot load another configuration. Install Checkov, Trivy
+and TFLint outside both the scanned directories and the consumer checkout:
+baseline creation rejects repository executables, including linked paths.
+Its Python interpreter is verified before any capability probe and reused by
+both policy generation and baseline finalization.
+The invoked path and resolved target are both checked, including virtual
+environment startup locations. Virtual environments must also stay outside
+the scanned and consumer checkouts.
+
 During a reviewed migration only, the reusable IaC workflow's
 `allow-legacy-exceptions: true`, the local scanner's `--allow-legacy-exceptions`,
 or the hook environment `SCAN_ALLOW_LEGACY_EXCEPTIONS=1` explicitly enables schema

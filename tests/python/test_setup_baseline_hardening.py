@@ -12,6 +12,7 @@ import check_fix_allowlist as allowlist
 import scan
 import setup_scan_fix
 from scan_policy import apply_exceptions
+from .baseline_helpers import scanner_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -277,11 +278,11 @@ def test_baseline_scanner_error_preserves_existing_file(tmp_path, tool, code):
     trusted.write_text('config {}', encoding="utf-8")
     env = clean_env()
     env.update(SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(tmp_path / 'cache'))
-    command = (f'function {tool} {{ $global:LASTEXITCODE={code}; '
-               "'{\"Results\":[],\"results\":{\"failed_checks\":[]},\"issues\":[]}' }; "
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool {tool} -CloudProvider aws -Force')
+    scanner_stub(tmp_path / 'tools', tool, env, code=code)
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool {tool} -CloudProvider aws -Force'
     result = powershell(command, repo, env=env)
     assert result.returncode != 0, result.stdout + result.stderr
+    assert Path(env['BASELINE_TRACE']).exists()
     assert baseline.read_text(encoding="utf-8") == 'existing reviewed baseline'
     assert 'Created Successfully' not in result.stdout
 
@@ -300,10 +301,11 @@ def test_baseline_invalid_report_preserves_existing_file(tmp_path, tool, report)
     trusted.write_text('config {}', encoding="utf-8")
     env = clean_env()
     env.update(SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(tmp_path / 'cache'))
-    command = (f'function {tool} {{ $global:LASTEXITCODE=0; {ps_string(report)} }}; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool {tool} -CloudProvider aws -Force')
+    scanner_stub(tmp_path / 'tools', tool, env, report=report)
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool {tool} -CloudProvider aws -Force'
     result = powershell(command, repo, env=env)
     assert result.returncode != 0, result.stdout + result.stderr
+    assert Path(env['BASELINE_TRACE']).exists()
     assert baseline.read_text(encoding="utf-8") == 'existing reviewed baseline'
 
 
@@ -324,13 +326,13 @@ def test_baseline_rejects_linked_plugin_cache_before_scanner_runs(tmp_path):
     marker = tmp_path / 'scanner-ran'
     env = clean_env()
     env.update(SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(cache), SCANNER_MARKER=str(marker))
-    command = ('function tflint { Set-Content $env:SCANNER_MARKER executed; '
-               '$global:LASTEXITCODE=0; \'{"issues":[]}\' }; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool tflint -CloudProvider aws -Force')
+    scanner_stub(tmp_path / 'tools', 'tflint', env)
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool tflint -CloudProvider aws -Force'
     result = powershell(command, repo, env=env)
     assert result.returncode != 0
     assert 'symlink or reparse point' in result.stderr
     assert not marker.exists()
+    assert not Path(env['BASELINE_TRACE']).exists()
     assert not (repo / '.scan-baseline/baseline.json').exists()
 
 
@@ -347,9 +349,8 @@ def test_baseline_covers_untrusted_skip_using_gate_identity(tmp_path, monkeypatc
     report = dict(results=dict(failed_checks=[], skipped_checks=[check]), summary=dict(skipped=1))
     raw = json.dumps([report] if array_report else report)
     env = clean_env()
-    env['STUB_REPORT'] = raw
-    command = ('function checkov { $global:LASTEXITCODE=1; $env:STUB_REPORT }; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force')
+    scanner_stub(tmp_path / 'tools', 'checkov', env, report=raw, code=1)
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force'
     result = powershell(command, module, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     monkeypatch.chdir(repo)

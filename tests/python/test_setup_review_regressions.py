@@ -9,6 +9,7 @@ import pytest
 
 import scan_policy
 import setup_scan_fix
+from .baseline_helpers import scanner_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 REAL_SKIP_SOURCE = ('resource "aws_s3_bucket" "sample" {\n'
@@ -134,15 +135,16 @@ def test_baseline_uses_explicit_approval_context(tmp_path, authority, approved, 
                  resource='sample.one', severity='HIGH')
     results = dict(failed_checks=[], skipped_checks=[check])
     env = clean_env()
-    env['STUB_REPORT'] = json.dumps(dict(results=results, summary=dict(skipped=1)))
+    scanner_stub(tmp_path / 'tools', 'checkov', env,
+                 report=json.dumps(dict(results=results, summary=dict(skipped=1))), code=1)
     option = (f'-PolicyRoot {ps_string(trusted)}' if authority == 'checkout' else
               f'-BaseCommit {base_commit}')
     directory = '-MonorepoScope infra' if scoped else '-TerraformDir infra'
-    command = ('function checkov { $global:LASTEXITCODE=1; $env:STUB_REPORT }; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov '
+    command = (f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov '
                f'-CloudProvider aws -Force {directory} {option}')
     result = powershell(command, repo, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
+    assert Path(env['BASELINE_TRACE']).exists()
     baseline = json.loads((repo / '.scan-baseline/baseline.json').read_text(encoding='utf-8'))
     options = dict(policy_root=trusted) if authority == 'checkout' else dict(base_commit=base_commit)
     pending = scan_policy.checkov_checks(results, repo, scan_directory=module, **options)
@@ -175,12 +177,9 @@ def test_baseline_retains_skips_from_real_scanner_reports(tmp_path, report_sourc
     for name, report in reports.items():
         (tmp_path / f'{name}.json').write_text(json.dumps(report), encoding='utf-8')
     env = clean_env()
-    env.update(FULL_REPORT=str(tmp_path / 'full.json'), QUIET_REPORT=str(tmp_path / 'quiet.json'))
-    # Replay the real serializer's two output modes, honoring the actual CLI args.
-    command = ('function checkov { $global:LASTEXITCODE=0; '
-               'if ($args -contains "--quiet") { Get-Content -Raw $env:QUIET_REPORT } '
-               'else { Get-Content -Raw $env:FULL_REPORT } }; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force')
+    scanner_stub(tmp_path / 'tools', 'checkov', env, report=json.dumps(reports['full']),
+                 quiet_report=json.dumps(reports['quiet']))
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force'
     result = powershell(command, repo, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     entries = json.loads((repo / '.scan-baseline/baseline.json').read_text(encoding='utf-8'))['entries']
@@ -210,12 +209,12 @@ def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, 
     existing.parent.mkdir()
     existing.write_text('previously reviewed baseline', encoding='utf-8')
     env = clean_env()
-    env['SCANNER_REPORT'] = json.dumps(report)
+    scanner_stub(tmp_path / 'tools', 'checkov', env, report=json.dumps(report))
     # Configuration can select quiet output even without an explicit CLI flag.
-    command = ('function checkov { $global:LASTEXITCODE=0; $env:SCANNER_REPORT }; '
-               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force')
+    command = f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force'
     result = powershell(command, repo, env=env)
     assert result.returncode != 0, result.stdout + result.stderr
+    assert Path(env['BASELINE_TRACE']).exists()
     assert existing.read_text(encoding='utf-8') == 'previously reviewed baseline'
     assert 'Created Successfully' not in result.stdout
 

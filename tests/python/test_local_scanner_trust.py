@@ -582,7 +582,7 @@ def test_legacy_push_consumes_only_remote_pair(consumer, package, scanner, shell
 @pytest.mark.parametrize('output', ['cli', 'json', 'sarif', ['cli', 'json']])
 def test_passive_policy_accepts_valid_output_and_removes_it(consumer, output):
     import yaml
-    from checkov_policy import passive_policy
+    passive_policy = load_runner('standalone_checkov_policy', 'lib/checkov_policy.py').passive_policy
     path = consumer / 'policy.yaml'
     path.write_text(yaml.safe_dump({'output': output}), encoding='utf-8')
     assert passive_policy(path) == {'download-external-modules': False, 'skip-download': True}
@@ -591,7 +591,7 @@ def test_passive_policy_accepts_valid_output_and_removes_it(consumer, output):
 @pytest.mark.parametrize('output', ['unsupported', ['cli', 'unsupported'], 1, {'cli': True}])
 def test_passive_policy_rejects_invalid_output(consumer, output):
     import yaml
-    from checkov_policy import passive_policy
+    passive_policy = load_runner('standalone_checkov_policy', 'lib/checkov_policy.py').passive_policy
     path = consumer / 'policy.yaml'
     path.write_text(yaml.safe_dump({'output': output}), encoding='utf-8')
     with pytest.raises(ValueError, match='output'):
