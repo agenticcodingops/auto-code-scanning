@@ -672,8 +672,8 @@ jobs:
       - name: Install the checksum-verified patch scanner
         if: steps.capture.outputs.has_changes == 'true' && steps.gate.outputs.gated != 'true'
         env:
-          TRIVY_VERSION: "0.71.0"
-          TRIVY_SHA256: "30a3d22b23f88c233f1658f562fb477cae3b3e8b4761109d515b7698daf85814"
+          TRIVY_VERSION: "0.75.0"
+          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
         working-directory: ${{ runner.temp }}
         run: |
           set -euo pipefail

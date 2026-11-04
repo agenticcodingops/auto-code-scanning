@@ -229,6 +229,13 @@ def test_patch_scan_is_a_required_gate_before_upload():
     assert "--exit-code 1" in scan["run"]
 
 
+def test_patch_scanner_matches_the_shared_release_lock():
+    lock = json.loads((ROOT / "scripts/scanner-downloads.json").read_text(encoding="utf-8"))["trivy"]
+    install = step("Install the checksum-verified patch scanner")
+    assert install["env"]["TRIVY_VERSION"] == lock["version"]
+    assert install["env"]["TRIVY_SHA256"] == lock["platforms"]["linux-amd64"]["sha256"]
+
+
 def bash_path(path):
     value = str(path).replace("\\", "/")
     return "/" + value[0].lower() + value[2:] if re.match(r"^[A-Za-z]:", value) else value
