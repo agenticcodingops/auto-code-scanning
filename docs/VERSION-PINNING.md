@@ -321,7 +321,7 @@ at that ref.
 | Scanner | Version | Where it is pinned |
 |---|---|---|
 | Checkov | 3.3.19 | the `bridgecrewio/checkov-action` SHA (v12.3125.0): the action's `action.yml` names the image `ghcr.io/bridgecrewio/checkov:3.3.19` |
-| Trivy | 0.75.0 | `version:` on each of the four `aquasecurity/trivy-action` steps |
+| Trivy | 0.75.0 | `TRIVY_VERSION` and `TRIVY_SHA256` on the `Install Trivy` step, which downloads the GitHub release and verifies its checksum; the four `aquasecurity/trivy-action` steps set `skip-setup-trivy` |
 | TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
 | TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
 | Snyk CLI (optional job) | 1.1307.4 | `npm install -g snyk@1.1307.4` in the `scan-snyk` job (`reusable-scan.yml:507-508`) |
@@ -338,7 +338,12 @@ To bump a scanner, change it in one release:
 
 1. Checkov: choose the `checkov-action` tag whose `action.yml` names the Checkov
    image you want, and pin that tag's commit SHA.
-2. Trivy: change all four `version:` values together.
+2. Trivy: change `TRIVY_VERSION` and `TRIVY_SHA256` together on every `Install Trivy` step in
+   `.github/workflows/` (`grep -rl TRIVY_SHA256 .github/workflows` lists them;
+   `tests/python/test_workflow_pins.py` fails if any pair differs), and the `trivy` entry in
+   `scripts/scanner-downloads.json` in the same change: the test also requires the workflows'
+   pair to match that lock's `linux-amd64` version and SHA-256, taken from the release's
+   `trivy_<version>_checksums.txt`.
 3. TFLint: change `tflint_version:`, and replace `checksums:` with the SHA-256 of
    `tflint_linux_amd64.zip` and `tflint_linux_arm64.zip` from that release's
    `checksums.txt`.
