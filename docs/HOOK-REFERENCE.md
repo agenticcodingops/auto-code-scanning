@@ -51,6 +51,11 @@ reports are published. Formatters retain their existing worktree behavior.
 SQLFluff lints the staged file names in the working tree because it is a style
 linter, not a security gate; project configuration, macros and templates remain
 available in their original locations.
+When upgrading, provision Python 3.11+ for `semgrep-csharp`, `semgrep-typescript`
+and `trivy-iac-critical` before re-vendoring: their staged snapshot adapter needs
+it even when the scanner executable is installed. An unavailable, older or broken
+interpreter blocks before scanner launch with `Python is required for index
+snapshots`. `SCAN_ALLOW_TOOL_ERRORS=1` does not bypass this prerequisite.
 Parallel scanners capture private index copies. Repository-local Semgrep rule
 overrides (files or directories) are exported from that same index version.
 The pre-commit Terraform snapshot contains selected changed IaC files and policy,
@@ -136,6 +141,10 @@ The dispatcher sets these environment variables for hook scripts:
 - **Purpose**: Quick scan for CRITICAL Terraform misconfigurations only
 - **Stage**: pre-commit
 - **Tool**: Trivy (IaC scanner mode)
+- **Prerequisite when upgrading**: Python 3.11+ is required for the staged snapshot
+  adapter, including installations that previously ran this hook with only Bash,
+  Git and the standalone Trivy binary. Missing or unusable Python blocks before
+  Trivy starts, even with `SCAN_ALLOW_TOOL_ERRORS=1`.
 - **Target**: <5 seconds
 - **Severity filter**: CRITICAL only
 - **Flags**: `--skip-check-update`, `--severity CRITICAL`, `--exit-code 1`, `--quiet`

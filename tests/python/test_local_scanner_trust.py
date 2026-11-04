@@ -421,6 +421,28 @@ def wrapper_command(package, shell, hook):
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('hook,source', [('semgrep-csharp', 'App.cs'),
                                        ('semgrep-typescript', 'app.ts'), ('trivy-iac-critical', 'main.tf')])
+@pytest.mark.parametrize('allow_errors', [False, True])
+def test_staged_security_hooks_require_python_before_scanner(consumer, package, passive_probe, shell, hook, source, allow_errors):
+    (consumer / source).write_text('staged source\n', encoding='utf-8')
+    git(consumer, 'add', source)
+    # Interpreter probing (including old/broken candidates) has separate coverage.
+    # Model its unavailable result while keeping the scanner installed and usable.
+    common = package / f'hooks/lib/common.{shell}'
+    unavailable = ('\nfind_python() { return 1; }\n' if shell == 'sh' else
+                   '\nfunction Find-WorkingPython { return $null }\n')
+    common.write_text(common.read_text(encoding='utf-8') + unavailable, encoding='utf-8', newline='\n')
+    env, trace = passive_probe
+    env['SCAN_ALLOW_TOOL_ERRORS'] = '1' if allow_errors else '0'
+    result = subprocess.run(wrapper_command(package, shell, hook), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Python is required for index snapshots' in result.stdout + result.stderr
+    assert not trace.exists(), 'scanner ran before the required snapshot was created'
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('hook,source', [('semgrep-csharp', 'App.cs'),
+                                       ('semgrep-typescript', 'app.ts'), ('trivy-iac-critical', 'main.tf')])
 def test_snapshot_launcher_ignores_inherited_pythonpath(consumer, package, passive_probe, shell, hook, source):
     (consumer / source).write_text('staged source\n', encoding='utf-8')
     git(consumer, 'add', source)
