@@ -8,6 +8,16 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.2...v3.0.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ci:** confine fix tools and require patch scanning before upload ([#86](https://github.com/agenticcodingops/auto-code-scanning/issues/86)) ([fa7f31d](https://github.com/agenticcodingops/auto-code-scanning/commit/fa7f31df7daf99b2bcf0c354f5729aa01edb45a1))
+* **ci:** install Trivy from the verified GitHub release ([#87](https://github.com/agenticcodingops/auto-code-scanning/issues/87)) ([e001ecf](https://github.com/agenticcodingops/auto-code-scanning/commit/e001ecf3d47f0181755d543e784e4eb08cfc22a7))
+* **hooks:** harden local scanner policy and staged source selection ([#84](https://github.com/agenticcodingops/auto-code-scanning/issues/84)) ([7bcc05d](https://github.com/agenticcodingops/auto-code-scanning/commit/7bcc05d8379387a0ca9d172893caffc900b55495))
+* **setup:** harden onboarding, scan feedback and baselines ([#85](https://github.com/agenticcodingops/auto-code-scanning/issues/85)) ([0cc611b](https://github.com/agenticcodingops/auto-code-scanning/commit/0cc611b276827e8ae38eda1be39383e4f5817142))
+
 ## [3.0.2](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.1...v3.0.2) (2026-11-03)
 
 
