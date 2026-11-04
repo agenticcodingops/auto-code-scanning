@@ -8,7 +8,7 @@ import yaml
 
 def hook_entries(config, runner):
     if runner == 'pre-commit':
-        return {(repo['repo'], hook['id']): hook
+        return {(repo['repo'], hook['id']): (repo.get('rev'), hook)
                 for repo in config['repos'] for hook in repo['hooks']}
     return {(stage, name): command
             for stage in ('pre-commit', 'pre-push')
@@ -32,6 +32,8 @@ def main():
         for key, hook in expected.items():
             if key not in actual:
                 raise ValueError(f'Required hook missing: {key[1]}')
+            if args.runner == 'pre-commit' and actual[key] != hook:
+                raise ValueError(f'Required hook settings or revision changed: {key[1]}')
             if args.runner == 'lefthook' and actual[key].get('run') != hook['run']:
                 raise ValueError(f'Required hook command changed: {key[1]}')
     except (OSError, ValueError, TypeError, KeyError, AttributeError, yaml.YAMLError) as exc:

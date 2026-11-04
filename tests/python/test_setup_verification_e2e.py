@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -135,3 +136,26 @@ def test_expected_hook_ids_come_from_selected_template(tmp_path):
     assert 'Required hook missing: template-specific-hook' in result.stdout
     shutil.copyfile(template, config)
     assert run(command, tmp_path, os.environ.copy()).returncode == 0
+
+
+@pytest.mark.parametrize('tier', ['starter', 'standard', 'strict'])
+@pytest.mark.parametrize('damage', ['revision', 'stages', 'args', 'entry'])
+def test_precommit_verification_rejects_changed_hook_settings(tmp_path, tier, damage):
+    document = yaml.safe_load((ROOT / f'templates/{tier}/pre-commit-config.yaml').read_text(encoding='utf-8'))
+    repo = next(repo for repo in document['repos']
+                if any(hook['id'] == 'trivy-secrets' for hook in repo['hooks']))
+    hook = next(hook for hook in repo['hooks'] if hook['id'] == 'trivy-secrets')
+    if damage == 'revision':
+        repo['rev'] += '-changed'
+    elif damage == 'stages':
+        hook['stages'] = ['pre-push']
+    elif damage == 'args':
+        hook['args'] = ['--fixture-override']
+    else:
+        hook['entry'] = 'echo changed'
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(document), encoding='utf-8')
+    result = run([sys.executable, '-I', str(ROOT / 'scripts/verify-setup-hooks.py'),
+                  'pre-commit', tier, str(config)], tmp_path, os.environ.copy())
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Required hook settings or revision changed:' in result.stdout
