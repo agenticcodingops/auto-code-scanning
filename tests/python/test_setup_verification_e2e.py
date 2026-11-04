@@ -232,6 +232,9 @@ def test_verification_keeps_virtualenv_package_discovery(tmp_path):
         '$ast=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$null,[ref]$null); '
         '$block=$ast.Find({param($node) $node -is [Management.Automation.Language.TryStatementAst] '
         '-and $node.Extent.Text.Contains(\'$hookResult = &\')},$true); '
+        '$resolver=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] '
+        '-and $node.Name -eq \'Resolve-VerifiedTool\'},$true); '
+        '. ([scriptblock]::Create($resolver.Extent.Text)); '
         '$HooksRunner="lefthook"; $Tier="strict"; $runnerConfig="lefthook.yml"; '
         'function Add-CheckResult { param($Passed,$Message) if (-not $Passed) { throw $Message } }; '
         '& ([scriptblock]::Create($block.Extent.Text))')

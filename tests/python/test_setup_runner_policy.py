@@ -97,10 +97,16 @@ def test_verifier_checks_selected_runner(tmp_path, runner, missing):
     env = clean_env()
     env.update(SCAN_TFLINT_CONFIG=str(trusted), SCAN_TFLINT_PLUGIN_DIR=str(tmp_path / 'plugins'),
                SELECTED_RUNNER=runner)
+    # The verifier runs TFLint only from a resolved executable outside the checkout.
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    launcher = tools / ('tflint.cmd' if os.name == 'nt' else 'tflint')
+    launcher.write_text('@exit /b 0\n' if os.name == 'nt' else '#!/bin/sh\nexit 0\n', encoding='utf-8')
+    launcher.chmod(0o755)
+    env['PATH'] = str(tools) + os.pathsep + env.get('PATH', '')
     # The unselected runner must never be probed or executed, including -Full.
     command = ('function trivy { $global:LASTEXITCODE=0; "1.0" }; '
                'function checkov { "1.0" }; function terraform { "1.0" }; '
-               'function tflint { $global:LASTEXITCODE=0 }; '
                'function lefthook { if ($env:SELECTED_RUNNER -ne "lefthook") { throw "wrong runner" }; '
                '$global:LASTEXITCODE=0; "1.0" }; '
                'function pre-commit { if ($env:SELECTED_RUNNER -ne "pre-commit") { throw "wrong runner" }; '
