@@ -133,6 +133,27 @@ the loop on later by re-running setup.)
 
 ## 4. Step 2 — Run one-command setup
 
+Before verification, provision the same trusted external TFLint policy used by the
+normal hooks. Set `SCAN_TFLINT_CONFIG` to an absolute `.hcl` file outside the
+repository and `SCAN_TFLINT_PLUGIN_DIR` to an absolute external plugin cache.
+The policy must not set `plugin_dir`; verification validates both paths and uses
+them for initialization and scanning. A missing or repository-local policy/cache
+fails verification. The destination's `.tflint.hcl` is never used by verification.
+For example, use an approved provider config from a separate release checkout:
+
+```powershell
+$env:SCAN_TFLINT_CONFIG = '/trusted/scanning-release/configs/aws/.tflint.hcl'
+$env:SCAN_TFLINT_PLUGIN_DIR = '/trusted/scanning-cache/tflint'
+```
+```bash
+export SCAN_TFLINT_CONFIG=/trusted/scanning-release/configs/aws/.tflint.hcl
+export SCAN_TFLINT_PLUGIN_DIR=/trusted/scanning-cache/tflint
+```
+
+Both setup entry points resolve external executables to absolute paths before running any
+installation step. A tool that resolves inside the destination repository is
+rejected; install tools outside it and use a trusted PATH.
+
 Run from **inside your consumer repo** (or pass `--repo-path`). The script is **idempotent** —
 re-run it any time (e.g., to add a language or turn on the fix-loop).
 
@@ -170,6 +191,7 @@ python /path/to/auto-code-scanning/scripts/setup-scan-fix.py \
 | `scan-config.yaml` | **Your** config seam (languages, tools, fix_loop) | **Yes** — tune in Step 3 |
 | `hooks/` | Vendored dispatcher + per-tool `.sh`/`.ps1` + `lib/common.*` | No (re-vendored on upgrade) |
 | `lefthook.yml` *(or `.pre-commit-config.yaml`)* | Local runner config | Rarely |
+| `.scanning/configs/` | Provider configs selected by `--cloud-provider` / `-CloudProvider` (AWS when omitted) | Review on upgrade |
 | `scripts/` | `scan-and-fix.*`, `check-fix-allowlist.py`, `validate-scan-config.py`, `render-scan-config.py` | No |
 | `.claude/settings.json` + `.claude/hooks/*` | In-session self-correction bundle (fix-loop) | Keep local |
 | `.github/workflows/code-security-scan.yml` | Thin **scan** caller | Pin tag |
@@ -182,6 +204,13 @@ Setup also:
 - **verifies** (never creates) the `AUTOFIX_TOKEN` / `ANTHROPIC_API_KEY` secrets and prints exact
   creation steps if missing,
 - runs `verify-scanning` to prove the install.
+
+Verification uses the selected runner and tier's shipped template. When running
+it manually, pass `-HooksRunner lefthook` (or `pre-commit`) and `-Tier starter`,
+`standard`, or `strict` to match setup. It requires the installed policy at
+`.scanning/configs/.checkov.yaml` (or under `SCAN_CONFIG_DIR` when set).
+The external `SCAN_TFLINT_CONFIG` and `SCAN_TFLINT_PLUGIN_DIR` requirements
+still apply; the copied provider configs do not replace that external policy.
 
 ---
 
@@ -196,7 +225,7 @@ languages:
   csharp:
     enabled: true
     build:
-      solution: "api/MyApp.slnx"   # your .sln/.slnx; "" = auto-detect the nearest one
+      solution: "MyApp.slnx"       # relative to working_dir; "" = use the first matching solution
       working_dir: "api"           # directory to run `dotnet` from
 ```
 

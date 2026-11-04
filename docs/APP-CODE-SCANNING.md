@@ -17,7 +17,7 @@ languages:
     enabled: true
     file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx"]
     build:
-      solution: "api/App.slnx"   # empty "" => auto-detect nearest .sln/.slnx
+      solution: "App.slnx"       # relative to working_dir; "" => auto-detect first .sln/.slnx match
       working_dir: "api"         # run dotnet from here
     tools:
       semgrep_csharp: { enabled: true, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
@@ -47,7 +47,7 @@ and working directory from `languages.csharp.build.{solution,working_dir}`. They
 a path. This is the generic fix for the old `api/`-path bug, and it is enforced by a test
 (`tests/python/test_dotnet_format_path.py`) that fails if any hook hardcodes a solution.
 
-- `solution: ""` → the hook auto-detects the nearest `.slnx`/`.sln` under `working_dir`.
+- `solution: ""` → the hook uses the first matching `.slnx`/`.sln` under `working_dir`.
 - `working_dir` also scopes which staged files are passed to `--include` (monorepo-friendly).
 
 ---

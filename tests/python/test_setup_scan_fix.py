@@ -13,7 +13,7 @@ import pytest
 
 def test_python_setup_vendors_schemas(tmp_path: Path, monkeypatch):
     """The Python setup copies every schema beside the copied validator."""
-    monkeypatch.setattr(setup_scan_fix, "have", lambda _command: False)
+    monkeypatch.setattr(setup_scan_fix, "resolve_tool", lambda *_args: None)
     monkeypatch.setattr(setup_scan_fix.subprocess, "run", lambda *args, **kwargs: None)
 
     assert setup_scan_fix.main(["setup-scan-fix.py", "--repo-path", str(tmp_path)]) == 0
@@ -28,21 +28,11 @@ def test_python_setup_vendors_schemas(tmp_path: Path, monkeypatch):
         assert name in (setup_scan_fix.PLATFORM_ROOT / 'scripts/setup-scan-fix.ps1').read_text()
 
 
-def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path):
+def test_copied_validator_uses_vendored_schema(tmp_path: Path, repo_root: Path, monkeypatch):
     """The copied validator finds its schema and enforces it in strict mode."""
-    setup = subprocess.run(
-        [
-            sys.executable,
-            str(repo_root / "scripts/setup-scan-fix.py"),
-            "--repo-path",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=300,
-    )
-    assert setup.returncode == 0, setup.stdout + setup.stderr
+    # Schema validation does not depend on installed runners or host verification.
+    monkeypatch.setattr(setup_scan_fix, "resolve_tool", lambda *_args: None)
+    assert setup_scan_fix.main(["setup-scan-fix.py", "--repo-path", str(tmp_path)]) == 0
 
     validator = tmp_path / "scripts/validate-scan-config.py"
     environment = {**os.environ, "STRICT": "1"}
@@ -88,7 +78,7 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
     if implementation == 'ps1' and not pwsh:
         pytest.skip('PowerShell unavailable')
     platform = tmp_path / 'platform'
-    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+    for folder in ('scripts', 'hooks', 'schemas', 'templates', 'configs'):
         shutil.copytree(repo_root / folder, platform / folder,
                         ignore=shutil.ignore_patterns('__pycache__'))
     # Verification and external account commands are deterministic local stubs.
@@ -127,8 +117,9 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
             'import os,runpy,shutil,subprocess,sys\n'
             'run,which=subprocess.run,shutil.which\n'
             'stubs={name:os.path.join(sys.argv[1],name+".py") for name in ("pre-commit","gh")}\n'
+            'stub_paths=set(stubs.values())\n'
             'subprocess.run=lambda cmd,**kw: run([sys.executable,stubs[cmd[0]],*cmd[1:]] '
-            'if cmd[0] in stubs else cmd,**kw)\n'
+            'if cmd[0] in stubs else [sys.executable,*cmd] if cmd[0] in stub_paths else cmd,**kw)\n'
             'shutil.which=lambda cmd: stubs.get(cmd) or which(cmd)\n'
             'sys.argv=sys.argv[2:]\n'
             'sys.path.insert(0,os.path.dirname(sys.argv[0]))\n'
@@ -136,10 +127,11 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
         command = [sys.executable, str(bootstrap), str(bin_dir), str(platform / 'scripts/setup-scan-fix.py'),
                    '--repo-path', str(consumer), '--hooks-runner', 'pre-commit', '--enable-fix-loop']
     else:
+        for name in ('pre-commit', 'gh'):
+            (bin_dir / f'{name}.ps1').write_text(
+                f'& $env:STUB_PY "$env:STUB_BIN/{name}.py" @args\nexit $LASTEXITCODE\n')
         bootstrap = tmp_path / 'setup.ps1'
         bootstrap.write_text(
-            'function pre-commit { & $env:STUB_PY "$env:STUB_BIN/pre-commit.py" @args }\n'
-            'function gh { & $env:STUB_PY "$env:STUB_BIN/gh.py" @args }\n'
             '$setupArgs = @($args | Select-Object -Skip 1)\n'
             '& $args[0] @setupArgs\nexit $LASTEXITCODE\n')
         env.update(STUB_PY=sys.executable, STUB_BIN=str(bin_dir))

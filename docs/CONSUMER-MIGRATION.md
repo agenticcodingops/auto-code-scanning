@@ -321,7 +321,8 @@ Set the values from step 1. An excerpt with example paths:
 languages:
   csharp:
     enabled: true
-    build: { solution: "app/Example.slnx", working_dir: "app" }
+    # C# solution is relative to working_dir (which is relative to the repository root).
+    build: { solution: "Example.slnx", working_dir: "app" }
   typescript:
     enabled: true
     build: { working_dir: "web" }

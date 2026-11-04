@@ -30,7 +30,45 @@ Assert-SafeWritePath (Get-Location).Path
 
 $PlatformRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Assert-SafeWritePath $RepoPath
-$RepoPath = (Resolve-Path $RepoPath).Path
+
+. "$PSScriptRoot/setup-paths.ps1"
+
+$RepoPath = Resolve-SetupRealPath (Resolve-Path $RepoPath).Path
+
+function Resolve-SetupTool {
+    param([string]$Name, [switch]$SkipUnresolved)
+    $command = Get-Command $Name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $command) { return $null }
+    if (-not [IO.Path]::IsPathRooted($command.Source)) { throw "$Name must resolve to an absolute executable path" }
+    $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+        [StringComparison]::OrdinalIgnoreCase
+    } else { [StringComparison]::Ordinal }
+    $boundary = $RepoPath.TrimEnd('/', '\')
+    $path = [IO.Path]::GetFullPath($command.Source)
+    if ($path.Equals($boundary, $comparison) -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+        throw "$Name must resolve outside the destination repository"
+    }
+    try { $path = Resolve-SetupRealPath $path }
+    catch {
+        # Store application aliases expose no link target. Use the interpreter
+        # already running this script rather than executing an unresolved alias.
+        if ($Name -eq 'pwsh' -and $PSVersionTable.PSEdition -eq 'Core') {
+            $path = Resolve-SetupRealPath ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+        } elseif ($SkipUnresolved) {
+            return $null
+        } else { throw }
+    }
+    if ($path.Equals($boundary, $comparison) -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+        throw "$Name must resolve outside the destination repository"
+    }
+    return $path
+}
+
+# Resolve every executable before probes, writes or directory changes.
+$setupTools = @{}
+foreach ($name in @('lefthook', 'pre-commit', 'gh', 'pwsh')) {
+    $setupTools[$name] = Resolve-SetupTool $name
+}
 
 function Info  { param($m) Write-Host "[INFO] $m" -ForegroundColor White }
 function Ok    { param($m) Write-Host "[OK]   $m" -ForegroundColor Green }
@@ -50,7 +88,8 @@ function Install-Step {
 }
 function Find-Py {
     foreach ($c in @('python', 'python3', 'py')) {
-        if (Get-Command $c -ErrorAction SilentlyContinue) { try { & $c -c "" 2>$null; if ($LASTEXITCODE -eq 0) { return $c } } catch {} }
+        $path = Resolve-SetupTool $c -SkipUnresolved
+        if ($path) { try { & $path -c "" 2>$null; if ($LASTEXITCODE -eq 0) { return $path } } catch {} }
     }
     return $null
 }
@@ -109,11 +148,19 @@ if ($RepoPath -ne $PlatformRoot) {
 # ---------------------------------------------------------------------------
 # 3) Local runner
 # ---------------------------------------------------------------------------
+Step 'Provider configuration (.scanning/configs/)'
+$provider = if ($CloudProvider) { $CloudProvider } else { 'aws' }
+Get-ChildItem -LiteralPath (Join-Path $PlatformRoot "configs/$provider") -File -Force | ForEach-Object {
+    Copy-IfNewer $_.FullName (Join-Path $RepoPath ".scanning/configs/$($_.Name)")
+}
+
 Step "Local runner: $HooksRunner"
 if ($HooksRunner -eq "lefthook") {
     Copy-IfNewer (Join-Path $PlatformRoot "templates/lefthook/lefthook.yml") (Join-Path $RepoPath "lefthook.yml")
-    if (Get-Command lefthook -ErrorAction SilentlyContinue) {
-        Push-Location $RepoPath; try { lefthook install | Out-Null; Ok "lefthook installed" } finally { Pop-Location }
+    if ($setupTools['lefthook']) {
+        Push-Location $RepoPath
+        try { Install-Step 'lefthook installation' { & $setupTools['lefthook'] install | Out-Null } }
+        finally { Pop-Location }
     } else {
         Warn "lefthook not on PATH. Install: 'choco install lefthook' or 'go install github.com/evilmartians/lefthook@latest', then 'lefthook install'"
     }
@@ -121,12 +168,12 @@ if ($HooksRunner -eq "lefthook") {
     $pcDest = Join-Path $RepoPath ".pre-commit-config.yaml"
     $pcSrc = Join-Path $PlatformRoot "templates/$Tier/pre-commit-config.yaml"
     if ((Test-Path $pcSrc) -and -not (Test-Path $pcDest)) { Copy-IfNewer $pcSrc $pcDest }
-    if (Get-Command pre-commit -ErrorAction SilentlyContinue) {
+    if ($setupTools['pre-commit']) {
         Push-Location $RepoPath
         try {
             Install-Step 'pre-commit hook installation' {
                 if (-not $py) { throw 'Python is required to install the pre-commit hook' }
-                pre-commit install
+                & $setupTools['pre-commit'] install
             }
             Install-Step 'push transaction adapter installation' {
                 if (-not $py) { throw 'Python is required to install the push transaction adapter' }
@@ -166,14 +213,14 @@ Ok "Caller workflows copied (review the immutable commit pins)"
 # ---------------------------------------------------------------------------
 if ($EnableFixLoop) {
     Step "Fix-loop: labels + secret verification"
-    if (Get-Command gh -ErrorAction SilentlyContinue) {
+    if ($setupTools['gh']) {
         Push-Location $RepoPath
         try {
-            try { gh label create "ai-autofix" --color 1D76DB --description "Opt this PR into the autonomous fix-loop" --force | Out-Null; Ok "label ai-autofix" } catch { Warn "could not create ai-autofix label: $_" }
-            try { gh label create "needs-human-review" --color B60205 --description "Autonomous fix loop stopped; needs a human" --force | Out-Null; Ok "label needs-human-review" } catch { Warn "could not create needs-human-review label: $_" }
+            try { & $setupTools['gh'] label create "ai-autofix" --color 1D76DB --description "Opt this PR into the autonomous fix-loop" --force | Out-Null; Ok "label ai-autofix" } catch { Warn "could not create ai-autofix label: $_" }
+            try { & $setupTools['gh'] label create "needs-human-review" --color B60205 --description "Autonomous fix loop stopped; needs a human" --force | Out-Null; Ok "label needs-human-review" } catch { Warn "could not create needs-human-review label: $_" }
 
             $secrets = @()
-            try { $secrets = (gh secret list --json name 2>$null | ConvertFrom-Json).name } catch { $secrets = (gh secret list 2>$null | ForEach-Object { ($_ -split '\s+')[0] }) }
+            try { $secrets = (& $setupTools['gh'] secret list --json name 2>$null | ConvertFrom-Json).name } catch { $secrets = (& $setupTools['gh'] secret list 2>$null | ForEach-Object { ($_ -split '\s+')[0] }) }
             foreach ($need in @("AUTOFIX_TOKEN", "ANTHROPIC_API_KEY")) {
                 if ($secrets -contains $need) { Ok "secret $need present" }
                 else {
@@ -197,10 +244,14 @@ if ($EnableFixLoop) {
 # ---------------------------------------------------------------------------
 Step "Verify install"
 $verify = Join-Path $PlatformRoot "scripts/verify-scanning.ps1"
-if (Test-Path $verify) {
+if ((Test-Path $verify) -and $setupTools['pwsh']) {
     Push-Location $RepoPath
-    try { & pwsh -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | Select-Object -First 30 } catch { Warn "verify-scanning reported issues: $_" } finally { Pop-Location }
-} else { Info "verify-scanning.ps1 not found; skipping" }
+    try {
+        Install-Step 'scan verification' {
+            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify -HooksRunner $HooksRunner -Tier $Tier 2>&1 | Select-Object -First 30 -Wait
+        }
+    } finally { Pop-Location }
+} else { Info "Verification needs verify-scanning.ps1 and an external pwsh; skipping" }
 
 if ($script:FailedSteps.Count) {
     Warn "Setup finished with failed steps: $($script:FailedSteps -join ', ')"

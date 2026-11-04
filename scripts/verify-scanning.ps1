@@ -13,13 +13,21 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(HelpMessage = "Run full test including pre-commit hooks")]
+    [Parameter(HelpMessage = "Run full test including the selected runner's hooks")]
     [switch]$Full = $false,
+
+    [ValidateSet('lefthook', 'pre-commit')]
+    [string]$HooksRunner = 'pre-commit',
+
+    [ValidateSet('starter', 'standard', 'strict')]
+    [string]$Tier = 'standard',
 
     [Parameter(HelpMessage = "Show verbose output")]
     [switch]$ShowDetails = $false
 )
 
+. "$PSScriptRoot/../hooks/lib/common.ps1"
+. "$PSScriptRoot/setup-paths.ps1"
 $ErrorActionPreference = "Continue"
 
 # ============================================================================
@@ -68,6 +76,34 @@ $Script:PassedChecks = 0
 $Script:FailedChecks = 0
 $Script:Warnings = 0
 
+function Resolve-VerifiedTool {
+    # Resolve a tool by name and refuse one that lives inside the scanned or consumer
+    # checkout, so a repository cannot shadow it on PATH. Check the canonical identity,
+    # but return the original absolute path so virtual environments keep their packages.
+    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
+    $path = (Get-Command $Name -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    if (-not [IO.Path]::IsPathRooted($path)) { throw "$Label must resolve to an absolute executable path" }
+    $target = Resolve-SetupRealPath $path
+    $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
+    $repoRoot = if ($snapshot) { (Get-Location).Path } else {
+        Assert-GitAvailable
+        git rev-parse --show-toplevel 2>$null
+    }
+    if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
+    $roots = @($repoRoot)
+    if ($snapshot -and $env:SCAN_CONSUMER_ROOT) { $roots += $env:SCAN_CONSUMER_ROOT }
+    $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+        [StringComparison]::OrdinalIgnoreCase
+    } else { [StringComparison]::Ordinal }
+    foreach ($root in $roots) {
+        $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
+        if ($target.Equals($boundary, $comparison) -or $target.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+            throw "$Label must resolve outside the scanned and consumer checkouts"
+        }
+    }
+    return $path
+}
+
 function Add-CheckResult {
     param(
         [bool]$Passed,
@@ -105,18 +141,26 @@ Write-Host ""
 
 Write-Header "1. Checking Required Tools"
 
+$runnerConfig = if ($HooksRunner -eq 'lefthook') { 'lefthook.yml' } else { '.pre-commit-config.yaml' }
+$runnerRunArgs = if ($HooksRunner -eq 'lefthook') { @('run', 'pre-commit', '--all-files') } else { @('run', '--all-files') }
+
 $tools = @(
     @{Name = "Trivy"; Command = "trivy"; Args = "--version"; Description = "IaC security scanner" },
     @{Name = "Checkov"; Command = "checkov"; Args = "--version"; Description = "Policy-as-code scanner" },
     @{Name = "tflint"; Command = "tflint"; Args = "--version"; Description = "Terraform linter" },
     @{Name = "Terraform"; Command = "terraform"; Args = "--version"; Description = "Infrastructure as Code" },
-    @{Name = "pre-commit"; Command = "pre-commit"; Args = "--version"; Description = "Git hook framework" },
+    @{Name = $HooksRunner; Command = $HooksRunner; Args = "--version"; Description = "Git hook framework" },
     @{Name = "Python"; Command = "python"; Args = "--version"; Description = "Required for Checkov" },
     @{Name = "Git"; Command = "git"; Args = "--version"; Description = "Version control" }
 )
 
 foreach ($tool in $tools) {
     if (Test-CommandExists $tool.Command) {
+        if ($tool.Command -eq 'tflint') {
+            # Even informational invocations must stay behind policy validation.
+            Add-CheckResult -Passed $true -Message 'tflint found; trusted policy verification follows'
+            continue
+        }
         try {
             $version = & $tool.Command $tool.Args 2>&1 | Select-Object -First 1
             $version = ($version -replace "^[^0-9]*", "" -replace "\s.*$", "").Trim()
@@ -139,15 +183,15 @@ foreach ($tool in $tools) {
 Write-Header "2. Checking Configuration Files"
 
 $configFiles = @(
-    @{Path = ".pre-commit-config.yaml"; Name = "Pre-commit configuration"; Required = $true },
-    @{Path = ".tflint.hcl"; Name = "tflint configuration"; Required = $true },
-    @{Path = ".checkov.yaml"; Name = "Checkov configuration"; Required = $true },
+    @{Path = $runnerConfig; Name = "$HooksRunner configuration"; Required = $true },
+    @{Path = $env:SCAN_TFLINT_CONFIG; Name = "Trusted external tflint configuration"; Required = $true },
+    @{Path = (Join-Path $(if ($env:SCAN_CONFIG_DIR) { $env:SCAN_CONFIG_DIR } else { '.scanning/configs' }) '.checkov.yaml'); Name = "Checkov configuration"; Required = $true },
     @{Path = ".trivyignore"; Name = "Trivy ignore file"; Required = $false }
 )
 
 foreach ($config in $configFiles) {
-    if (Test-Path $config.Path) {
-        $size = (Get-Item $config.Path).Length
+    if ($config.Path -and (Test-Path -LiteralPath $config.Path -PathType Leaf)) {
+        $size = (Get-Item -LiteralPath $config.Path -Force).Length
         Add-CheckResult -Passed $true -Message "$($config.Name) exists ($size bytes)"
     }
     else {
@@ -164,26 +208,30 @@ foreach ($config in $configFiles) {
 # 3. CHECK PRE-COMMIT HOOKS
 # ============================================================================
 
-Write-Header "3. Checking Pre-commit Hooks"
+Write-Header "3. Checking $HooksRunner Hooks"
 
 if (Test-Path ".git") {
     Add-CheckResult -Passed $true -Message "Git repository detected"
 
-    if (Test-Path ".git/hooks/pre-commit") {
-        $hookContent = Get-Content ".git/hooks/pre-commit" -Raw -ErrorAction SilentlyContinue
-        if ($hookContent -match "pre-commit") {
-            Add-CheckResult -Passed $true -Message "Pre-commit hooks installed in .git/hooks/"
+    $installedHooks = @('pre-commit', 'pre-push')
+    foreach ($hookName in $installedHooks) {
+        $hookPath = git rev-parse --git-path "hooks/$hookName"
+        $hookContent = if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $hookPath -PathType Leaf)) {
+            Get-Content -LiteralPath $hookPath -Raw -ErrorAction SilentlyContinue
+        } else { '' }
+        $matchesRunner = if ($HooksRunner -eq 'pre-commit' -and $hookName -eq 'pre-push') {
+            $hookContent -match '(?m)^# scan push transaction adapter\s*$' -and $hookContent.Contains('--pre-commit-runner')
+        } else { $hookContent -match [regex]::Escape($HooksRunner) }
+        if ($matchesRunner) {
+            Add-CheckResult -Passed $true -Message "$HooksRunner $hookName hook installed"
         }
         else {
-            Add-CheckResult -Passed $false -Message "Pre-commit hook file exists but may not be configured"
+            Add-CheckResult -Passed $false -Message "$HooksRunner $hookName hook NOT installed - run: $HooksRunner install"
         }
-    }
-    else {
-        Add-CheckResult -Passed $false -Message "Pre-commit hooks NOT installed - run: pre-commit install"
     }
 }
 else {
-    Add-CheckResult -Passed $true -Warning -Message "Not a Git repository - pre-commit hooks not applicable"
+    Add-CheckResult -Passed $true -Warning -Message "Not a Git repository - $HooksRunner hooks not applicable"
 }
 
 # ============================================================================
@@ -192,28 +240,21 @@ else {
 
 Write-Header "4. Checking Security Hooks in Configuration"
 
-if (Test-Path ".pre-commit-config.yaml") {
-    $configContent = Get-Content ".pre-commit-config.yaml" -Raw
-
-    $securityHooks = @(
-        @{Pattern = "terraform_trivy"; Name = "Trivy IaC scanner" },
-        @{Pattern = "terraform_checkov"; Name = "Checkov policy scanner" },
-        @{Pattern = "terraform_tflint"; Name = "tflint linter" },
-        @{Pattern = "trivy-secrets|trivy.*secret"; Name = "Trivy secret scanner" },
-        @{Pattern = "detect-private-key"; Name = "Private key detection" }
-    )
-
-    foreach ($hook in $securityHooks) {
-        if ($configContent -match $hook.Pattern) {
-            Add-CheckResult -Passed $true -Message "$($hook.Name) configured"
-        }
-        else {
-            Add-CheckResult -Passed $false -Message "$($hook.Name) NOT configured in .pre-commit-config.yaml"
-        }
+if (Test-Path -LiteralPath $runnerConfig -PathType Leaf) {
+    try {
+        # Parse YAML with an external interpreter; isolated mode excludes the
+        # consumer working directory from Python's import search path.
+        $python = Resolve-VerifiedTool -Name python -Label Python
+        $hookResult = & $python -I "$PSScriptRoot/verify-setup-hooks.py" $HooksRunner $Tier $runnerConfig 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ($hookResult -join "`n") }
+        Add-CheckResult -Passed $true -Message "$HooksRunner $Tier template hooks configured"
+    }
+    catch {
+        Add-CheckResult -Passed $false -Message "Cannot verify template hooks: $_"
     }
 }
 else {
-    Add-CheckResult -Passed $false -Message "Cannot check hooks - .pre-commit-config.yaml not found"
+    Add-CheckResult -Passed $false -Message "Cannot check hooks - $runnerConfig not found"
 }
 
 # ============================================================================
@@ -250,18 +291,26 @@ else {
 Write-Header "6. Testing tflint"
 
 if (Test-CommandExists "tflint") {
-    if (Test-Path ".tflint.hcl") {
-        Write-Info "Initializing tflint plugins..."
-        try {
-            tflint --init 2>&1 | Out-Null
-            Add-CheckResult -Passed $true -Message "tflint initialized with plugins"
+    try {
+        if (-not $env:SCAN_TFLINT_CONFIG -or -not (Test-Path -LiteralPath $env:SCAN_TFLINT_CONFIG -PathType Leaf)) {
+            throw 'Set SCAN_TFLINT_CONFIG to a trusted external HCL file'
         }
-        catch {
-            Add-CheckResult -Passed $true -Warning -Message "tflint init had warnings (plugins may download on first use)"
-        }
+        Assert-TrustedTflintConfig $env:SCAN_TFLINT_CONFIG
+        if (-not $env:SCAN_TFLINT_PLUGIN_DIR) { throw 'Set SCAN_TFLINT_PLUGIN_DIR to an external plugin cache' }
+        Assert-ExternalPath $env:SCAN_TFLINT_PLUGIN_DIR
+        Assert-SafeWritePath $env:SCAN_TFLINT_PLUGIN_DIR
+        $env:TFLINT_PLUGIN_DIR = Resolve-ExternalRealPath $env:SCAN_TFLINT_PLUGIN_DIR
+        $trustedConfig = Resolve-ExternalRealPath $env:SCAN_TFLINT_CONFIG
+        $tflint = Resolve-VerifiedTool -Name tflint -Label TFLint
+        Write-Info "Initializing tflint with trusted external policy..."
+        & $tflint --init --config=$trustedConfig 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'tflint initialization failed' }
+        & $tflint --config=$trustedConfig 2>&1 | Out-Null
+        if ($LASTEXITCODE -notin @(0, 2)) { throw 'tflint verification failed' }
+        Add-CheckResult -Passed $true -Message "tflint initialized and verified with trusted external policy"
     }
-    else {
-        Add-CheckResult -Passed $true -Warning -Message "tflint available but .tflint.hcl not found"
+    catch {
+        Add-CheckResult -Passed $false -Message "Cannot verify tflint: $_"
     }
 }
 else {
@@ -273,24 +322,24 @@ else {
 # ============================================================================
 
 if ($Full) {
-    Write-Header "7. Running Full Pre-commit Test"
-    Write-Info "Running all pre-commit hooks (this may take a minute)..."
+    Write-Header "7. Running Full $HooksRunner Test"
+    Write-Info "Running all $HooksRunner hooks (this may take a minute)..."
 
     try {
-        $precommitOutput = pre-commit run --all-files 2>&1
+        $precommitOutput = & $HooksRunner @runnerRunArgs 2>&1
         $precommitExitCode = $LASTEXITCODE
 
         if ($precommitExitCode -eq 0) {
-            Add-CheckResult -Passed $true -Message "All pre-commit hooks passed"
+            Add-CheckResult -Passed $true -Message "All $HooksRunner hooks passed"
         }
         else {
-            Add-CheckResult -Passed $true -Warning -Message "Some pre-commit hooks had findings (review output below)"
+            Add-CheckResult -Passed $true -Warning -Message "Some $HooksRunner hooks had findings (review output below)"
             Write-Host ""
             Write-Host $precommitOutput -ForegroundColor Yellow
         }
     }
     catch {
-        Add-CheckResult -Passed $false -Message "Pre-commit run failed: $_"
+        Add-CheckResult -Passed $false -Message "$HooksRunner run failed: $_"
     }
 }
 
@@ -316,17 +365,17 @@ Write-Host ""
 if ($Script:FailedChecks -gt 0) {
     Write-Host "NEXT STEPS:" -ForegroundColor Yellow
     Write-Host "  1. Run setup script: .\scripts\setup-local-scanning.ps1" -ForegroundColor White
-    Write-Host "  2. Install pre-commit hooks: pre-commit install" -ForegroundColor White
+    Write-Host "  2. Install hooks: $HooksRunner install" -ForegroundColor White
     Write-Host "  3. Run this script again to verify" -ForegroundColor White
 }
 else {
     Write-Host "All security scanning tools are installed and configured!" -ForegroundColor Green
     Write-Host ""
     Write-Host "QUICK COMMANDS:" -ForegroundColor Cyan
-    Write-Host "  pre-commit run --all-files  - Run all hooks manually" -ForegroundColor White
+    Write-Host "  $HooksRunner $($runnerRunArgs -join ' ')  - Run all hooks manually" -ForegroundColor White
     Write-Host "  trivy config .              - Scan Terraform for issues" -ForegroundColor White
     Write-Host "  checkov -d .                - Run Checkov policies" -ForegroundColor White
-    Write-Host "  tflint --recursive          - Lint Terraform files" -ForegroundColor White
+    Write-Host '  tflint --recursive --config="$env:SCAN_TFLINT_CONFIG" - Lint with trusted policy' -ForegroundColor White
 }
 
 Write-Host ""

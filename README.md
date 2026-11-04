@@ -87,7 +87,8 @@ global:
   blocking_severities: [CRITICAL, HIGH]
 languages:
   terraform:  { enabled: true,  tools: { trivy: {...}, checkov: {...}, tflint: {...} } }
-  csharp:     { enabled: true,  build: { solution: "api/App.slnx", working_dir: "api" },
+  # C# solution is relative to working_dir (which is relative to the repository root).
+  csharp:     { enabled: true,  build: { solution: "App.slnx", working_dir: "api" },
                 tools: { semgrep_csharp: {...}, dotnet_format: {...}, dotnet_build: {...} } }
   typescript: { enabled: true,  tools: { eslint: {...}, prettier: {...}, semgrep_typescript: {...} } }
 ci:        { sarif: { category_prefix: "scan-" } }   # distinct SARIF categories per tool

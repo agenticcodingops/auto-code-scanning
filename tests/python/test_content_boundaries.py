@@ -270,7 +270,7 @@ def test_onboarding_allows_unrelated_dependency_symlink(tmp_path, monkeypatch):
     target=tmp_path/'dependency.js'; target.write_text('// installed dependency\n')
     folder=tmp_path/'node_modules/.bin'; folder.mkdir(parents=True)
     link_or_skip(target,folder/'tool')
-    monkeypatch.setattr(setup_scan_fix,'have',lambda _command: False)
+    monkeypatch.setattr(setup_scan_fix,'resolve_tool',lambda *_args: None)
     monkeypatch.setattr(setup_scan_fix.subprocess,'run',lambda *a, **kw: None)
     assert setup_scan_fix.main(['setup-scan-fix.py','--repo-path',str(tmp_path)])==0
     assert (tmp_path/'hooks/lib/common.sh').is_file()
