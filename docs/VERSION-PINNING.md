@@ -340,8 +340,10 @@ To bump a scanner, change it in one release:
    image you want, and pin that tag's commit SHA.
 2. Trivy: change `TRIVY_VERSION` and `TRIVY_SHA256` together on every `Install Trivy` step in
    `.github/workflows/` (`grep -rl TRIVY_SHA256 .github/workflows` lists them;
-   `tests/python/test_workflow_pins.py` fails if any pair differs), taking the SHA-256 of
-   `trivy_<version>_Linux-64bit.tar.gz` from that release's `trivy_<version>_checksums.txt`.
+   `tests/python/test_workflow_pins.py` fails if any pair differs), and the `trivy` entry in
+   `scripts/scanner-downloads.json` in the same change: the test also requires the workflows'
+   pair to match that lock's `linux-amd64` version and SHA-256, taken from the release's
+   `trivy_<version>_checksums.txt`.
 3. TFLint: change `tflint_version:`, and replace `checksums:` with the SHA-256 of
    `tflint_linux_amd64.zip` and `tflint_linux_arm64.zip` from that release's
    `checksums.txt`.

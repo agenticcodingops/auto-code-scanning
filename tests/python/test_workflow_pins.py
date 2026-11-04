@@ -5,6 +5,7 @@ a digest, and the optional Snyk job installs an exact CLI version. Until v2.3.2 
 token) and `semgrep.yml` were exceptions, the semgrep image had no tag or digest, and the Snyk job installed whatever
 npm called latest.
 """
+import json
 import re
 from pathlib import Path
 
@@ -113,3 +114,6 @@ def test_trivy_comes_from_the_verified_release():
                 assert "sha256sum -c" in step.get("run", ""), path.name
                 installs.add((env["TRIVY_VERSION"], env["TRIVY_SHA256"]))
     assert len(installs) == 1, installs
+    # The workflows and the local installer share one lock: scripts/scanner-downloads.json.
+    lock = json.loads((REPO_ROOT / "scripts" / "scanner-downloads.json").read_text(encoding="utf-8"))["trivy"]
+    assert installs == {(lock["version"], lock["platforms"]["linux-amd64"]["sha256"])}
