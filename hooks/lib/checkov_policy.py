@@ -24,6 +24,8 @@ def passive_policy(source=None):
     # output, so drop it rather than rejecting every existing consumer config.
     if isinstance(data.get('output-file-path'), str):
         data.pop('output-file-path')
+    if isinstance(data.get('output'), str):
+        data['output'] = [data['output']]
     for key, value in data.items():
         if key in booleans and type(value) is bool:
             if key == 'download-external-modules' and value:

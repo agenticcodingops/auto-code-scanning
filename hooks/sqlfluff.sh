@@ -25,6 +25,15 @@ for file in "${files[@]}"; do
     configured=0
     while :; do
         if [[ -f "$directory/.sqlfluff" ]]; then configured=1; break; fi
+        for config in setup.cfg tox.ini pep8.ini; do
+            if [[ -f "$directory/$config" ]] && grep -Eq '^[[:space:]]*\[sqlfluff(:|\])' "$directory/$config"; then
+                configured=1
+            fi
+        done
+        if [[ -f "$directory/pyproject.toml" ]] && grep -Eq '^[[:space:]]*\[tool\.sqlfluff(\.|\])' "$directory/pyproject.toml"; then
+            configured=1
+        fi
+        [[ "$configured" == 0 ]] || break
         [[ "$directory" != . ]] || break
         directory="$(dirname -- "$directory")"
     done
@@ -33,8 +42,10 @@ done
 
 start_timer
 hook_log "Linting... (${#files[@]} SQL files, project dialects or ansi default)"
-output=''
+results="$(mktemp -d)"
+trap 'rm -rf -- "$results"' EXIT
 exit_code=0
+tool_errors=()
 for group in configured default; do
     sqlfluff_cmd=(sqlfluff lint)
     if [[ "$group" == configured ]]; then
@@ -48,29 +59,31 @@ for group in configured default; do
     [[ $# -gt 0 ]] && sqlfluff_cmd+=("$@")
     sqlfluff_cmd+=(-- "${selected_files[@]}")
     set +e
-    group_output="$("${sqlfluff_cmd[@]}" 2>&1)"
+    "${sqlfluff_cmd[@]}" > "$results/$group.output" 2>&1
     group_exit=$?
     set -e
-    output+="${group_output}"$'\n'
+    printf '%s\n' "$group_exit" > "$results/$group.exit"
     if [[ $group_exit -eq 1 ]]; then
         exit_code=1
     elif [[ $group_exit -ne 0 ]]; then
-        handle_exit_code "$group_exit"
+        tool_errors+=("$group_exit")
     fi
 done
 
 duration_ms="$(stop_timer)"
+py="$(find_python)" || { hook_error 'Python is required for SQL lint reports'; exit 1; }
+report="$("$py" -I "$SCRIPT_DIR/lib/sqlfluff_report.py" "$results" "$duration_ms")"
+write_scan_json "$report"
+for group in configured default; do
+    [[ ! -f "$results/$group.output" ]] || cat -- "$results/$group.output"
+done
 
-if [[ ${exit_code} -eq 0 ]]; then
-    hook_log "PASS: SQLFluff clean (${duration_ms}ms)"
-    write_scan_json "$(build_pass_json "sqlfluff" "." "${duration_ms}")"
-    exit 0
-elif [[ ${exit_code} -eq 1 ]]; then
-    echo "${output}"
+if [[ ${exit_code} -eq 1 ]]; then
     hook_log "FAIL: SQLFluff lint issues"
-    write_scan_json "$(build_findings_json "sqlfluff" "." "${duration_ms}" "[]" 0 0 1 0)"
-    exit 1
-else
-    handle_exit_code ${exit_code}
-    exit 0
+elif [[ ${#tool_errors[@]} -eq 0 ]]; then
+    hook_log "PASS: SQLFluff clean (${duration_ms}ms)"
 fi
+for code in "${tool_errors[@]}"; do
+    if ! handle_exit_code "$code"; then exit_code=1; fi
+done
+exit "$exit_code"

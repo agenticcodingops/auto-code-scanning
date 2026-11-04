@@ -292,15 +292,17 @@ def test_hook_runners_load_without_pyyaml(monkeypatch):
     load_runner('pre_commit_no_yaml', 'pre-commit.py')
 
 
-@pytest.mark.parametrize('ruleset', ['rules/custom.yml', 'p/csharp'])
+@pytest.mark.parametrize('ruleset', ['rules/custom.yml', 'absolute', 'absolute-missing', 'p/csharp'])
 def test_unstaged_relative_ruleset_fails_clearly(consumer, monkeypatch, ruleset):
     # A local rule file the snapshot cannot see is an error; a registry reference is not.
     rules = consumer / 'rules/custom.yml'
     rules.parent.mkdir()
     rules.write_text('worktree only\n', encoding='utf-8')
+    if ruleset == 'absolute-missing':
+        rules.unlink()
     (consumer / 'App.cs').write_text('// source\n', encoding='utf-8')
     git(consumer, 'add', 'App.cs')
-    monkeypatch.setenv('SEMGREP_RULESET_CSHARP', ruleset)
+    monkeypatch.setenv('SEMGREP_RULESET_CSHARP', str(rules) if ruleset.startswith('absolute') else ruleset)
     runner = load_runner('unstaged_rules_snapshot', 'pre-commit.py')
     monkeypatch.setattr(runner.push, 'select_shell', lambda _: ('sh', 'scanner-shell'))
     original = subprocess.run
@@ -432,25 +434,31 @@ def test_push_launcher_isolates_imports_before_transaction_validation(consumer, 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('root_config', [False, True])
-def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package, passive_probe, shell, root_config):
+@pytest.mark.parametrize('config_name', ['.sqlfluff', 'pyproject.toml', 'setup.cfg', 'tox.ini', 'pep8.ini'])
+def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package, passive_probe, shell, root_config, config_name):
+    def config(dialect):
+        return (f'[tool.sqlfluff.core]\ndialect = "{dialect}"\n' if config_name == 'pyproject.toml'
+                else f'[sqlfluff]\ndialect = {dialect}\n')
     staged = {'plain.sql': 'select 1;\n', 'sql/models/query.sql': 'select 2;\n',
               'sql/generated/query.sql': 'select 3;\n',
-              'sql/.sqlfluff': '[sqlfluff]\ndialect = postgres\n',
-              'sql/models/.sqlfluff': '[sqlfluff]\ndialect = tsql\n',
+              f'sql/{config_name}': config('postgres'),
+              f'sql/models/{config_name}': config('tsql'),
               '.sqlfluffignore': 'sql/generated/\n', 'sql/.sqlfluffignore': 'generated/\n'}
     if root_config:
-        staged['.sqlfluff'] = '[sqlfluff]\ndialect = sqlite\n'
+        staged[config_name] = config('sqlite')
+    elif config_name != '.sqlfluff':
+        staged[config_name] = '[unrelated]\nvalue = "other tool"\n'
     for name, content in staged.items():
         target = consumer / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding='utf-8')
     # Unrelated config and executable project inputs must not expand the snapshot.
     (consumer / 'other').mkdir()
-    (consumer / 'other/.sqlfluff').write_text('[sqlfluff]\ndialect = mysql\n', encoding='utf-8')
+    (consumer / f'other/{config_name}').write_text(config('mysql'), encoding='utf-8')
     (consumer / 'setup.py').write_text('raise SystemExit("not a scanner input")\n', encoding='utf-8')
     git(consumer, 'add', '.')
     for name in staged:
-        if '.sqlfluff' in name:
+        if not name.endswith('.sql'):
             (consumer / name).write_text('unstaged policy\n', encoding='utf-8')
     env, trace = passive_probe
     result = subprocess.run(wrapper_command(package, shell, 'sqlfluff'), cwd=consumer, env=env,
@@ -462,7 +470,7 @@ def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package
     for call in calls:
         for name, content in staged.items():
             assert call['files'][name] == content
-        assert 'other/.sqlfluff' not in call['files']
+        assert f'other/{config_name}' not in call['files']
         assert 'setup.py' not in call['files']
         args = call['args']
         selected = args[args.index('--') + 1:]
@@ -507,3 +515,112 @@ def test_legacy_push_consumes_only_remote_pair(consumer, package, scanner, shell
         assert result.returncode != 0, result.stdout + result.stderr
         assert 'Checkov extra arguments are disabled' in result.stdout + result.stderr
         assert not trace.exists()
+
+
+@pytest.mark.parametrize('output', ['cli', 'json', 'sarif', ['cli', 'json']])
+def test_passive_policy_accepts_valid_output_and_removes_it(consumer, output):
+    import yaml
+    from checkov_policy import passive_policy
+    path = consumer / 'policy.yaml'
+    path.write_text(yaml.safe_dump({'output': output}), encoding='utf-8')
+    assert passive_policy(path) == {'download-external-modules': False, 'skip-download': True}
+
+
+@pytest.mark.parametrize('output', ['unsupported', ['cli', 'unsupported'], 1, {'cli': True}])
+def test_passive_policy_rejects_invalid_output(consumer, output):
+    import yaml
+    from checkov_policy import passive_policy
+    path = consumer / 'policy.yaml'
+    path.write_text(yaml.safe_dump({'output': output}), encoding='utf-8')
+    with pytest.raises(ValueError, match='output'):
+        passive_policy(path)
+
+
+@pytest.mark.parametrize('config_name', ['pyproject.toml', 'setup.cfg', 'tox.ini', 'pep8.ini'])
+@pytest.mark.parametrize('mode', ['120000', '160000'])
+def test_sql_snapshot_rejects_nonregular_config(consumer, monkeypatch, config_name, mode):
+    (consumer / 'query.sql').write_text('select 1;\n', encoding='utf-8')
+    git(consumer, 'add', 'query.sql')
+    if mode == '120000':
+        oid = subprocess.check_output(['git', 'hash-object', '-w', '--stdin'], cwd=consumer, input=b'outside').decode().strip()
+    else:
+        tree = git(consumer, 'write-tree')
+        oid = subprocess.check_output(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
+                                       'commit-tree', tree], cwd=consumer, input=b'fixture\n').decode().strip()
+    git(consumer, 'update-index', '--add', '--cacheinfo', f'{mode},{oid},{config_name}')
+    runner = load_runner('sql_config_modes', 'pre-commit.py')
+    monkeypatch.setattr(runner.push, 'select_shell', lambda _: ('sh', 'unused'))
+    with pytest.raises(ValueError, match='symlink or submodule'):
+        runner.scan('sqlfluff', [], 'sh')
+
+
+@pytest.mark.parametrize('hook', ['checkov', 'checkov-strict'])
+@pytest.mark.parametrize('tool_exit', [0, 1, 2])
+def test_powershell_prepares_one_policy_and_cleans_it_on_all_exits(consumer, package, scanner, hook, tool_exit):
+    for folder in ('one', 'two'):
+        (consumer / folder).mkdir()
+        (consumer / folder / 'main.tf').write_text('# selected\n', encoding='utf-8')
+    manifest = consumer.parent / 'paths'
+    manifest.write_bytes(b'one/main.tf\0two/main.tf\0')
+    helper = package / 'hooks/lib/checkov_policy.py'
+    helper.write_text(helper.read_text(encoding='utf-8') + '''
+    with open(__import__('os').environ['PREPARATION_TRACE'], 'a') as trace:
+        trace.write('prepared\\n')
+''', encoding='utf-8')
+    # Record the exact policy path and contents for every scanner call.
+    env, trace = scanner
+    binary = Path(env['PATH'].split(os.pathsep)[0])
+    mock = binary / 'mock.py'
+    mock.write_text(mock.read_text(encoding='utf-8').replace(
+        "folder=pathlib.Path.cwd()", "folder=pathlib.Path.cwd()\n"
+        "with open(os.environ['POLICY_CALLS'], 'a') as f:\n"
+        " p=pathlib.Path(sys.argv[sys.argv.index('--config-file')+1])\n"
+        " f.write(json.dumps({'path':str(p),'content':p.read_text()})+'\\n')"), encoding='utf-8')
+    preparations, calls = consumer.parent / 'preparations', consumer.parent / 'policy-calls'
+    env.update(SCAN_PUSH_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest), SCANNER_EXIT=str(tool_exit),
+               PREPARATION_TRACE=str(preparations), POLICY_CALLS=str(calls))
+    result = subprocess.run(wrapper_command(package, 'ps1', hook), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == (0 if tool_exit == 0 else 1), result.stdout + result.stderr
+    assert preparations.read_text().splitlines() == ['prepared']
+    seen = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert len(seen) == (1 if tool_exit == 2 else 2)
+    assert len({row['path'] for row in seen}) == 1
+    assert all('download-external-modules: false' in row['content'] for row in seen)
+    assert not Path(seen[0]['path']).exists()
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.parametrize('exits', [(1, 2), (2, 1), (0, 2), (2, 0), (1, 1), (2, 3)])
+@pytest.mark.parametrize('allow_errors', [False, True])
+def test_sql_batches_preserve_output_findings_and_errors(consumer, package, passive_probe, shell, exits, allow_errors):
+    (consumer / 'configured').mkdir()
+    (consumer / 'configured/.sqlfluff').write_text('[sqlfluff]\ndialect = postgres\n', encoding='utf-8')
+    (consumer / 'configured/query.sql').write_text('select 1;\n', encoding='utf-8')
+    (consumer / 'plain.sql').write_text('select 2;\n', encoding='utf-8')
+    git(consumer, 'add', '.')
+    env, trace = passive_probe
+    probe = Path(env['PATH'].split(os.pathsep)[0]) / 'probe.py'
+    probe.write_text(probe.read_text(encoding='utf-8').replace(
+        "print('{\"Results\":[]}')", "group = 'default' if '--dialect' in sys.argv else 'configured'\n"
+        "print(group + ' batch details: ' + chr(34) + 'quoted' + chr(34) + chr(92) + 'path')").replace(
+        "int(os.environ.get('PROBE_EXIT', '0'))", "int(os.environ[group.upper() + '_EXIT'])"), encoding='utf-8')
+    env.update(CONFIGURED_EXIT=str(exits[0]), DEFAULT_EXIT=str(exits[1]),
+               SCAN_ALLOW_TOOL_ERRORS='1' if allow_errors else '0')
+    result = subprocess.run(wrapper_command(package, shell, 'sqlfluff'), cwd=consumer, env=env,
+                            capture_output=True, text=True)
+    expected = 1 if 1 in exits or (any(code > 1 for code in exits) and not allow_errors) else 0
+    assert result.returncode == expected, result.stdout + result.stderr
+    assert len(trace.read_text().splitlines()) == 2, result.stdout + result.stderr
+    report = json.loads((consumer / '.scanning/last-scan.json').read_text(encoding='utf-8'))
+    import jsonschema
+    jsonschema.validate(report, json.loads((ROOT / 'schemas/last-scan.schema.json').read_text(encoding='utf-8')))
+    assert report['summary']['total_findings'] == exits.count(1)
+    assert report['scan_complete'] is (not any(code > 1 for code in exits))
+    assert [batch['exit_code'] for batch in report['batches']] == list(exits)
+    for group, batch in zip(('configured', 'default'), report['batches']):
+        assert group + ' batch details' in result.stdout + result.stderr
+        assert group + ' batch details' in batch['output']
+    if any(code > 1 for code in exits):
+        assert 'Tool error' in result.stdout + result.stderr
+        assert 'PASS:' not in result.stdout + result.stderr

@@ -28,8 +28,8 @@ function Invoke-StagedSnapshot {
     exit $LASTEXITCODE
 }
 
-function Invoke-PassiveCheckov {
-    param([string[]]$Arguments, [object[]]$ExtraArgs)
+function New-PassiveCheckovPolicy {
+    param([object[]]$ExtraArgs)
     # Consume only Git's conventional remote pair in the explicit legacy mode.
     if ($env:SCAN_LEGACY_PUSH_STATE -eq '1' -and $env:SCAN_PUSH_SNAPSHOT -ne '1' -and
         @($ExtraArgs).Count -eq 2 -and $ExtraArgs[0] -and $ExtraArgs[1] -and
@@ -46,10 +46,10 @@ function Invoke-PassiveCheckov {
     $temporary = [IO.Path]::GetTempFileName()
     try {
         [IO.File]::WriteAllText($temporary, ($policy -join "`n"))
-        & checkov @Arguments --config-file $temporary 2>&1
-        $global:LASTEXITCODE = $LASTEXITCODE
-    } finally {
+        return $temporary
+    } catch {
         Remove-Item -LiteralPath $temporary -Force
+        throw
     }
 }
 

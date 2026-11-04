@@ -50,7 +50,7 @@ def rule_inputs(root, tree, hook):
         return set(), {setting: str(target)}
     names = {os.fsdecode(name) for name in push.git('ls-tree', '-rz', '--name-only', tree).split(b'\0') if name}
     inputs = {name for name in names if name == relative or name.startswith(relative.rstrip('/') + '/')}
-    if not inputs and not Path(configured).is_absolute() and target.exists():
+    if not inputs and (Path(configured).is_absolute() or target.exists()):
         # A local rule file the snapshot cannot see would fail later with an unrelated
         # Semgrep error; registry references never exist on disk and pass through.
         raise ValueError(f'{setting} names {relative}, which is not staged; stage it or use a path outside the repository')
@@ -83,7 +83,8 @@ def scan(hook, arguments, shell):
         # ancestor chain. Materialization still rejects links and special modes.
         for name in selected:
             for parent in PurePosixPath(name).parents:
-                policy.update(str(parent / filename) for filename in ('.sqlfluff', '.sqlfluffignore'))
+                policy.update(str(parent / filename) for filename in (
+                    '.sqlfluff', '.sqlfluffignore', 'pyproject.toml', 'setup.cfg', 'tox.ini', 'pep8.ini'))
     rules, rule_environment = rule_inputs(root, tree, hook)
     policy.update(rules)
     implementation, executable = push.select_shell(shell)

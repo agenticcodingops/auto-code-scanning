@@ -332,11 +332,15 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Purpose**: SQL linting (staged `.sql` files)
 - **Stage**: pre-commit
 - **Tool**: `sqlfluff lint`
-- **Dialect**: Applicable staged `.sqlfluff` configuration; `ansi` for files without one.
-- **Configuration**: Staged `.sqlfluff` and `.sqlfluffignore` files in each selected
-  file's directory and ancestors are preserved. Configured and default-dialect
-  files are linted in separate batches so nested dialects are respected.
+- **Dialect**: Applicable staged SQLFluff configuration; `ansi` for files without one.
+- **Configuration**: Staged `.sqlfluff`, `pyproject.toml`, `setup.cfg`, `tox.ini`,
+  `pep8.ini` and `.sqlfluffignore` files in each selected file's directory and
+  ancestors are preserved. Configured and default-dialect files are linted in
+  separate batches so nested dialects are respected.
 - **Behavior**: Lint issues -> exit 1; tool errors block by default (shared local opt-in applies).
+- **Reporting**: All batches finish before reporting. `.scanning/last-scan.json`
+  retains each batch's output and exit code; `scan_complete` is false when any
+  batch has a tool error. Allowing tool errors never allows lint findings.
 
 ### Config Validation
 
