@@ -1,3 +1,5 @@
+$ErrorActionPreference = 'Stop'
+
 BeforeAll {
     $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $content = Get-Content (Join-Path $root 'scripts/setup-scan-fix.ps1') -Raw

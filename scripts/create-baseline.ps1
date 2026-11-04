@@ -192,7 +192,7 @@ function New-CheckovBaseline {
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $checkovJson = checkov -d $dir --framework terraform --output json --quiet --compact 2>$null
+        $checkovJson = checkov -d $dir --framework terraform --output json --compact 2>$null
         if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
         if (-not $checkovJson) { throw "Checkov returned no report for $dir" }
         $baseline.checkov_reports += @{

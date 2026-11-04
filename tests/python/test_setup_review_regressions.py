@@ -11,6 +11,9 @@ import scan_policy
 import setup_scan_fix
 
 ROOT = Path(__file__).resolve().parents[2]
+REAL_SKIP_SOURCE = ('resource "aws_s3_bucket" "sample" {\n'
+                    '  #checkov:skip=CKV_AWS_20:Reviewed exception\n'
+                    '  bucket = "baseline-fixture"\n}\n')
 
 
 def ps_string(value):
@@ -119,3 +122,41 @@ def test_baseline_uses_explicit_approval_context(tmp_path, authority, approved, 
         assert baseline['entries'][0]['fingerprint'] == scan_policy.occurrence_fingerprint(
             dict(tool='checkov', rule_id=check['check_id'], file='infra/main.tf',
                  resource='sample.one', line=1, end_line=3), repo)
+
+
+@pytest.mark.parametrize('report_source', ['captured', 'live'])
+def test_baseline_retains_skips_from_real_scanner_reports(tmp_path, report_source):
+    """Quiet output must not erase a skipped record before gate normalization."""
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+    (repo / 'main.tf').write_text(REAL_SKIP_SOURCE, encoding='utf-8')
+    if report_source == 'live':
+        runner = pytest.importorskip('checkov.terraform.runner')
+        filters = pytest.importorskip('checkov.runner_filter')
+        report = runner.Runner().run(root_folder=str(repo), runner_filter=filters.RunnerFilter(
+            checks=['CKV_AWS_20'], download_external_modules=False))
+        reports = dict(full=report.get_dict(), quiet=report.get_dict(is_quiet=True))
+    else:
+        reports = json.loads((ROOT / 'tests/fixtures/checkov-baseline-reports.json').read_text(encoding='utf-8'))
+        assert reports['full']['summary']['checkov_version'] == '3.3.8'
+    assert len(reports['full']['results']['skipped_checks']) == 1
+    assert 'skipped_checks' not in reports['quiet']['results']
+    for name, report in reports.items():
+        (tmp_path / f'{name}.json').write_text(json.dumps(report), encoding='utf-8')
+    env = clean_env()
+    env.update(FULL_REPORT=str(tmp_path / 'full.json'), QUIET_REPORT=str(tmp_path / 'quiet.json'))
+    # Replay the real serializer's two output modes, honoring the actual CLI args.
+    command = ('function checkov { $global:LASTEXITCODE=0; '
+               'if ($args -contains "--quiet") { Get-Content -Raw $env:QUIET_REPORT } '
+               'else { Get-Content -Raw $env:FULL_REPORT } }; '
+               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force')
+    result = powershell(command, repo, env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    entries = json.loads((repo / '.scan-baseline/baseline.json').read_text(encoding='utf-8'))['entries']
+    pending = scan_policy.checkov_checks(reports['full']['results'], repo)
+    assert len(entries) == len(pending) == 1
+    assert entries[0]['rule_id'] == pending[0]['check_id'] == 'CKV_AWS_20'
+    assert entries[0]['fingerprint'] == scan_policy.occurrence_fingerprint(
+        dict(tool='checkov', rule_id='CKV_AWS_20', file='main.tf',
+             resource='aws_s3_bucket.sample', line=1, end_line=4), repo)

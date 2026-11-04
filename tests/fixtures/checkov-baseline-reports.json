@@ -1,0 +1,106 @@
+{
+  "full": {
+    "check_type": "terraform",
+    "results": {
+      "passed_checks": [],
+      "failed_checks": [],
+      "skipped_checks": [
+        {
+          "check_id": "CKV_AWS_20",
+          "bc_check_id": null,
+          "check_name": "S3 Bucket has an ACL defined which allows public READ access.",
+          "check_result": {
+            "result": "SKIPPED",
+            "entity": {
+              "aws_s3_bucket": {
+                "sample": {
+                  "__end_line__": 4,
+                  "__start_line__": 1,
+                  "bucket": [
+                    "baseline-fixture"
+                  ],
+                  "__address__": "aws_s3_bucket.sample"
+                }
+              }
+            },
+            "evaluated_keys": [
+              "access_control_policy/grant/*/grantee/uri",
+              "acl",
+              "access_control_policy/grant",
+              "access_control_policy",
+              "resource_type"
+            ],
+            "suppress_comment": "Reviewed exception"
+          },
+          "code_block": [
+            [
+              1,
+              "resource \"aws_s3_bucket\" \"sample\" {\n"
+            ],
+            [
+              2,
+              "  #checkov:skip=CKV_AWS_20:Reviewed exception\n"
+            ],
+            [
+              3,
+              "  bucket = \"baseline-fixture\"\n"
+            ],
+            [
+              4,
+              "}\n"
+            ]
+          ],
+          "file_path": "/main.tf",
+          "file_abs_path": "/fixture/main.tf",
+          "repo_file_path": "/fixture/main.tf",
+          "file_line_range": [
+            1,
+            4
+          ],
+          "resource": "aws_s3_bucket.sample",
+          "evaluations": null,
+          "check_class": "checkov.common.graph.checks_infra.base_check",
+          "fixed_definition": null,
+          "entity_tags": null,
+          "caller_file_path": null,
+          "caller_file_line_range": null,
+          "resource_address": null,
+          "severity": null,
+          "bc_category": null,
+          "benchmarks": {},
+          "description": null,
+          "short_description": null,
+          "vulnerability_details": null,
+          "connected_node": null,
+          "guideline": null,
+          "details": [],
+          "check_len": null,
+          "definition_context_file_path": "/fixture/main.tf"
+        }
+      ],
+      "parsing_errors": []
+    },
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "skipped": 1,
+      "parsing_errors": 0,
+      "resource_count": 1,
+      "checkov_version": "3.3.8"
+    }
+  },
+  "quiet": {
+    "check_type": "terraform",
+    "results": {
+      "failed_checks": []
+    },
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "skipped": 1,
+      "parsing_errors": 0,
+      "resource_count": 1,
+      "checkov_version": "3.3.8"
+    }
+  }
+}
