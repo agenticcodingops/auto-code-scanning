@@ -45,12 +45,19 @@ def rule_inputs(root, tree, hook):
     configured = os.environ.get(setting, '') if setting else ''
     if not configured:
         return set(), {}
-    target = Path(os.path.realpath(root / configured))
-    try:
-        relative = target.relative_to(root).as_posix()
-    except ValueError:
+    lexical = Path(os.path.abspath(root / configured))
+    target = Path(os.path.realpath(lexical))
+    for candidate in (lexical, target):
+        try:
+            relative = candidate.relative_to(root).as_posix()
+            break
+        except ValueError:
+            continue
+    else:
         # Preserve explicitly external rules when cwd changes to the snapshot.
         return set(), {setting: str(target)}
+    # A checkout-local setting always names the captured index entry, even if
+    # an unstaged link redirects that worktree path outside the checkout.
     names = {os.fsdecode(name) for name in push.git('ls-tree', '-rz', '--name-only', tree).split(b'\0') if name}
     if relative == '.':
         # Semgrep loads the YAML files of a rules directory; the root has no name prefix.

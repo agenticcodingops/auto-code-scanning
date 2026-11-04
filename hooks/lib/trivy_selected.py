@@ -29,7 +29,19 @@ def filter_report(report, directory, manifest):
         target = result.get('Target')
         if not isinstance(target, str) or not target:
             raise ValueError('Missing Trivy target')
-        path = (module / target).resolve().relative_to(root).as_posix()
+        target = Path(target)
+        context = module.relative_to(root)
+        if target.is_absolute():
+            candidate = target
+        elif context.parts and target.parts[:len(context.parts)] == context.parts:
+            candidate = root / target
+            if candidate.is_file() and (module / target).is_file():
+                raise ValueError('Ambiguous Trivy directory prefix')
+        else:
+            candidate = module / target
+        path = candidate.resolve().relative_to(root).as_posix()
+        if not candidate.is_file():
+            raise ValueError('Trivy target does not name a snapshot file')
         if path in selected:
             results.append(result)
     # This helper handles exit 1 only. No findings at all cannot justify turning
