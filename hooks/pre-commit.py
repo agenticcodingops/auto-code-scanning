@@ -48,7 +48,11 @@ def rule_inputs(root, tree, hook):
         # Preserve explicitly external rules when cwd changes to the snapshot.
         return set(), {setting: str(target)}
     names = {os.fsdecode(name) for name in push.git('ls-tree', '-rz', '--name-only', tree).split(b'\0') if name}
-    inputs = {name for name in names if name == relative or name.startswith(relative.rstrip('/') + '/')}
+    if relative == '.':
+        # Semgrep loads the YAML files of a rules directory; the root has no name prefix.
+        inputs = {name for name in names if name.lower().endswith(('.yml', '.yaml'))}
+    else:
+        inputs = {name for name in names if name == relative or name.startswith(relative.rstrip('/') + '/')}
     if not inputs and (Path(configured).is_absolute() or target.exists()):
         # A local rule file the snapshot cannot see would fail later with an unrelated
         # Semgrep error; registry references never exist on disk and pass through.

@@ -262,7 +262,7 @@ def test_index_snapshot_preserves_consumer_tool_boundary(consumer, package, scan
     assert not trace.exists()
 
 
-@pytest.mark.parametrize('ruleset', ['rules/custom.yml', 'rules', 'absolute'])
+@pytest.mark.parametrize('ruleset', ['rules/custom.yml', 'rules', 'absolute', '.', 'absolute-root'])
 def test_snapshot_keeps_local_rule_inputs_in_the_index(consumer, monkeypatch, ruleset):
     rules = consumer / 'rules/custom.yml'
     rules.parent.mkdir()
@@ -270,7 +270,8 @@ def test_snapshot_keeps_local_rule_inputs_in_the_index(consumer, monkeypatch, ru
     (consumer / 'App.cs').write_text('// source\n', encoding='utf-8')
     git(consumer, 'add', '.')
     rules.write_text('worktree rule inputs\n', encoding='utf-8')
-    monkeypatch.setenv('SEMGREP_RULESET_CSHARP', str(rules) if ruleset == 'absolute' else ruleset)
+    configured = {'absolute': str(rules), 'absolute-root': str(consumer)}.get(ruleset, ruleset)
+    monkeypatch.setenv('SEMGREP_RULESET_CSHARP', configured)
     runner = load_runner('local_rules_snapshot', 'pre-commit.py')
     monkeypatch.setattr(runner.push, 'select_shell', lambda _: ('sh', 'scanner-shell'))
     original = subprocess.run
