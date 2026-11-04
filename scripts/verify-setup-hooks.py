@@ -25,8 +25,10 @@ def main():
     template = (templates / 'lefthook/lefthook.yml' if args.runner == 'lefthook'
                 else templates / args.tier / 'pre-commit-config.yaml')
     try:
-        expected = hook_entries(yaml.safe_load(template.read_text(encoding='utf-8')), args.runner)
-        actual = hook_entries(yaml.safe_load(args.config.read_text(encoding='utf-8')), args.runner)
+        expected_config = yaml.safe_load(template.read_text(encoding='utf-8'))
+        actual_config = yaml.safe_load(args.config.read_text(encoding='utf-8'))
+        expected = hook_entries(expected_config, args.runner)
+        actual = hook_entries(actual_config, args.runner)
         if not expected:
             raise ValueError('Template contains no hooks')
         for key, hook in expected.items():
@@ -34,8 +36,18 @@ def main():
                 raise ValueError(f'Required hook missing: {key[1]}')
             if args.runner == 'pre-commit' and actual[key] != hook:
                 raise ValueError(f'Required hook settings or revision changed: {key[1]}')
-            if args.runner == 'lefthook' and actual[key].get('run') != hook['run']:
-                raise ValueError(f'Required hook command changed: {key[1]}')
+            if args.runner == 'lefthook' and actual[key] != hook:
+                raise ValueError(f'Required hook settings changed: {key[1]}')
+        if args.runner == 'lefthook':
+            stages = ('pre-commit', 'pre-push')
+            for stage in stages:
+                expected_settings = {key: value for key, value in expected_config[stage].items() if key != 'commands'}
+                actual_settings = {key: value for key, value in actual_config[stage].items() if key != 'commands'}
+                if actual_settings != expected_settings:
+                    raise ValueError(f'Required stage settings changed: {stage}')
+            if ({key: value for key, value in actual_config.items() if key not in stages} !=
+                    {key: value for key, value in expected_config.items() if key not in stages}):
+                raise ValueError('Required runner settings changed')
     except (OSError, ValueError, TypeError, KeyError, AttributeError, yaml.YAMLError) as exc:
         print(f'Hook configuration invalid: {exc}')
         return 1

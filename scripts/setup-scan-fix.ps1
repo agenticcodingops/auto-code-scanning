@@ -31,34 +31,7 @@ Assert-SafeWritePath (Get-Location).Path
 $PlatformRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Assert-SafeWritePath $RepoPath
 
-function Resolve-SetupRealPath {
-    param([string]$Path)
-    $full = Resolve-ExternalRealPath $Path
-    if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
-        if (-not ('SetupPathNative' -as [type])) {
-            Add-Type @'
-using System.Runtime.InteropServices;
-using System.Text;
-public static class SetupPathNative {
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern uint GetLongPathName(string path, StringBuilder output, uint size);
-}
-'@
-        }
-        $buffer = [Text.StringBuilder]::new(32768)
-        $length = [SetupPathNative]::GetLongPathName($full, $buffer, $buffer.Capacity)
-        if (-not $length -or $length -ge $buffer.Capacity) {
-            throw 'Cannot canonicalize setup path'
-        }
-        $full = $buffer.ToString()
-        if ($full.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) {
-            $full = '\\' + $full.Substring(8)
-        } elseif ($full.StartsWith('\\?\')) {
-            $full = $full.Substring(4)
-        }
-    }
-    return $full
-}
+. "$PSScriptRoot/setup-paths.ps1"
 
 $RepoPath = Resolve-SetupRealPath (Resolve-Path $RepoPath).Path
 
@@ -67,9 +40,12 @@ function Resolve-SetupTool {
     $command = Get-Command $Name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $command) { return $null }
     if (-not [IO.Path]::IsPathRooted($command.Source)) { throw "$Name must resolve to an absolute executable path" }
+    $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+        [StringComparison]::OrdinalIgnoreCase
+    } else { [StringComparison]::Ordinal }
     $boundary = $RepoPath.TrimEnd('/', '\')
     $path = [IO.Path]::GetFullPath($command.Source)
-    if ($path -eq $boundary -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($path.Equals($boundary, $comparison) -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
         throw "$Name must resolve outside the destination repository"
     }
     try { $path = Resolve-SetupRealPath $path }
@@ -82,7 +58,7 @@ function Resolve-SetupTool {
             return $null
         } else { throw }
     }
-    if ($path -eq $boundary -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($path.Equals($boundary, $comparison) -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
         throw "$Name must resolve outside the destination repository"
     }
     return $path

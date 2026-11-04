@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 BeforeAll {
     $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    $content = Get-Content (Join-Path $root 'scripts/setup-scan-fix.ps1') -Raw
+    $fixtureScripts = Join-Path $root 'scripts'
+    $content = (Get-Content (Join-Path $root 'scripts/setup-scan-fix.ps1') -Raw).Replace('$PSScriptRoot', '$fixtureScripts')
     $installedTool = (Get-Command git -CommandType Application | Where-Object {
         -not ((Get-Item -LiteralPath $_.Source).Attributes -band [IO.FileAttributes]::ReparsePoint)
     } | Select-Object -First 1).Source

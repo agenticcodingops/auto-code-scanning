@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import venv
 
 import pytest
 import yaml
@@ -159,3 +160,81 @@ def test_precommit_verification_rejects_changed_hook_settings(tmp_path, tier, da
                   'pre-commit', tier, str(config)], tmp_path, os.environ.copy())
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'Required hook settings or revision changed:' in result.stdout
+
+
+@pytest.mark.parametrize('field,value', [
+    ('skip', True), ('only', ['merge']), ('glob', 'unmatched/**'),
+    ('exclude', '**'), ('tags', ['optional']), ('files', 'echo'),
+    ('root', 'other/'), ('env', {'SCAN_FIXTURE': 'changed'}),
+    ('interactive', True), ('priority', 99), ('use_stdin', False),
+    ('stage_fixed', False), ('run', 'echo changed'),
+])
+@pytest.mark.parametrize('stage', ['pre-commit', 'pre-push'])
+def test_lefthook_verification_rejects_changed_command_settings(tmp_path, field, value, stage):
+    document = yaml.safe_load((ROOT / 'templates/lefthook/lefthook.yml').read_text(encoding='utf-8'))
+    command = next(iter(document[stage]['commands'].values()))
+    command[field] = value
+    config = tmp_path / 'lefthook.yml'
+    config.write_text(yaml.safe_dump(document), encoding='utf-8')
+    result = run([sys.executable, '-I', str(ROOT / 'scripts/verify-setup-hooks.py'),
+                  'lefthook', 'strict', str(config)], tmp_path, os.environ.copy())
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Hook configuration invalid:' in result.stdout
+
+
+@pytest.mark.parametrize('scope,field,value', [
+    ('global', 'min_version', '99.0.0'), ('global', 'skip_output', True),
+    ('pre-commit', 'skip', True), ('pre-commit', 'parallel', False),
+    ('pre-push', 'only', ['merge']),
+])
+def test_lefthook_verification_rejects_changed_runner_settings(tmp_path, scope, field, value):
+    document = yaml.safe_load((ROOT / 'templates/lefthook/lefthook.yml').read_text(encoding='utf-8'))
+    settings = document if scope == 'global' else document[scope]
+    settings[field] = value
+    config = tmp_path / 'lefthook.yml'
+    config.write_text(yaml.safe_dump(document), encoding='utf-8')
+    result = run([sys.executable, '-I', str(ROOT / 'scripts/verify-setup-hooks.py'),
+                  'lefthook', 'strict', str(config)], tmp_path, os.environ.copy())
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Hook configuration invalid:' in result.stdout
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Unix virtualenv interpreter symlinks')
+def test_verification_keeps_virtualenv_package_discovery(tmp_path):
+    pwsh = shutil.which('pwsh')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    environment = tmp_path / 'environment'
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(environment)
+    python = environment / 'bin/python'
+    assert python.is_symlink()
+    site = run([str(python), '-I', '-c', 'import sysconfig; print(sysconfig.get_path("purelib"))'],
+               tmp_path, os.environ.copy())
+    assert site.returncode == 0, site.stderr
+    package = Path(site.stdout.strip()) / 'yaml'
+    shutil.copytree(Path(yaml.__file__).parent, package)
+    marker = tmp_path / 'environment-imported'
+    with (package / '__init__.py').open('a', encoding='utf-8') as stream:
+        stream.write(f'\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\n')
+    repo = tmp_path / 'consumer'
+    repo.mkdir()
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(('GIT_', 'SCAN_'))}
+    env['PATH'] = str(environment / 'bin') + os.pathsep + env['PATH']
+    assert run(['git', 'init', '-q'], repo, env).returncode == 0
+    shutil.copyfile(ROOT / 'templates/lefthook/lefthook.yml', repo / 'lefthook.yml')
+    # Execute the actual hook-verification block without unrelated scanner probes.
+    command = (
+        f"$fixtureScripts='{(ROOT / 'scripts').as_posix()}'; "
+        '. "$fixtureScripts/../hooks/lib/common.ps1"; '
+        'if (Test-Path "$fixtureScripts/setup-paths.ps1") { . "$fixtureScripts/setup-paths.ps1" }; '
+        '$text=(Get-Content "$fixtureScripts/verify-scanning.ps1" -Raw).Replace(\'$PSScriptRoot\',\'$fixtureScripts\'); '
+        '$ast=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$null,[ref]$null); '
+        '$block=$ast.Find({param($node) $node -is [Management.Automation.Language.TryStatementAst] '
+        '-and $node.Extent.Text.Contains(\'$hookResult = &\')},$true); '
+        '$HooksRunner="lefthook"; $Tier="strict"; $runnerConfig="lefthook.yml"; '
+        'function Add-CheckResult { param($Passed,$Message) if (-not $Passed) { throw $Message } }; '
+        '& ([scriptblock]::Create($block.Extent.Text))')
+    result = run([pwsh, '-NoProfile', '-Command', command], repo, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert marker.is_file(), 'Hook verification did not import the virtualenv package'

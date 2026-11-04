@@ -27,6 +27,7 @@ param(
 )
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
+. "$PSScriptRoot/setup-paths.ps1"
 $ErrorActionPreference = "Continue"
 
 # ============================================================================
@@ -216,8 +217,27 @@ if (Test-Path -LiteralPath $runnerConfig -PathType Leaf) {
         # Parse YAML with an external interpreter; isolated mode excludes the
         # consumer working directory from Python's import search path.
         $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-        $python = Resolve-ExternalRealPath $python
-        Assert-ExternalPath $python
+        if (-not [IO.Path]::IsPathRooted($python)) { throw 'Python must resolve to an absolute executable path' }
+        # Check the canonical identity, but retain the original interpreter path
+        # for execution so virtual environments keep their package discovery.
+        $pythonTarget = Resolve-SetupRealPath $python
+        $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
+        $repoRoot = if ($snapshot) { (Get-Location).Path } else {
+            Assert-GitAvailable
+            git rev-parse --show-toplevel 2>$null
+        }
+        if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
+        $roots = @($repoRoot)
+        if ($snapshot -and $env:SCAN_CONSUMER_ROOT) { $roots += $env:SCAN_CONSUMER_ROOT }
+        $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+            [StringComparison]::OrdinalIgnoreCase
+        } else { [StringComparison]::Ordinal }
+        foreach ($root in $roots) {
+            $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
+            if ($pythonTarget.Equals($boundary, $comparison) -or $pythonTarget.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+                throw 'Python must resolve outside the scanned and consumer checkouts'
+            }
+        }
         $hookResult = & $python -I "$PSScriptRoot/verify-setup-hooks.py" $HooksRunner $Tier $runnerConfig 2>&1
         if ($LASTEXITCODE -ne 0) { throw ($hookResult -join "`n") }
         Add-CheckResult -Passed $true -Message "$HooksRunner $Tier template hooks configured"
