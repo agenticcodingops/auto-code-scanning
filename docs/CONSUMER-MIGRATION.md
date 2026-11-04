@@ -186,6 +186,9 @@ and TFLint outside both the scanned directories and the consumer checkout:
 baseline creation rejects repository executables, including linked paths.
 Its Python interpreter is verified before any capability probe and reused by
 both policy generation and baseline finalization.
+The invoked path and resolved target are both checked, including virtual
+environment startup locations. Virtual environments must also stay outside
+the scanned and consumer checkouts.
 
 During a reviewed migration only, the reusable IaC workflow's
 `allow-legacy-exceptions: true`, the local scanner's `--allow-legacy-exceptions`,

@@ -1,7 +1,7 @@
 # Canonical setup identities shared by onboarding and hook verification.
 function Resolve-SetupRealPath {
-    param([string]$Path)
-    $full = Resolve-ExternalRealPath $Path
+    param([string]$Path, [switch]$PreserveLinks)
+    $full = if ($PreserveLinks) { [IO.Path]::GetFullPath($Path) } else { Resolve-ExternalRealPath $Path }
     if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
         if (-not ('SetupPathNative' -as [type])) {
             Add-Type @'
@@ -30,8 +30,8 @@ public static class SetupPathNative {
 
 function Resolve-VerifiedTool {
     # Resolve a tool by name and refuse one that lives inside the scanned or consumer
-    # checkout, so a repository cannot shadow it on PATH. Check the canonical identity,
-    # but return the original absolute path so virtual environments keep their packages.
+    # checkout, so a repository cannot shadow it on PATH. Check both the invoked
+    # location and target, but retain external virtual environments' original paths.
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Label,
@@ -39,7 +39,10 @@ function Resolve-VerifiedTool {
     )
     $path = (Get-Command $Name -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     if (-not [IO.Path]::IsPathRooted($path)) { throw "$Label must resolve to an absolute executable path" }
-    $target = Resolve-SetupRealPath $path
+    # Python can load pyvenv.cfg and startup files relative to the invoked path.
+    # Keep the final link unresolved when checking that environment's directory.
+    $invoked = Join-Path (Resolve-SetupRealPath ([IO.Path]::GetDirectoryName($path))) ([IO.Path]::GetFileName($path))
+    $identities = @((Resolve-SetupRealPath $path), (Resolve-SetupRealPath $path -PreserveLinks), $invoked)
     $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
     $repoRoot = if ($snapshot) { (Get-Location).Path } else {
         Assert-GitAvailable
@@ -61,9 +64,14 @@ function Resolve-VerifiedTool {
         [StringComparison]::OrdinalIgnoreCase
     } else { [StringComparison]::Ordinal }
     foreach ($root in $roots) {
-        $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
-        if ($target.Equals($boundary, $comparison) -or $target.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
-            throw "$Label must resolve outside the scanned and consumer checkouts"
+        $boundaries = @((Resolve-SetupRealPath $root), (Resolve-SetupRealPath $root -PreserveLinks))
+        foreach ($boundary in $boundaries) {
+            $boundary = $boundary.TrimEnd('/', '\')
+            foreach ($identity in $identities) {
+                if ($identity.Equals($boundary, $comparison) -or $identity.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+                    throw "$Label must resolve outside the scanned and consumer checkouts"
+                }
+            }
         }
     }
     return $path

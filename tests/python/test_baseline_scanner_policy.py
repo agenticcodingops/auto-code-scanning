@@ -2,8 +2,10 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import venv
 
 import pytest
 import yaml
@@ -182,3 +184,50 @@ def test_baseline_verifies_interpreter_before_any_probe(tmp_path, baseline_case,
         assert 'must resolve outside' in result.stderr
         assert not Path(env['BASELINE_TRACE']).exists()
         assert baseline.read_text(encoding='utf-8') == 'reviewed baseline'
+
+
+@pytest.mark.parametrize('boundary', ['repository', 'scanned', 'consumer', 'alias', 'parent-link', 'external'])
+def test_baseline_refuses_checkout_venv_with_external_interpreter(tmp_path, baseline_case, boundary):
+    repo, baseline, env = baseline_case
+    scanner_stub(tmp_path / 'scanner tools', 'checkov', env)
+    checkout = repo if boundary in ('repository', 'alias', 'parent-link') else tmp_path / 'other checkout'
+    checkout.mkdir(exist_ok=True)
+    extra = ''
+    if boundary == 'scanned':
+        extra = f'-TerraformDir {ps_string(checkout)}'
+    elif boundary == 'consumer':
+        env.update(SCAN_INDEX_SNAPSHOT='1', SCAN_CONSUMER_ROOT=str(checkout))
+    environment = (tmp_path / 'external environment' if boundary in ('parent-link', 'external')
+                   else checkout / '.venv')
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(environment)
+    binary = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    if not binary.is_symlink():
+        pytest.skip('Interpreter symlinks unavailable')
+    marker = tmp_path / 'checkout-startup-ran'
+    site = (environment / 'Lib/site-packages' if os.name == 'nt' else
+            environment / f'lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages')
+    site.mkdir(parents=True, exist_ok=True)
+    (site / 'checkout.pth').write_text(
+        f'import pathlib; pathlib.Path({str(marker)!r}).touch()\n', encoding='utf-8')
+    if boundary == 'external':
+        shutil.copytree(Path(yaml.__file__).parent, site / 'yaml')
+    if boundary in ('alias', 'parent-link'):
+        alias = tmp_path / 'environment alias' if boundary == 'alias' else checkout / '.venv'
+        if os.name == 'nt':
+            subprocess.run(['cmd', '/c', 'mklink', '/J', str(alias), str(environment)],
+                           check=True, capture_output=True)
+        else:
+            alias.symlink_to(environment, target_is_directory=True)
+        binary = alias / binary.relative_to(environment)
+    env['PATH'] = str(binary.parent) + os.pathsep + env['PATH']
+    result = invoke(repo, env, extra=extra)
+    if boundary == 'external':
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert marker.exists(), 'Trusted external virtual environment was not used'
+        assert json.loads(baseline.read_text(encoding='utf-8'))['schema_version'] == '2.0'
+        return
+    assert not marker.exists(), 'Checkout virtual-environment startup executed'
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'must resolve outside' in result.stderr
+    assert not Path(env['BASELINE_TRACE']).exists()
+    assert baseline.read_text(encoding='utf-8') == 'reviewed baseline'
