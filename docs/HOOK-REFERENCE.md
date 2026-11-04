@@ -17,7 +17,11 @@ one, so Python 3.8–3.10 and broken launchers are skipped. The shared configura
 reader (`scan_config.py`, called from `read_scan_config` and `Read-ScanConfigValue`) runs
 with the same flags, which keep the working and helper directories and Python environment
 overrides out of its imports while keeping the trusted user-site dependencies that the
-no-admin setup installs. Other helper scripts, including `pre-push.py`, run without them. Upgrade older interpreters before re-vendoring these hooks.
+no-admin setup installs. Staged and push snapshot launchers use `-I`, which also
+excludes the user site. Install PyYAML in the selected interpreter's site-packages
+or an active virtual environment; a user-site-only installation is insufficient
+for snapshots. Check that environment with `python -I -c "import yaml"` before
+running the hooks. Upgrade older interpreters before re-vendoring these hooks.
 
 Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
 this covers both the original Terraform/IaC hooks and the new app-code hooks

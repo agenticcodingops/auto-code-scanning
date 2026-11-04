@@ -340,7 +340,7 @@ files = {p.relative_to(root).as_posix(): p.read_text(encoding='utf-8')
 with open(os.environ['TRACE'], 'a', encoding='utf-8') as output:
     output.write(json.dumps({'args':sys.argv[1:], 'files':files}) + '\\n')
 if '--output' in sys.argv:
-    pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text('{"results":[]}')
+    pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text('{"results":[]}', encoding='utf-8')
 print('{"Results":[]}')
 sys.exit(int(os.environ.get('PROBE_EXIT', '0')))
 ''', encoding='utf-8')
@@ -409,8 +409,8 @@ def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package
         target.write_text(content, encoding='utf-8')
     # Unrelated config and executable project inputs must not expand the snapshot.
     (consumer / 'other').mkdir()
-    (consumer / 'other/.sqlfluff').write_text('[sqlfluff]\ndialect = mysql\n')
-    (consumer / 'setup.py').write_text('raise SystemExit("not a scanner input")\n')
+    (consumer / 'other/.sqlfluff').write_text('[sqlfluff]\ndialect = mysql\n', encoding='utf-8')
+    (consumer / 'setup.py').write_text('raise SystemExit("not a scanner input")\n', encoding='utf-8')
     git(consumer, 'add', '.')
     for name in staged:
         if '.sqlfluff' in name:
@@ -438,7 +438,7 @@ def test_sql_snapshot_preserves_applicable_policy_and_dialects(consumer, package
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 @pytest.mark.parametrize('tool_exit', [1, 2])
 def test_sql_default_dialect_group_preserves_blocking_status(consumer, package, passive_probe, shell, tool_exit):
-    (consumer / 'query.sql').write_text('select 1;\n')
+    (consumer / 'query.sql').write_text('select 1;\n', encoding='utf-8')
     git(consumer, 'add', '.')
     env, trace = passive_probe
     env['PROBE_EXIT'] = str(tool_exit)
