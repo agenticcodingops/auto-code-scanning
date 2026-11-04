@@ -76,34 +76,6 @@ $Script:PassedChecks = 0
 $Script:FailedChecks = 0
 $Script:Warnings = 0
 
-function Resolve-VerifiedTool {
-    # Resolve a tool by name and refuse one that lives inside the scanned or consumer
-    # checkout, so a repository cannot shadow it on PATH. Check the canonical identity,
-    # but return the original absolute path so virtual environments keep their packages.
-    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
-    $path = (Get-Command $Name -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-    if (-not [IO.Path]::IsPathRooted($path)) { throw "$Label must resolve to an absolute executable path" }
-    $target = Resolve-SetupRealPath $path
-    $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
-    $repoRoot = if ($snapshot) { (Get-Location).Path } else {
-        Assert-GitAvailable
-        git rev-parse --show-toplevel 2>$null
-    }
-    if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
-    $roots = @($repoRoot)
-    if ($snapshot -and $env:SCAN_CONSUMER_ROOT) { $roots += $env:SCAN_CONSUMER_ROOT }
-    $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
-        [StringComparison]::OrdinalIgnoreCase
-    } else { [StringComparison]::Ordinal }
-    foreach ($root in $roots) {
-        $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
-        if ($target.Equals($boundary, $comparison) -or $target.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
-            throw "$Label must resolve outside the scanned and consumer checkouts"
-        }
-    }
-    return $path
-}
-
 function Add-CheckResult {
     param(
         [bool]$Passed,

@@ -87,6 +87,7 @@ $ErrorActionPreference = "Stop"
 if ($PolicyRoot -and $BaseCommit) { throw 'Supply either PolicyRoot or BaseCommit, not both' }
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
+. "$PSScriptRoot/setup-paths.ps1"
 $sourceRoot = git rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
 if ($PolicyRoot) {
@@ -147,16 +148,17 @@ $baseline = @{
 function New-TrivyBaseline {
     Write-Host "Creating Trivy baseline..." -ForegroundColor Cyan
 
-    if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command trivy -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Warning "Trivy not found. Skipping Trivy baseline."
         return @()
     }
 
     $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
+    $scanner = Resolve-VerifiedTool -Name trivy -Label trivy -AdditionalRoots (@($sourceRoot) + $scanDirs)
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $trivyJson = trivy config --severity CRITICAL,HIGH,MEDIUM,LOW --include-non-failures --format json --quiet -- $dir 2>$null
+        $trivyJson = & $scanner config --severity CRITICAL,HIGH,MEDIUM,LOW --include-non-failures --format json --quiet -- $dir 2>$null
         if ($LASTEXITCODE -ne 0) { throw "Trivy scan failed for $dir (exit $LASTEXITCODE)" }
         if (-not $trivyJson) { throw "Trivy returned no report for $dir" }
         if ($trivyJson) {
@@ -195,23 +197,29 @@ function New-TrivyBaseline {
 function New-CheckovBaseline {
     Write-Host "Creating Checkov baseline..." -ForegroundColor Cyan
 
-    if (-not (Get-Command checkov -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command checkov -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Warning "Checkov not found. Skipping Checkov baseline."
         return @()
     }
 
     $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
+    $scanner = Resolve-VerifiedTool -Name checkov -Label checkov -AdditionalRoots (@($sourceRoot) + $scanDirs)
     $entries = @()
 
-    foreach ($dir in $scanDirs) {
-        $checkovJson = checkov -d $dir --framework terraform --output json --compact 2>$null
-        if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
-        if (-not $checkovJson) { throw "Checkov returned no report for $dir" }
-        $baseline.checkov_reports += @{
-            scan_directory = Resolve-HookPath $dir
-            report = ($checkovJson -join "`n") | ConvertFrom-Json
-            baselined_date = $dateStamp
+    $policyFile = New-PassiveCheckovPolicy
+    try {
+        foreach ($dir in $scanDirs) {
+            $checkovJson = & $scanner -d $dir --framework terraform --output json --compact --config-file $policyFile 2>$null
+            if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
+            if (-not $checkovJson) { throw "Checkov returned no report for $dir" }
+            $baseline.checkov_reports += @{
+                scan_directory = Resolve-HookPath $dir
+                report = ($checkovJson -join "`n") | ConvertFrom-Json
+                baselined_date = $dateStamp
+            }
         }
+    } finally {
+        Remove-Item -LiteralPath $policyFile -Force
     }
 
     Write-Host "  Checkov: report collected for shared gate normalization" -ForegroundColor Gray
@@ -221,7 +229,7 @@ function New-CheckovBaseline {
 function New-TflintBaseline {
     Write-Host "Creating tflint baseline..." -ForegroundColor Cyan
 
-    if (-not (Get-Command tflint -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command tflint -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Warning "tflint not found. Skipping tflint baseline."
         return @()
     }
@@ -241,10 +249,11 @@ function New-TflintBaseline {
     $trustedConfig = Resolve-ExternalRealPath $env:SCAN_TFLINT_CONFIG
 
     $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
+    $scanner = Resolve-VerifiedTool -Name tflint -Label tflint -AdditionalRoots (@($sourceRoot) + $scanDirs)
     $entries = @()
 
     foreach ($dir in $scanDirs) {
-        $tflintJson = tflint --config=$trustedConfig --chdir=$dir --format json 2>$null
+        $tflintJson = & $scanner --config=$trustedConfig --chdir=$dir --format json 2>$null
         if ($LASTEXITCODE -notin @(0, 2)) { throw "tflint scan failed for $dir (exit $LASTEXITCODE)" }
         if (-not $tflintJson) { throw "tflint returned no report for $dir" }
         if ($tflintJson) {

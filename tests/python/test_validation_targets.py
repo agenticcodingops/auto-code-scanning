@@ -11,6 +11,7 @@ import jsonschema
 import scan
 from safe_io import write_text
 from scan_policy import suppression_file
+from .baseline_helpers import scanner_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 ZERO = '0' * 40
@@ -1857,15 +1858,19 @@ def test_baseline_all_skips_unconfigured_tflint_and_uses_current_directory(tmp_p
     source = folder / 'main.tf'
     source.write_text('resource "sample" "one" {}\n', encoding='utf-8')
     script = (ROOT / 'scripts/create-baseline.ps1').as_posix()
-    # Functions keep this regression independent of installed scanner versions.
-    command = ("function trivy { $global:LASTEXITCODE=0; "
-               "'{\"Results\":[{\"Target\":\"main.tf\",\"Misconfigurations\":[{\"ID\":\"AVD-TEST-1\",\"Severity\":\"HIGH\",\"CauseMetadata\":{\"StartLine\":1,\"EndLine\":1}}]}]}' }; "
-               "function checkov { $global:LASTEXITCODE=0; '{\"results\":{\"failed_checks\":[]},\"summary\":{\"skipped\":0}}' }; function tflint { throw 'unconfigured scanner executed' }; "
-               f"& '{script}' -Tool {tool} -CloudProvider aws -Force")
     env = clean_env()
+    scanner_stub(tmp_path / 'tools', 'trivy', env, report=json.dumps(dict(Results=[dict(
+        Target='main.tf', Misconfigurations=[dict(ID='AVD-TEST-1', Severity='HIGH',
+                                                CauseMetadata=dict(StartLine=1, EndLine=1))])])))
+    scanner_stub(tmp_path / 'tools', 'checkov', env)
+    scanner_stub(tmp_path / 'tools', 'tflint', env, code=9)
+    command = f"& '{script}' -Tool {tool} -CloudProvider aws -Force"
     env.pop('SCAN_TFLINT_CONFIG', None)
     result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=folder, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+    calls = Path(env['BASELINE_TRACE']).read_text(encoding='utf-8').splitlines()
+    assert len(calls) == (2 if tool == 'all' else 1)
+    assert all('tflint_stub.py' not in call for call in calls)
     if tool == 'all':
         assert 'Skipping tflint' in result.stdout
     baseline = json.loads((repo / '.scan-baseline/baseline.json').read_text(encoding='utf-8'))
