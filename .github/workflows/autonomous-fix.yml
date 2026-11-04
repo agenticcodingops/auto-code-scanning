@@ -640,7 +640,15 @@ jobs:
               git reset -q -- "$p"
             done < "$RUNNER_TEMP/autofix-removed-paths"
           fi
-          git diff --cached --binary > autofix.patch || true
+          # A binary hunk encodes file content the patch secret scan cannot read, and
+          # .gitattributes in the pull request decides what counts as binary. Publish
+          # text only, rendered without textconv or external diff drivers.
+          binary="$(git diff --cached --numstat --no-renames | awk -F'\t' '$1 == "-" && $2 == "-" {print $3}')"
+          if [ -n "${binary}" ]; then
+            printf '::error::the fix changes binary files, which are never published:\n%s\n' "${binary}"
+            exit 1
+          fi
+          git diff --cached --no-ext-diff --no-textconv > autofix.patch || true
           if [ -s autofix.patch ]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "patch_sha256=$(sha256sum autofix.patch | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"

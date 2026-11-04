@@ -143,6 +143,39 @@ def _git(*args, cwd, env=None):
     ).stdout
 
 
+@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+@pytest.mark.parametrize("binary", [True, False])
+def test_capture_publishes_text_patches_only(wf, tmp_path, binary):
+    """A binary hunk would hide content from the patch secret scan, so capture refuses it."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    (repo / "notes.txt").write_text("before\n", encoding="utf-8")
+    _git("add", ".", cwd=repo)
+    _git("commit", "-qm", "base", cwd=repo)
+    head = _git("rev-parse", "HEAD", cwd=repo).strip()
+    if binary:
+        # The pull request can mark any file as binary for diff purposes.
+        (repo / ".gitattributes").write_text("notes.txt -diff\n", encoding="utf-8")
+    (repo / "notes.txt").write_text("after\n", encoding="utf-8")
+    script = _require_step(wf["jobs"]["analyze"], "Capture fix as a patch")["run"]
+    out = tmp_path / "github-output"
+    env = os.environ.copy()
+    env.update({"HEAD_SHA": head, "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(out)})
+    bash = shutil.which("bash")
+    result = subprocess.run([bash, "-c", script], cwd=repo, env=env, capture_output=True, text=True)
+    patch = repo / "autofix.patch"
+    if binary:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "binary files" in result.stdout + result.stderr
+        assert not patch.exists() or patch.stat().st_size == 0
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = patch.read_text(encoding="utf-8")
+        assert "+after" in text and "GIT binary patch" not in text
+        assert "has_changes=true" in out.read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Base-sourced config and token handling
 # ---------------------------------------------------------------------------
