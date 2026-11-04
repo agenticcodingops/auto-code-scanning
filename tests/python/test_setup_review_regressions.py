@@ -184,3 +184,37 @@ def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, 
     assert result.returncode != 0, result.stdout + result.stderr
     assert existing.read_text(encoding='utf-8') == 'previously reviewed baseline'
     assert 'Created Successfully' not in result.stdout
+
+
+@pytest.mark.parametrize('failed_step', ['runner', 'verification', 'both'])
+@pytest.mark.parametrize('failure', ['exit', 'launch'])
+def test_shell_setup_records_runner_and_verification_failures(tmp_path, failed_step, failure):
+    """Run the real shell setup and verifier process, including nonzero exits."""
+    platform = tmp_path / 'platform'
+    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+        shutil.copytree(ROOT / folder, platform / folder, ignore=shutil.ignore_patterns('__pycache__'))
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    for name, path, marker in [('runner', tools / 'lefthook.ps1', 'RUNNER_REACHED'),
+                               ('verification', platform / 'scripts/verify-scanning.ps1', 'VERIFY_REACHED')]:
+        action = ("throw 'fixture launch failure'" if failure == 'launch' else 'exit 7') if failed_step in (name, 'both') else 'exit 0'
+        path.write_text(f"Write-Output '{marker}'\n{action}\n", encoding='utf-8')
+    env = clean_env()
+    env['RUNNER_TOOL'] = str(tools / 'lefthook.ps1')
+    command = ('function Get-Command { param($Name, $CommandType, $ErrorAction) '
+               'if ($Name -eq "lefthook") { [pscustomobject]@{ Source=$env:RUNNER_TOOL } } '
+               'elseif ($Name -notin @("pre-commit", "gh")) { '
+               'Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters } }; '
+               f'& {ps_string(platform / "scripts/setup-scan-fix.ps1")} -RepoPath {ps_string(repo)}')
+    result = powershell(command, tmp_path, env=env)
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert '=== SETUP COMPLETED WITH ERRORS ===' in output
+    for step, label in [('runner', 'lefthook installation'), ('verification', 'scan verification')]:
+        assert (f'FAILED: {label}' in output) == (failed_step in (step, 'both'))
+        if failed_step in (step, 'both'):
+            assert f'[OK]   {label}' not in output
+    assert 'VERIFY_REACHED' in output
+    assert (repo / '.github/workflows/code-security-scan.yml').is_file()

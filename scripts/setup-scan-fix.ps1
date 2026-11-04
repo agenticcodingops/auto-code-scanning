@@ -173,7 +173,9 @@ Step "Local runner: $HooksRunner"
 if ($HooksRunner -eq "lefthook") {
     Copy-IfNewer (Join-Path $PlatformRoot "templates/lefthook/lefthook.yml") (Join-Path $RepoPath "lefthook.yml")
     if ($setupTools['lefthook']) {
-        Push-Location $RepoPath; try { & $setupTools['lefthook'] install | Out-Null; Ok "lefthook installed" } finally { Pop-Location }
+        Push-Location $RepoPath
+        try { Install-Step 'lefthook installation' { & $setupTools['lefthook'] install | Out-Null } }
+        finally { Pop-Location }
     } else {
         Warn "lefthook not on PATH. Install: 'choco install lefthook' or 'go install github.com/evilmartians/lefthook@latest', then 'lefthook install'"
     }
@@ -259,7 +261,11 @@ Step "Verify install"
 $verify = Join-Path $PlatformRoot "scripts/verify-scanning.ps1"
 if ((Test-Path $verify) -and $setupTools['pwsh']) {
     Push-Location $RepoPath
-    try { & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | Select-Object -First 30 } catch { Warn "verify-scanning reported issues: $_" } finally { Pop-Location }
+    try {
+        Install-Step 'scan verification' {
+            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | Select-Object -First 30 -Wait
+        }
+    } finally { Pop-Location }
 } else { Info "Verification needs verify-scanning.ps1 and an external pwsh; skipping" }
 
 if ($script:FailedSteps.Count) {
