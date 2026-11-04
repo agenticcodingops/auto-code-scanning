@@ -70,7 +70,7 @@ def test_shell_setup_forwards_selected_runner(tmp_path, runner):
 
 
 @pytest.mark.parametrize('runner', ['lefthook', 'pre-commit'])
-@pytest.mark.parametrize('missing', [None, 'config', 'hook', 'security-hook'])
+@pytest.mark.parametrize('missing', [None, 'config', 'hook', 'security-hook', 'push-hook', 'push-hook-corrupt'])
 def test_verifier_checks_selected_runner(tmp_path, runner, missing):
     repo = tmp_path / 'repo'
     repo.mkdir()
@@ -83,8 +83,13 @@ def test_verifier_checks_selected_runner(tmp_path, runner, missing):
         (repo / config).write_text(content.replace('trivy-secrets', 'removed')
                                    if missing == 'security-hook' else content, encoding='utf-8')
     for hook in ('pre-commit', 'pre-push'):
-        if missing != 'hook' or hook != 'pre-commit':
-            (repo / '.git/hooks' / hook).write_text(f'#!/bin/sh\n# {runner}\n', encoding='utf-8')
+        if (missing == 'hook' and hook == 'pre-commit') or (missing == 'push-hook' and hook == 'pre-push'):
+            continue
+        hook_content = (f'#!/bin/sh\n# {runner}\n' if runner == 'lefthook' or hook == 'pre-commit' else
+                        '#!/bin/sh\n# scan push transaction adapter\npython hooks/pre-push.py --pre-commit-runner\n')
+        if missing == 'push-hook-corrupt' and hook == 'pre-push':
+            hook_content = '#!/bin/sh\nexit 0\n'
+        (repo / '.git/hooks' / hook).write_text(hook_content, encoding='utf-8')
     (repo / '.scanning/configs').mkdir(parents=True)
     (repo / '.scanning/configs/.checkov.yaml').write_text('{}', encoding='utf-8')
     trusted = tmp_path / 'trusted.hcl'

@@ -184,13 +184,16 @@ Write-Header "3. Checking $HooksRunner Hooks"
 if (Test-Path ".git") {
     Add-CheckResult -Passed $true -Message "Git repository detected"
 
-    $installedHooks = if ($HooksRunner -eq 'lefthook') { @('pre-commit', 'pre-push') } else { @('pre-commit') }
+    $installedHooks = @('pre-commit', 'pre-push')
     foreach ($hookName in $installedHooks) {
         $hookPath = git rev-parse --git-path "hooks/$hookName"
         $hookContent = if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $hookPath -PathType Leaf)) {
             Get-Content -LiteralPath $hookPath -Raw -ErrorAction SilentlyContinue
         } else { '' }
-        if ($hookContent -match [regex]::Escape($HooksRunner)) {
+        $matchesRunner = if ($HooksRunner -eq 'pre-commit' -and $hookName -eq 'pre-push') {
+            $hookContent -match '(?m)^# scan push transaction adapter\s*$' -and $hookContent.Contains('--pre-commit-runner')
+        } else { $hookContent -match [regex]::Escape($HooksRunner) }
+        if ($matchesRunner) {
             Add-CheckResult -Passed $true -Message "$HooksRunner $hookName hook installed"
         }
         else {

@@ -94,6 +94,13 @@ if ($PolicyRoot) {
     Assert-ExternalPath $PolicyRoot
     if (-not (Test-Path -LiteralPath $PolicyRoot -PathType Container)) { throw 'PolicyRoot must be a trusted external checkout directory' }
 }
+if ($BaseCommit) {
+    $resolvedBase = git -C $sourceRoot rev-parse --verify --end-of-options "${BaseCommit}^{commit}" 2>$null
+    if ($LASTEXITCODE -ne 0 -or $resolvedBase -notmatch '^([0-9a-f]{40}|[0-9a-f]{64})$') {
+        throw 'BaseCommit must identify an existing commit'
+    }
+    $BaseCommit = $resolvedBase.Trim()
+}
 if (-not $PSBoundParameters.ContainsKey('OutputDir')) {
     $OutputDir = Join-Path $sourceRoot '.scan-baseline'
 }

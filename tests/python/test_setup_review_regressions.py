@@ -33,6 +33,36 @@ def powershell(command, cwd, *, env):
                           cwd=cwd, env=env, text=True, capture_output=True, timeout=90)
 
 
+@pytest.mark.parametrize('revision', ['missing', 'tree', 'blob', 'option'])
+def test_baseline_rejects_invalid_base_before_scanning(tmp_path, revision):
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.run(['git', '-C', str(repo), *args], check=True,
+                              text=True, capture_output=True).stdout.strip()
+
+    git('init', '-q')
+    git('config', 'user.name', 'Test')
+    git('config', 'user.email', 'test@example.com')
+    (repo / 'main.tf').write_text('resource "sample" "one" {}\n', encoding='utf-8')
+    git('add', '.')
+    git('commit', '-qm', 'base')
+    value = {'missing': 'missing-base', 'tree': git('rev-parse', 'HEAD^{tree}'),
+             'blob': git('rev-parse', 'HEAD:main.tf'), 'option': '--fixture-option'}[revision]
+    baseline = repo / '.scan-baseline/baseline.json'
+    baseline.parent.mkdir()
+    baseline.write_text('existing reviewed baseline', encoding='utf-8')
+    command = ('function checkov { throw "scanner must not run" }; '
+               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov '
+               f'-CloudProvider aws -Force -BaseCommit {ps_string(value)}')
+    result = powershell(command, repo, env=clean_env())
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'BaseCommit must identify an existing commit' in result.stderr
+    assert 'scanner must not run' not in result.stdout + result.stderr
+    assert baseline.read_text(encoding='utf-8') == 'existing reviewed baseline'
+
+
 @pytest.mark.parametrize('failed_step', ['runner', 'verification', 'both'])
 @pytest.mark.parametrize('failure', ['exit', 'os-error'])
 def test_setup_records_runner_and_verification_failures(tmp_path, monkeypatch, capsys, failed_step, failure):
