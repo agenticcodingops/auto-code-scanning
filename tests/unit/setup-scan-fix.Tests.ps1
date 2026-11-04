@@ -11,6 +11,8 @@ BeforeAll {
     . (Join-Path $root 'hooks/lib/common.ps1')
     # Load the actual preflight without running installation or account operations.
     $preflight = [scriptblock]::Create($content.Substring(0, $content.IndexOf('# Resolve every executable')))
+    $resolutionStart = $content.IndexOf('# Resolve every executable')
+    $eagerResolution = [scriptblock]::Create($content.Substring($resolutionStart, $content.IndexOf('function Info') - $resolutionStart))
     if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
         Add-Type @'
 using System.Runtime.InteropServices;
@@ -66,6 +68,20 @@ Describe 'Setup Python discovery' {
         Mock Get-Command { [pscustomobject]@{ Source = Join-Path $RepoPath 'python.exe' } }
         Mock Resolve-SetupRealPath { throw 'Cannot resolve trusted path link' }
         { Find-Py } | Should -Throw '*must resolve outside*'
+    }
+
+    It 'Blocks an unresolved external <Tool> identity' -TestCases @(
+        @{ Tool = 'lefthook' }
+        @{ Tool = 'pre-commit' }
+        @{ Tool = 'gh' }
+    ) {
+        param($Tool)
+        $script:unresolvedTool = $Tool
+        Mock Get-Command {
+            if ($Name -eq $script:unresolvedTool) { [pscustomobject]@{ Source = Join-Path $TestDrive 'external-tool.exe' } }
+        }
+        Mock Resolve-SetupRealPath { throw 'Cannot resolve trusted path link' }
+        { & $eagerResolution } | Should -Throw '*Cannot resolve trusted path link*'
     }
 }
 

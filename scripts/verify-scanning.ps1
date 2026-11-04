@@ -162,7 +162,7 @@ $configFiles = @(
 
 foreach ($config in $configFiles) {
     if ($config.Path -and (Test-Path -LiteralPath $config.Path -PathType Leaf)) {
-        $size = (Get-Item $config.Path).Length
+        $size = (Get-Item -LiteralPath $config.Path -Force).Length
         Add-CheckResult -Passed $true -Message "$($config.Name) exists ($size bytes)"
     }
     else {
