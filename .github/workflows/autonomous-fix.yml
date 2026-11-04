@@ -438,13 +438,13 @@ jobs:
           // .git/config under any reading of its wildcards. A Glob pattern returns names only, and a later Read of
           // a listed file is checked by its resolved path, so for Glob a literal .git segment is what is refused.
           // A Grep glob that starts with ! only excludes files, so only its form is checked.
-          // Positive basename globs search at every depth, including arbitrary files in .git.
-          // Require a directory component rather than trying to enumerate credential filenames.
+          // Positive content globs need literal directories and a non-recursive filename pattern.
+          // Wildcard directories can select nested .git, which can itself also be a metadata file.
           function readPattern(tool, p) {
             if (p === undefined) return null;
             const refuse = "the pattern " + JSON.stringify(p) + " must be relative and stay out of .git: no root, ~, " +
               "drive or .. in any brace alternative, and no character class, extglob or backslash" +
-              (tool === "Grep" ? "; a Grep glob also may not match .git under any reading of its wildcards." : ".");
+              (tool === "Grep" ? "; positive Grep globs need literal directories and a non-recursive filename pattern that excludes .git." : ".");
             if (typeof p !== "string" || /[\x00-\x1f\x7f\x5b\x5d\x5c()]/.test(p)) return refuse;
             const negated = tool === "Grep" && p.startsWith("!");
             const alts = alternatives(negated ? p.slice(1) : p);
@@ -452,7 +452,10 @@ jobs:
             for (const alt of alts) {
               if (/^(?:[/~]|[A-Za-z]:)/.test(alt)) return refuse;
               const segs = alt.split("/");
-              if (tool === "Grep" && !negated && segs.length === 1) return refuse;
+              if (tool === "Grep" && !negated && (segs.length === 1 || alt.includes("**") ||
+                  segs.slice(0, -1).some((s) => /[*?]/.test(s)) || globRegex(segs[segs.length - 1]).test(".git"))) {
+                return refuse;
+              }
               if (segs.some((s) => s.toLowerCase() === ".git" || (s.startsWith(".") && globRegex(s).test("..")))) {
                 return refuse;
               }

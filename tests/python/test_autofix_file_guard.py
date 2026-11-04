@@ -202,9 +202,16 @@ def test_content_search_refuses_recursive_basename_globs(guard, glob):
     assert call("Grep", {"pattern": "credential", "glob": glob}) == 2
 
 
+@pytest.mark.parametrize("glob", ["src/**", "**/*.key", "src/*/config", "src/*", "src/?git",
+                                 "?git/HEAD", "?git/logs/HEAD", "src/?git/HEAD"])
+def test_content_search_refuses_metadata_selecting_wildcards(guard, glob):
+    call, _ = guard
+    assert call("Grep", {"pattern": "credential", "glob": glob}) == 2
+
+
 def test_content_search_keeps_rooted_patterns_and_exclusions(guard):
     call, _ = guard
-    for glob in ("src/*.py", "src/**", "!*.key"):
+    for glob in ("src/*.py", "src/lib/*.py", "!*.key"):
         assert call("Grep", {"pattern": "answer", "glob": glob}) == 0
 
 
