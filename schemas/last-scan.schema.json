@@ -128,20 +128,6 @@
     "scan_complete": {
       "type": "boolean",
       "description": "False when any required scanner or policy failed"
-    },
-    "batches": {
-      "type": "array",
-      "description": "SQL lint batch outcomes, including output from incomplete batches",
-      "items": {
-        "type": "object",
-        "required": ["name", "exit_code", "output"],
-        "properties": {
-          "name": {"type": "string", "enum": ["configured", "default"]},
-          "exit_code": {"type": "integer"},
-          "output": {"type": "string"}
-        },
-        "additionalProperties": false
-      }
     }
   },
   "$defs": {

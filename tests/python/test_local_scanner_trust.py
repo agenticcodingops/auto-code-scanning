@@ -510,6 +510,15 @@ def test_sql_single_invocation_preserves_exit_policy(consumer, package, passive_
     assert len(trace.read_text(encoding='utf-8').splitlines()) == 1
     expected = int(tool_exit == 1 or (tool_exit > 1 and not allow_errors))
     assert result.returncode == expected, result.stdout + result.stderr
+    if tool_exit in (0, 1):
+        import jsonschema
+        schema = json.loads((ROOT / 'schemas/last-scan.schema.json').read_text(encoding='utf-8'))
+        report = json.loads((consumer / '.scanning/last-scan.json').read_text(encoding='utf-8'))
+        jsonschema.validate(report, schema)
+        # Consumers accept the single-run report and reject the retired batch contract.
+        report['batches'] = [{'name': 'default', 'exit_code': tool_exit, 'output': ''}]
+        with pytest.raises(jsonschema.ValidationError, match='batches'):
+            jsonschema.validate(report, schema)
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
