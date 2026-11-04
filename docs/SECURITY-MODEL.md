@@ -16,10 +16,23 @@ way it is. This document explains the threat model, the controls, and — concre
 
 | Layer | What it does | Risk |
 |---|---|---|
-| **A — scanning** | Trivy/Checkov/tflint/Semgrep/ESLint/etc. detect issues locally + in CI | Low: read-only, no code changes |
+| **A — scanning** | Trivy/Checkov/tflint/Semgrep/ESLint/etc. detect issues locally + in CI | Passive scanners report findings; formatters can edit files and build hooks execute project logic |
 | **B — fix-loop** | An agent (claude-code-action) edits code and pushes a fix | **Higher**: write access + reads attacker-influenced PR/review text |
 
-Everything below is about LAYER B. Layer A only ever *reports*.
+### Local build hooks require a trusted repository
+
+`dotnet-build` runs the repository's own build logic on the developer's machine.
+Project files, imported targets, build tasks and dependencies can execute commands
+with that developer's permissions, environment, credentials and network access.
+An immutable source snapshot ensures the intended version is built; it does not
+isolate execution from the host. `dotnet-format` also evaluates project inputs.
+
+Enable local build hooks only for repositories and build inputs the developer
+already trusts. Local hooks are developer feedback; CI is the authoritative
+security boundary. Review untrusted changes through the protected CI process,
+with builds isolated from developer credentials and privileged jobs.
+
+The remaining sections describe LAYER B.
 
 ## 2. The threat: the "lethal trifecta"
 
