@@ -4,10 +4,11 @@ from pathlib import Path
 import sys
 import tempfile
 
-import yaml
-
 
 def passive_policy(source=None):
+    # Imported here, as in scan_config.load_yaml, so hooks that never read a Checkov
+    # policy do not need PyYAML when pre-push.py loads this module.
+    import yaml
     try:
         data = {} if source is None else yaml.safe_load(Path(source).read_text(encoding='utf-8'))
     except (yaml.YAMLError, UnicodeError) as exc:
@@ -42,6 +43,7 @@ def passive_policy(source=None):
 
 @contextmanager
 def prepared_policy(source=None):
+    import yaml
     data = passive_policy(source)
     with tempfile.TemporaryDirectory(prefix='scan-checkov-') as directory:
         path = Path(directory) / 'policy.yaml'
@@ -50,6 +52,7 @@ def prepared_policy(source=None):
 
 
 if __name__ == '__main__':
+    import yaml
     try:
         # Shell wrappers invoke this only to write into their own private temp dir.
         print(yaml.safe_dump(passive_policy(sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None)), end='')

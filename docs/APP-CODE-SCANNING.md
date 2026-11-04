@@ -33,7 +33,7 @@ languages:
   sql:
     enabled: true
     tools:
-      sqlfluff: { enabled: true, args: ["lint", "--dialect=ansi"], stage: pre-commit }
+      sqlfluff: { enabled: true, stage: pre-commit }
 ```
 
 `setup-scan-fix --languages csharp,typescript,sql` writes this for you from a tier template.
@@ -56,9 +56,12 @@ a path. This is the generic fix for the old `api/`-path bug, and it is enforced 
 
 Each app-code hook ships as a `.sh` + `.ps1` pair under `hooks/`, dispatched by
 `hooks/dispatcher.sh` (Windows → `.ps1`, else `.sh`), sharing `hooks/lib/common.{sh,ps1}`. They
-all: check the tool with **fail-open** (`require_tool` → exit 0 if absent), scan **only staged
-files** (via the git index), write `.scanning/last-scan.json`, and classify exit codes
-(`0` pass / `1` findings / `2+` infra error → fail-open).
+check tool availability, write `.scanning/last-scan.json`, and classify exit codes
+(`0` pass / `1` findings / `2+` tool error). Incomplete scans block by default;
+`SCAN_ALLOW_TOOL_ERRORS=1` explicitly permits supported local tool failures. It does
+not bypass snapshot creation, policy checks, or invalid configuration. Passive commit
+scanners read exported index blobs, formatters operate on worktree files, and push
+scanners read the selected pushed objects.
 
 | Hook | What it runs | Stage | Notes |
 |---|---|---|---|
@@ -68,7 +71,7 @@ files** (via the git index), write `.scanning/last-scan.json`, and classify exit
 | `dotnet-build` | `dotnet build <sln> /p:AnalysisMode=AllEnabledByDefault` | pre-push | Roslyn analyzers; heavier |
 | `eslint` | `eslint --fix` (local/npx) | pre-commit | gates on remaining errors; `stage_fixed` under Lefthook |
 | `prettier` | `prettier --write` | pre-commit | auto-format; `stage_fixed` under Lefthook |
-| `sqlfluff` | `sqlfluff lint --dialect ansi` | pre-commit | |
+| `sqlfluff` | `sqlfluff lint` | pre-commit | applicable staged `.sqlfluff` dialects; ANSI only for files without configuration; ancestor config and ignore files are preserved |
 | `validate-scan-config` | validate `scan-config.yaml` vs schema | pre-commit | runs only when the config is staged |
 
 Both **Lefthook** (default) and **pre-commit** invoke these same scripts, so behaviour is

@@ -283,6 +283,43 @@ def test_snapshot_keeps_local_rule_inputs_in_the_index(consumer, monkeypatch, ru
     assert runner.scan('semgrep-csharp', [], 'sh') == 0
 
 
+def test_hook_runners_load_without_pyyaml(monkeypatch):
+    # Hooks that never read a Checkov policy must not need PyYAML just to load.
+    monkeypatch.setitem(sys.modules, 'yaml', None)
+    for name in ('checkov_policy', 'pre_push_no_yaml', 'pre_commit_no_yaml'):
+        sys.modules.pop(name, None)
+    load_runner('pre_push_no_yaml', 'pre-push.py')
+    load_runner('pre_commit_no_yaml', 'pre-commit.py')
+
+
+@pytest.mark.parametrize('ruleset', ['rules/custom.yml', 'p/csharp'])
+def test_unstaged_relative_ruleset_fails_clearly(consumer, monkeypatch, ruleset):
+    # A local rule file the snapshot cannot see is an error; a registry reference is not.
+    rules = consumer / 'rules/custom.yml'
+    rules.parent.mkdir()
+    rules.write_text('worktree only\n', encoding='utf-8')
+    (consumer / 'App.cs').write_text('// source\n', encoding='utf-8')
+    git(consumer, 'add', 'App.cs')
+    monkeypatch.setenv('SEMGREP_RULESET_CSHARP', ruleset)
+    runner = load_runner('unstaged_rules_snapshot', 'pre-commit.py')
+    monkeypatch.setattr(runner.push, 'select_shell', lambda _: ('sh', 'scanner-shell'))
+    original = subprocess.run
+    seen = []
+    def run(command, **kwargs):
+        if command[0] != 'scanner-shell':
+            return original(command, **kwargs)
+        seen.append(kwargs['env']['SEMGREP_RULESET_CSHARP'])
+        return subprocess.CompletedProcess(command, 0)
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    if ruleset == 'p/csharp':
+        assert runner.scan('semgrep-csharp', [], 'sh') == 0
+        assert seen == ['p/csharp']
+    else:
+        with pytest.raises(ValueError, match='not staged'):
+            runner.scan('semgrep-csharp', [], 'sh')
+        assert seen == []
+
+
 @pytest.mark.parametrize('split_index', [False, True])
 def test_snapshot_capture_leaves_the_shared_index_unlocked_and_unchanged(consumer, package, scanner, split_index):
     (consumer / 'main.tf').write_text('# source\n', encoding='utf-8')

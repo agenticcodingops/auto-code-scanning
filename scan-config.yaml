@@ -363,9 +363,6 @@ languages:
       sqlfluff:
         enabled: true
         config_file: ".sqlfluff"
-        args:
-          - "lint"
-          - "--dialect=ansi"
         stage: pre-commit
 
 # ============================================================================
