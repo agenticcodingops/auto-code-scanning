@@ -326,15 +326,20 @@ jobs:
           TRUSTED_POLICY_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: python3 "${RUNNER_TEMP}/app-policy-helper/prepare_scan_policy.py"
 
-      # The trivy-action/setup-trivy default (Trivy v0.65.0) fails to install on the
-      # runner ("found version 0.65.0" then exit 1). This is a READ-ONLY job (no push),
-      # so install a KNOWN-GOOD version directly from its release-tagged install.sh —
-      # the same approach the proven inline workflow used. (The write-capable
-      # autonomous-fix apply job keeps the SHA-pinned action with a pinned version.)
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-        with:
-          version: "v0.75.0"
+        # Download the pinned release from GitHub and verify its checksum. The install
+        # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
+        env:
+          TRIVY_VERSION: "0.75.0"
+          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${archive}"             "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/trivy-bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/trivy-bin" trivy
+          echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
 
       - name: Trivy secret scan -> SARIF
         run: |
