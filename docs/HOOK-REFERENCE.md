@@ -59,10 +59,20 @@ interpreter blocks before scanner launch with `Python is required for index
 snapshots`. `SCAN_ALLOW_TOOL_ERRORS=1` does not bypass this prerequisite.
 Parallel scanners capture private index copies. Repository-local Semgrep rule
 overrides (files or directories) are exported from that same index version.
-The pre-commit Terraform snapshot contains selected changed IaC files and policy,
-as the file-only push scanners do. Unchanged sibling files are excluded, so local
-evaluation has less module context for cross-file references. Use the complete
-CI scan as the authoritative result for module-wide analysis.
+External rule aliases are resolved before checking the repository boundary, so
+a link into the checkout uses staged rules or fails if they are not staged.
+Checkout-local rule settings keep their captured names even when an unstaged
+link redirects the worktree path elsewhere; captured symlinks still block.
+The pre-commit Terraform snapshot includes `.tf`, `.tf.json` and `.tfvars`
+siblings from the captured index in each selected directory. Trivy can resolve
+module variables and locals. Indexed `terraform.tfvars` and `*.auto.tfvars` files
+are passed as variable overrides, with automatic files in ordinal filename order;
+other variable files require an explicit `--tf-vars` argument. Findings are
+filtered to the selected changed files, accepting bare or directory-prefixed
+scanner targets. Ambiguous targets and invalid reports block even with tool-error
+opt-in. Nested directories and unrelated files remain excluded. A required
+context file that is a symlink blocks snapshot creation. Index-capture errors include
+Git's diagnostic so conflicts or other rejected index entries can be corrected.
 Transaction-bound push
 scanners select changed files from each isolated pushed tree, alongside required
 tracked policy. Terraform directory scans exclude unchanged source files, including

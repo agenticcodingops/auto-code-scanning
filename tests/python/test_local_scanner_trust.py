@@ -343,17 +343,23 @@ def test_snapshot_capture_leaves_the_shared_index_unlocked_and_unchanged(consume
     assert lock.read_text(encoding='utf-8') == 'another index writer\n'
 
 
-def test_commit_iac_snapshot_limits_sources_to_selected_changes(consumer, monkeypatch):
+def test_commit_iac_snapshot_keeps_context_but_limits_manifest(consumer, monkeypatch):
     module = consumer / 'module'
     module.mkdir()
     (module / 'main.tf').write_text('# original\n', encoding='utf-8')
     (module / 'variables.tf').write_text('# unchanged module context\n', encoding='utf-8')
+    (module / 'settings.tf.json').write_text('{}\n', encoding='utf-8')
+    (module / 'terraform.tfvars').write_text('value = "staged"\n', encoding='utf-8')
+    (module / 'ignored.txt').write_text('not Terraform\n', encoding='utf-8')
+    (module / 'nested').mkdir()
+    (module / 'nested/main.tf').write_text('# other module\n', encoding='utf-8')
     git(consumer, 'add', '.')
     git(consumer, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
         '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'fixture')
     (module / 'main.tf').write_text('# staged change\n', encoding='utf-8')
     git(consumer, 'add', 'module/main.tf')
     (module / 'main.tf').write_text('# worktree change\n', encoding='utf-8')
+    (module / 'variables.tf').write_text('# worktree context\n', encoding='utf-8')
     runner = load_runner('selected_iac_snapshot', 'pre-commit.py')
     monkeypatch.setattr(runner.push, 'select_shell', lambda _: ('sh', 'scanner-shell'))
     original = subprocess.run
@@ -362,7 +368,12 @@ def test_commit_iac_snapshot_limits_sources_to_selected_changes(consumer, monkey
             return original(command, **kwargs)
         snapshot = kwargs['cwd']
         assert (snapshot / 'module/main.tf').read_text(encoding='utf-8') == '# staged change\n'
-        assert not (snapshot / 'module/variables.tf').exists()
+        assert (snapshot / 'module/variables.tf').read_text(encoding='utf-8') == '# unchanged module context\n'
+        assert (snapshot / 'module/settings.tf.json').read_text(encoding='utf-8') == '{}\n'
+        assert (snapshot / 'module/terraform.tfvars').read_text(encoding='utf-8') == 'value = "staged"\n'
+        assert not (snapshot / 'module/ignored.txt').exists()
+        assert not (snapshot / 'module/nested/main.tf').exists()
+        assert Path(kwargs['env']['SCAN_PUSH_FILES']).read_bytes() == b'module/main.tf\0'
         return subprocess.CompletedProcess(command, 0)
     monkeypatch.setattr(runner.subprocess, 'run', run)
     assert runner.scan('trivy-iac-critical', [], 'sh') == 0
