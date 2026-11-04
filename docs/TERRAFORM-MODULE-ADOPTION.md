@@ -3,7 +3,7 @@
 A worked example: add the Terraform scan to a repository that publishes a Terraform
 module.
 
-The current release is `v3.0.2`. <!-- x-release-please-version -->
+The current release is `v3.0.3`. <!-- x-release-please-version -->
 
 Every `file:line` reference on this page, such as `reusable-scan.yml:126`, means that line
 at commit
@@ -128,11 +128,11 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.2 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.3 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "azure"
-      scanning-repo-ref: "v3.0.2" # x-release-please-version
+      scanning-repo-ref: "v3.0.3" # x-release-please-version
 ```
 
 - Replace `OWNER`, the branch name and `cloud-provider` with yours.
