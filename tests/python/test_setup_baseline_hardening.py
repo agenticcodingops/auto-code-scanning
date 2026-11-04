@@ -228,10 +228,24 @@ def test_verifier_uses_external_policy_only(tmp_path, policy, init_code):
                STUB_TRACE=str(trace), STUB_INIT_CODE=str(init_code))
     if policy == 'missing':
         del env['SCAN_TFLINT_CONFIG']
+    # The verifier only runs a TFLint executable it resolved outside the checkout,
+    # so the stub is a real program on PATH rather than a shell function.
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    stub = tools / 'tflint_stub.py'
+    stub.write_text(
+        'import json, os, sys\n'
+        'with open(os.environ["STUB_TRACE"], "a", encoding="utf-8") as trace:\n'
+        '    trace.write(json.dumps({"args": sys.argv[1:], "cache": os.environ.get("TFLINT_PLUGIN_DIR")}) + "\\n")\n'
+        'sys.exit(int(os.environ["STUB_INIT_CODE"]) if "--init" in sys.argv else 2)\n', encoding="utf-8")
+    if os.name == 'nt':
+        (tools / 'tflint.cmd').write_text(f'@"{sys.executable}" "{stub}" %*\n', encoding="utf-8")
+    else:
+        launcher = tools / 'tflint'
+        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{stub}" "$@"\n', encoding="utf-8")
+        launcher.chmod(0o755)
+    env['PATH'] = str(tools) + os.pathsep + env.get('PATH', '')
     command = (
-        'function tflint { '
-        '@{ args=@($args); cache=$env:TFLINT_PLUGIN_DIR } | ConvertTo-Json -Compress | Add-Content $env:STUB_TRACE; '
-        '$global:LASTEXITCODE=if ($args -contains "--init") { [int]$env:STUB_INIT_CODE } else { 2 } }; '
         'function trivy { $global:LASTEXITCODE=0 }; function checkov {}; function pre-commit {}; '
         f'& {ps_string(ROOT / "scripts/verify-scanning.ps1")}')
     result = powershell(command, repo, env=env)

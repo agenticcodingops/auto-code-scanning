@@ -76,6 +76,34 @@ $Script:PassedChecks = 0
 $Script:FailedChecks = 0
 $Script:Warnings = 0
 
+function Resolve-VerifiedTool {
+    # Resolve a tool by name and refuse one that lives inside the scanned or consumer
+    # checkout, so a repository cannot shadow it on PATH. Check the canonical identity,
+    # but return the original absolute path so virtual environments keep their packages.
+    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
+    $path = (Get-Command $Name -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    if (-not [IO.Path]::IsPathRooted($path)) { throw "$Label must resolve to an absolute executable path" }
+    $target = Resolve-SetupRealPath $path
+    $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
+    $repoRoot = if ($snapshot) { (Get-Location).Path } else {
+        Assert-GitAvailable
+        git rev-parse --show-toplevel 2>$null
+    }
+    if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
+    $roots = @($repoRoot)
+    if ($snapshot -and $env:SCAN_CONSUMER_ROOT) { $roots += $env:SCAN_CONSUMER_ROOT }
+    $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+        [StringComparison]::OrdinalIgnoreCase
+    } else { [StringComparison]::Ordinal }
+    foreach ($root in $roots) {
+        $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
+        if ($target.Equals($boundary, $comparison) -or $target.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+            throw "$Label must resolve outside the scanned and consumer checkouts"
+        }
+    }
+    return $path
+}
+
 function Add-CheckResult {
     param(
         [bool]$Passed,
@@ -216,28 +244,7 @@ if (Test-Path -LiteralPath $runnerConfig -PathType Leaf) {
     try {
         # Parse YAML with an external interpreter; isolated mode excludes the
         # consumer working directory from Python's import search path.
-        $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-        if (-not [IO.Path]::IsPathRooted($python)) { throw 'Python must resolve to an absolute executable path' }
-        # Check the canonical identity, but retain the original interpreter path
-        # for execution so virtual environments keep their package discovery.
-        $pythonTarget = Resolve-SetupRealPath $python
-        $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
-        $repoRoot = if ($snapshot) { (Get-Location).Path } else {
-            Assert-GitAvailable
-            git rev-parse --show-toplevel 2>$null
-        }
-        if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
-        $roots = @($repoRoot)
-        if ($snapshot -and $env:SCAN_CONSUMER_ROOT) { $roots += $env:SCAN_CONSUMER_ROOT }
-        $comparison = if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
-            [StringComparison]::OrdinalIgnoreCase
-        } else { [StringComparison]::Ordinal }
-        foreach ($root in $roots) {
-            $boundary = (Resolve-SetupRealPath $root).TrimEnd('/', '\')
-            if ($pythonTarget.Equals($boundary, $comparison) -or $pythonTarget.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, $comparison)) {
-                throw 'Python must resolve outside the scanned and consumer checkouts'
-            }
-        }
+        $python = Resolve-VerifiedTool -Name python -Label Python
         $hookResult = & $python -I "$PSScriptRoot/verify-setup-hooks.py" $HooksRunner $Tier $runnerConfig 2>&1
         if ($LASTEXITCODE -ne 0) { throw ($hookResult -join "`n") }
         Add-CheckResult -Passed $true -Message "$HooksRunner $Tier template hooks configured"
@@ -294,10 +301,11 @@ if (Test-CommandExists "tflint") {
         Assert-SafeWritePath $env:SCAN_TFLINT_PLUGIN_DIR
         $env:TFLINT_PLUGIN_DIR = Resolve-ExternalRealPath $env:SCAN_TFLINT_PLUGIN_DIR
         $trustedConfig = Resolve-ExternalRealPath $env:SCAN_TFLINT_CONFIG
+        $tflint = Resolve-VerifiedTool -Name tflint -Label TFLint
         Write-Info "Initializing tflint with trusted external policy..."
-        tflint --init --config=$trustedConfig 2>&1 | Out-Null
+        & $tflint --init --config=$trustedConfig 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'tflint initialization failed' }
-        tflint --config=$trustedConfig 2>&1 | Out-Null
+        & $tflint --config=$trustedConfig 2>&1 | Out-Null
         if ($LASTEXITCODE -notin @(0, 2)) { throw 'tflint verification failed' }
         Add-CheckResult -Passed $true -Message "tflint initialized and verified with trusted external policy"
     }

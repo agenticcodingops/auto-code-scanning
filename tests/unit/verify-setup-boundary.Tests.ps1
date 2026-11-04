@@ -111,3 +111,40 @@ Describe 'Setup repository boundary casing' {
         }
     }
 }
+
+Describe 'Verifier tool boundary' {
+    BeforeEach {
+        $script:savedSnapshot = $env:SCAN_INDEX_SNAPSHOT
+        $env:SCAN_INDEX_SNAPSHOT = '1'
+        $script:repo = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'tool-consumer') -Force
+        Push-Location $script:repo.FullName
+    }
+
+    AfterEach {
+        Pop-Location
+        $env:SCAN_INDEX_SNAPSHOT = $script:savedSnapshot
+    }
+
+    It 'Refuses a tool that resolves inside the consumer checkout' {
+        $inside = New-Item -ItemType File -Path (Join-Path $script:repo.FullName 'bin/tflint.ps1') -Force
+        $script:toolPath = $inside.FullName
+        Mock Get-Command { [pscustomobject]@{ Source = $script:toolPath } }
+        { Resolve-VerifiedTool -Name tflint -Label TFLint } | Should -Throw '*TFLint must resolve outside*'
+    }
+
+    It 'Runs TFLint only through the verified absolute path' {
+        $tflintCheck = $ast.Find({ param($node)
+            $node -is [Management.Automation.Language.TryStatementAst] -and
+            $node.Extent.Text.Contains('SCAN_TFLINT_CONFIG')
+        }, $true).Extent.Text
+        $tflintCheck | Should -Match 'Resolve-VerifiedTool -Name tflint'
+        $tflintCheck | Should -Not -Match '(?m)^\s*tflint\s'
+    }
+
+    It 'Returns an external tool path unchanged' {
+        $outside = New-Item -ItemType File -Path (Join-Path $TestDrive 'external/tflint.ps1') -Force
+        $script:toolPath = $outside.FullName
+        Mock Get-Command { [pscustomobject]@{ Source = $script:toolPath } }
+        Resolve-VerifiedTool -Name tflint -Label TFLint | Should -BeExactly $script:toolPath
+    }
+}
