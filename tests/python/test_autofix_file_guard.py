@@ -196,6 +196,18 @@ def test_search_tools_share_the_review_path_boundary(guard, tool, inputs):
     assert call(tool, inputs) == 2
 
 
+@pytest.mark.parametrize("glob", ["config", "HEAD", "*.key", "*.py", "{src/**,config}"])
+def test_content_search_refuses_recursive_basename_globs(guard, glob):
+    call, _ = guard
+    assert call("Grep", {"pattern": "credential", "glob": glob}) == 2
+
+
+def test_content_search_keeps_rooted_patterns_and_exclusions(guard):
+    call, _ = guard
+    for glob in ("src/*.py", "src/**", "!*.key"):
+        assert call("Grep", {"pattern": "answer", "glob": glob}) == 0
+
+
 def test_guard_is_installed_for_every_tool_before_the_agent():
     steps = analyze()
     agent = step("Run Claude Code")

@@ -143,7 +143,7 @@ def _git(*args, cwd, env=None):
     ).stdout
 
 
-@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+@pytest.mark.skipif(_bash() is None, reason="needs compatible Bash")
 @pytest.mark.parametrize("binary", [True, False])
 def test_capture_publishes_text_patches_only(wf, tmp_path, binary):
     """A binary hunk would hide content from the patch secret scan, so capture refuses it."""
@@ -161,8 +161,8 @@ def test_capture_publishes_text_patches_only(wf, tmp_path, binary):
     script = _require_step(wf["jobs"]["analyze"], "Capture fix as a patch")["run"]
     out = tmp_path / "github-output"
     env = os.environ.copy()
-    env.update({"HEAD_SHA": head, "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(out)})
-    bash = shutil.which("bash")
+    env.update({"HEAD_SHA": head, "RUNNER_TEMP": _posix(tmp_path), "GITHUB_OUTPUT": _posix(out)})
+    bash = _bash()
     result = subprocess.run([bash, "-c", script], cwd=repo, env=env, capture_output=True, text=True)
     patch = repo / "autofix.patch"
     if binary:
@@ -174,6 +174,35 @@ def test_capture_publishes_text_patches_only(wf, tmp_path, binary):
         text = patch.read_text(encoding="utf-8")
         assert "+after" in text and "GIT binary patch" not in text
         assert "has_changes=true" in out.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name != "nt" or _bash() is None, reason="needs Windows with compatible Bash")
+def test_capture_ignores_an_incompatible_bash_on_path(wf, tmp_path, monkeypatch):
+    original = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: "unusable-wsl-launcher" if name == "bash" else original(name))
+    test_capture_publishes_text_patches_only(wf, tmp_path, False)
+
+
+@pytest.mark.skipif(_bash() is None, reason="needs compatible Bash")
+@pytest.mark.parametrize("control", [1, 6, 11, 14, 26, 28, 31, 127])
+def test_capture_rejects_unscannable_content(wf, tmp_path, control):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    (repo / "notes.txt").write_bytes(b"before\n")
+    _git("add", ".", cwd=repo)
+    _git("commit", "-qm", "base", cwd=repo)
+    head = _git("rev-parse", "HEAD", cwd=repo).strip()
+    token = "AKIA" + "Q7V3N9R2M8D5L6CW"
+    (repo / "notes.txt").write_bytes(bytes([control]) + ("access_key = '" + token + "'\n").encode())
+    proc = _run_step(_require_step(wf["jobs"]["analyze"], "Capture fix as a patch"), repo,
+                     {"HEAD_SHA": head, "RUNNER_TEMP": _posix(tmp_path),
+                      "GITHUB_OUTPUT": _posix(tmp_path / "output")}, _bash(), expect_ok=False)
+    assert proc.returncode != 0
+    assert "unsupported content" in proc.stdout + proc.stderr
+    assert token not in proc.stdout + proc.stderr
+    assert not (repo / "autofix.patch").exists()
+    assert not _outputs(tmp_path / "output").get("has_changes")
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +367,62 @@ def push_job_sandbox(tmp_path):
     }
 
 
+@pytest.mark.parametrize("control", [1, 11, 127])
+@pytest.mark.parametrize("offset", [0, 400])
+def test_export_rejects_unscannable_tree_content(wf, push_job_sandbox, control, offset):
+    sb = push_job_sandbox
+    token = "AKIA" + "Q7V3N9R2M8D5L6CW"
+    target = sb["repo"] / "src/app.txt"
+    target.write_bytes(b"x" * offset + bytes([control]) + ("access_key = '" + token + "'\n").encode())
+    _git("add", ".", cwd=sb["repo"])
+    tree = _git("write-tree", cwd=sb["repo"]).strip()
+    target.write_bytes(b"benign worktree\n")
+    env_file = sb["tmp"] / "export-env"
+    proc = _run_step(_require_step(wf["jobs"]["apply-and-push"], "Export the vetted files"), sb["ws"],
+                     {"RUNNER_TEMP": _posix(sb["runner_temp"]), "HEAD_SHA": sb["head_sha"],
+                      "PATCH_TREE": tree, "GITHUB_ENV": _posix(env_file)}, sb["bash"], expect_ok=False)
+    assert proc.returncode != 0
+    assert "unsupported content" in proc.stdout + proc.stderr
+    assert token not in proc.stdout + proc.stderr
+    assert "SCAN_TMP" not in _outputs(env_file)
+
+
+@pytest.mark.parametrize("name", ["diagram.svg", "package-lock.json", "node_modules/code.js"])
+def test_export_uses_scan_names_without_default_exclusions(wf, push_job_sandbox, name):
+    sb = push_job_sandbox
+    target = sb["repo"] / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    content = b"synthetic content for scanning\n"
+    target.write_bytes(content)
+    _git("add", ".", cwd=sb["repo"])
+    tree = _git("write-tree", cwd=sb["repo"]).strip()
+    env_file = sb["tmp"] / "export-env"
+    _run_step(_require_step(wf["jobs"]["apply-and-push"], "Export the vetted files"), sb["ws"],
+              {"RUNNER_TEMP": _posix(sb["runner_temp"]), "HEAD_SHA": sb["head_sha"],
+               "PATCH_TREE": tree, "GITHUB_ENV": _posix(env_file)}, sb["bash"])
+    scan_dir = Path(_outputs(env_file)["SCAN_TMP"])
+    files = sorted(p.relative_to(scan_dir).as_posix() for p in scan_dir.rglob("*") if p.is_file())
+    assert files == ["content/1.txt", "original/" + name]
+    assert (scan_dir / "content/1.txt").read_bytes() == content
+    assert (scan_dir / "original" / name).read_bytes() == content
+
+
+def test_export_preserves_path_sensitive_scan_inputs(wf, push_job_sandbox):
+    sb = push_job_sandbox
+    target = sb["repo"] / "settings.xml"
+    content = b"<settings>scan with the original filename</settings>\n"
+    target.write_bytes(content)
+    _git("add", ".", cwd=sb["repo"])
+    tree = _git("write-tree", cwd=sb["repo"]).strip()
+    env_file = sb["tmp"] / "export-env"
+    _run_step(_require_step(wf["jobs"]["apply-and-push"], "Export the vetted files"), sb["ws"],
+              {"RUNNER_TEMP": _posix(sb["runner_temp"]), "HEAD_SHA": sb["head_sha"],
+               "PATCH_TREE": tree, "GITHUB_ENV": _posix(env_file)}, sb["bash"])
+    scan_dir = Path(_outputs(env_file)["SCAN_TMP"])
+    assert (scan_dir / "original/settings.xml").read_bytes() == content
+    assert (scan_dir / "content/1.txt").read_bytes() == content
+
+
 def _tamper(repo, marker):
     """What hostile project code would do to the job state if it ever ran there."""
     hook = f"#!/bin/sh\necho ran > '{_posix(marker)}'\n"
@@ -373,8 +458,9 @@ def test_pushed_commit_is_exactly_the_scanned_tree(wf, push_job_sandbox):
               {**base_env, "GITHUB_ENV": _posix(gh_env), "PATCH_TREE": patch_tree}, sb["bash"])
     scan_dir = Path(_outputs(gh_env)["SCAN_TMP"])
     exported = sorted(p.relative_to(scan_dir).as_posix() for p in scan_dir.rglob("*") if p.is_file())
-    assert exported == ["src/app.txt"], "the secret scan must see exactly the vetted change"
-    assert (scan_dir / "src" / "app.txt").read_bytes() == b"hello fixed\n"
+    assert exported == ["content/1.txt", "original/src/app.txt"], "scan only the vetted bytes in both layouts"
+    assert (scan_dir / "content/1.txt").read_bytes() == b"hello fixed\n"
+    assert (scan_dir / "original/src/app.txt").read_bytes() == b"hello fixed\n"
 
     out = sb["tmp"] / "out-commit"
     _run_step(_require_step(job, "Commit the vetted tree"), sb["ws"],

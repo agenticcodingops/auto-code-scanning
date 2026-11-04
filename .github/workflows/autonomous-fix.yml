@@ -438,6 +438,8 @@ jobs:
           // .git/config under any reading of its wildcards. A Glob pattern returns names only, and a later Read of
           // a listed file is checked by its resolved path, so for Glob a literal .git segment is what is refused.
           // A Grep glob that starts with ! only excludes files, so only its form is checked.
+          // Positive basename globs search at every depth, including arbitrary files in .git.
+          // Require a directory component rather than trying to enumerate credential filenames.
           function readPattern(tool, p) {
             if (p === undefined) return null;
             const refuse = "the pattern " + JSON.stringify(p) + " must be relative and stay out of .git: no root, ~, " +
@@ -450,6 +452,7 @@ jobs:
             for (const alt of alts) {
               if (/^(?:[/~]|[A-Za-z]:)/.test(alt)) return refuse;
               const segs = alt.split("/");
+              if (tool === "Grep" && !negated && segs.length === 1) return refuse;
               if (segs.some((s) => s.toLowerCase() === ".git" || (s.startsWith(".") && globRegex(s).test("..")))) {
                 return refuse;
               }
@@ -649,6 +652,19 @@ jobs:
             exit 1
           fi
           git diff --cached --no-ext-diff --no-textconv > autofix.patch || true
+          # Refuse content the secret analyzer could silently skip. Check every byte,
+          # so the rule is also independent of patch headers and context placement.
+          python3 -I - <<'PY'
+          import pathlib
+          import re
+          patch = pathlib.Path("autofix.patch")
+          with patch.open("rb") as stream:
+              unsupported = any(re.search(rb"[\x00-\x06\x0b\x0e-\x1a\x1c-\x1f\x7f]", chunk)
+                                for chunk in iter(lambda: stream.read(65536), b""))
+          if unsupported:
+              patch.unlink()
+              raise SystemExit("::error::the generated patch contains unsupported content")
+          PY
           if [ -s autofix.patch ]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "patch_sha256=$(sha256sum autofix.patch | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -909,12 +925,27 @@ jobs:
           scan_dir="${RUNNER_TEMP}/autofix-secret-scan"
           list="${RUNNER_TEMP}/autofix-changed.list"
           rm -rf "${scan_dir}"
-          mkdir -p "${scan_dir}"
+          mkdir -p "${scan_dir}/original" "${scan_dir}/content"
           git -C pr-head diff-tree -r -z --no-renames --name-only --diff-filter=d "${HEAD_SHA}" "${PATCH_TREE}" > "${list}"
+          count=0
           while IFS= read -r -d '' f; do
-            mkdir -p "${scan_dir}/$(dirname -- "${f}")"
-            git -C pr-head cat-file blob "${PATCH_TREE}:${f}" > "${scan_dir}/${f}"
+            # Keep original filenames for path-sensitive rules, plus neutral copies
+            # that cannot match the scanner's built-in path exclusions.
+            count=$((count + 1))
+            mkdir -p "${scan_dir}/original/$(dirname -- "${f}")"
+            git -C pr-head cat-file blob "${PATCH_TREE}:${f}" > "${scan_dir}/original/${f}"
+            cp -- "${scan_dir}/original/${f}" "${scan_dir}/content/${count}.txt"
           done < "${list}"
+          python3 -I - "${scan_dir}" <<'PY'
+          import pathlib
+          import re
+          import sys
+          for file in (pathlib.Path(sys.argv[1]) / "content").iterdir():
+              with file.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(65536), b""):
+                      if re.search(rb"[\x00-\x06\x0b\x0e-\x1a\x1c-\x1f\x7f]", chunk):
+                          raise SystemExit("::error::the vetted files contain unsupported content")
+          PY
           echo "SCAN_TMP=${scan_dir}" >> "$GITHUB_ENV"
 
       - name: Install Trivy
