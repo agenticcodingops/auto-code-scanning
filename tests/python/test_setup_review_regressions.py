@@ -160,3 +160,27 @@ def test_baseline_retains_skips_from_real_scanner_reports(tmp_path, report_sourc
     assert entries[0]['fingerprint'] == scan_policy.occurrence_fingerprint(
         dict(tool='checkov', rule_id='CKV_AWS_20', file='main.tf',
              resource='aws_s3_bucket.sample', line=1, end_line=4), repo)
+
+
+@pytest.mark.parametrize('mode', ['missing', 'truncated', 'boolean', 'negative'])
+def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, mode):
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+    (repo / 'main.tf').write_text(REAL_SKIP_SOURCE, encoding='utf-8')
+    reports = json.loads((ROOT / 'tests/fixtures/checkov-baseline-reports.json').read_text(encoding='utf-8'))
+    report = reports['quiet' if mode in ('missing', 'negative') else 'full']
+    if mode != 'missing':
+        report['summary']['skipped'] = {'truncated': 2, 'boolean': True, 'negative': -1}[mode]
+    existing = repo / '.scan-baseline/baseline.json'
+    existing.parent.mkdir()
+    existing.write_text('previously reviewed baseline', encoding='utf-8')
+    env = clean_env()
+    env['SCANNER_REPORT'] = json.dumps(report)
+    # Configuration can select quiet output even without an explicit CLI flag.
+    command = ('function checkov { $global:LASTEXITCODE=0; $env:SCANNER_REPORT }; '
+               f'& {ps_string(ROOT / "scripts/create-baseline.ps1")} -Tool checkov -CloudProvider aws -Force')
+    result = powershell(command, repo, env=env)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert existing.read_text(encoding='utf-8') == 'previously reviewed baseline'
+    assert 'Created Successfully' not in result.stdout
