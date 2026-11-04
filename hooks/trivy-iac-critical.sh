@@ -54,6 +54,14 @@ for dir in "${scan_dirs[@]}"; do
     exit_code=$?
     set -e
 
+    if [[ "${SCAN_INDEX_SNAPSHOT:-0}" == 1 && ${exit_code} -eq 1 ]]; then
+        py="$(find_python)" || { hook_error 'Python is required to select commit findings'; exit 1; }
+        set +e
+        output="$(printf '%s' "$output" | "$py" -I "${SCRIPT_DIR}/lib/trivy_selected.py" "$dir" "$SCAN_PUSH_FILES")"
+        exit_code=$?
+        set -e
+    fi
+
     if [[ ${exit_code} -eq 1 ]]; then
         # Parse findings from JSON output
         parse_trivy_severities "${output}"

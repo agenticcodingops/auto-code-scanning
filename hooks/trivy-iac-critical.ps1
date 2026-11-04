@@ -46,6 +46,13 @@ $trivyArgs += @('--', $dir)
     # Run Trivy with retry
     $result = Invoke-TrivyWithRetry -ArgumentList $trivyArgs
 
+    if ($env:SCAN_INDEX_SNAPSHOT -eq '1' -and $result.ExitCode -eq 1) {
+        $py = Find-WorkingPython
+        if (-not $py) { throw 'Python is required to select commit findings' }
+        $filtered = $result.Output | & $py -I "$PSScriptRoot/lib/trivy_selected.py" $dir $env:SCAN_PUSH_FILES
+        $result = @{ Output = $filtered -join "`n"; ExitCode = $LASTEXITCODE }
+    }
+
     if ($result.ExitCode -eq 1) {
         # Parse findings
         try {
