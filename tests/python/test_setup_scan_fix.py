@@ -78,7 +78,7 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
     if implementation == 'ps1' and not pwsh:
         pytest.skip('PowerShell unavailable')
     platform = tmp_path / 'platform'
-    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+    for folder in ('scripts', 'hooks', 'schemas', 'templates', 'configs'):
         shutil.copytree(repo_root / folder, platform / folder,
                         ignore=shutil.ignore_patterns('__pycache__'))
     # Verification and external account commands are deterministic local stubs.

@@ -172,6 +172,12 @@ if ($RepoPath -ne $PlatformRoot) {
 # ---------------------------------------------------------------------------
 # 3) Local runner
 # ---------------------------------------------------------------------------
+Step 'Provider configuration (.scanning/configs/)'
+$provider = if ($CloudProvider) { $CloudProvider } else { 'aws' }
+Get-ChildItem -LiteralPath (Join-Path $PlatformRoot "configs/$provider") -File -Force | ForEach-Object {
+    Copy-IfNewer $_.FullName (Join-Path $RepoPath ".scanning/configs/$($_.Name)")
+}
+
 Step "Local runner: $HooksRunner"
 if ($HooksRunner -eq "lefthook") {
     Copy-IfNewer (Join-Path $PlatformRoot "templates/lefthook/lefthook.yml") (Join-Path $RepoPath "lefthook.yml")
@@ -266,7 +272,7 @@ if ((Test-Path $verify) -and $setupTools['pwsh']) {
     Push-Location $RepoPath
     try {
         Install-Step 'scan verification' {
-            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify -HooksRunner $HooksRunner 2>&1 | Select-Object -First 30 -Wait
+            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify -HooksRunner $HooksRunner -Tier $Tier 2>&1 | Select-Object -First 30 -Wait
         }
     } finally { Pop-Location }
 } else { Info "Verification needs verify-scanning.ps1 and an external pwsh; skipping" }

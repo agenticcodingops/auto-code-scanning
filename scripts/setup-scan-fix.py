@@ -118,6 +118,12 @@ def main(argv) -> int:
     else:
         info("Running inside the platform repo; hooks/scripts already present")
 
+    # Match the provider layout consumed by the local hooks and verifier.
+    provider = args.cloud_provider or 'aws'
+    for source in (PLATFORM_ROOT / 'configs' / provider).iterdir():
+        if source.is_file():
+            copy(source, repo / '.scanning/configs' / source.name)
+
     # 3) Runner
     step(f"Local runner: {args.hooks_runner}")
     if args.hooks_runner == "lefthook":
@@ -197,7 +203,7 @@ def main(argv) -> int:
     verify = PLATFORM_ROOT / "scripts/verify-scanning.ps1"
     if tools["pwsh"] and verify.exists():
         install_step([tools["pwsh"], "-NoProfile", "-File", str(verify),
-                      "-HooksRunner", args.hooks_runner], "scan verification")
+                      "-HooksRunner", args.hooks_runner, "-Tier", args.tier], "scan verification")
     else:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 

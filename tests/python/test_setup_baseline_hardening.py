@@ -127,7 +127,7 @@ def test_shell_setup_rejects_repository_tool_before_writes(tmp_path, name):
 @pytest.mark.parametrize('runner', ['lefthook', 'pre-commit'])
 def test_shell_setup_keeps_frozen_paths_after_directory_change(tmp_path, runner):
     platform = tmp_path / 'platform'
-    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+    for folder in ('scripts', 'hooks', 'schemas', 'templates', 'configs'):
         shutil.copytree(ROOT / folder, platform / folder, ignore=shutil.ignore_patterns('__pycache__'))
     repo = tmp_path / 'repo'
     repo.mkdir()

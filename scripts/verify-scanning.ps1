@@ -19,6 +19,9 @@ param(
     [ValidateSet('lefthook', 'pre-commit')]
     [string]$HooksRunner = 'pre-commit',
 
+    [ValidateSet('starter', 'standard', 'strict')]
+    [string]$Tier = 'standard',
+
     [Parameter(HelpMessage = "Show verbose output")]
     [switch]$ShowDetails = $false
 )
@@ -153,12 +156,12 @@ Write-Header "2. Checking Configuration Files"
 $configFiles = @(
     @{Path = $runnerConfig; Name = "$HooksRunner configuration"; Required = $true },
     @{Path = $env:SCAN_TFLINT_CONFIG; Name = "Trusted external tflint configuration"; Required = $true },
-    @{Path = ".checkov.yaml"; Name = "Checkov configuration"; Required = $true },
+    @{Path = (Join-Path $(if ($env:SCAN_CONFIG_DIR) { $env:SCAN_CONFIG_DIR } else { '.scanning/configs' }) '.checkov.yaml'); Name = "Checkov configuration"; Required = $true },
     @{Path = ".trivyignore"; Name = "Trivy ignore file"; Required = $false }
 )
 
 foreach ($config in $configFiles) {
-    if ($config.Path -and (Test-Path -LiteralPath $config.Path)) {
+    if ($config.Path -and (Test-Path -LiteralPath $config.Path -PathType Leaf)) {
         $size = (Get-Item $config.Path).Length
         Add-CheckResult -Passed $true -Message "$($config.Name) exists ($size bytes)"
     }
@@ -206,29 +209,18 @@ else {
 Write-Header "4. Checking Security Hooks in Configuration"
 
 if (Test-Path -LiteralPath $runnerConfig -PathType Leaf) {
-    $configContent = Get-Content -LiteralPath $runnerConfig -Raw
-
-    $securityHooks = if ($HooksRunner -eq 'lefthook') { @(
-        @{Pattern = 'trivy-iac-critical'; Name = 'Trivy IaC scanner' },
-        @{Pattern = 'checkov'; Name = 'Checkov policy scanner' },
-        @{Pattern = 'tflint'; Name = 'tflint linter' },
-        @{Pattern = 'trivy-secrets'; Name = 'Trivy secret scanner' },
-        @{Pattern = 'gitleaks'; Name = 'Private key detection' }
-    ) } else { @(
-        @{Pattern = "terraform_trivy"; Name = "Trivy IaC scanner" },
-        @{Pattern = "terraform_checkov"; Name = "Checkov policy scanner" },
-        @{Pattern = "terraform_tflint"; Name = "tflint linter" },
-        @{Pattern = "trivy-secrets|trivy.*secret"; Name = "Trivy secret scanner" },
-        @{Pattern = "detect-private-key"; Name = "Private key detection" }
-    ) }
-
-    foreach ($hook in $securityHooks) {
-        if ($configContent -match $hook.Pattern) {
-            Add-CheckResult -Passed $true -Message "$($hook.Name) configured"
-        }
-        else {
-            Add-CheckResult -Passed $false -Message "$($hook.Name) NOT configured in $runnerConfig"
-        }
+    try {
+        # Parse YAML with an external interpreter; isolated mode excludes the
+        # consumer working directory from Python's import search path.
+        $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $python = Resolve-ExternalRealPath $python
+        Assert-ExternalPath $python
+        $hookResult = & $python -I "$PSScriptRoot/verify-setup-hooks.py" $HooksRunner $Tier $runnerConfig 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ($hookResult -join "`n") }
+        Add-CheckResult -Passed $true -Message "$HooksRunner $Tier template hooks configured"
+    }
+    catch {
+        Add-CheckResult -Passed $false -Message "Cannot verify template hooks: $_"
     }
 }
 else {

@@ -44,13 +44,13 @@ def test_python_setup_forwards_selected_runner(tmp_path, monkeypatch, runner):
     assert setup_scan_fix.main(['setup', '--repo-path', str(repo), '--hooks-runner', runner]) == 0
     verification = next(command for command in calls if 'scan' in ' '.join(command)
                         and str(ROOT / 'scripts/verify-scanning.ps1') in command)
-    assert verification[-2:] == ['-HooksRunner', runner]
+    assert verification[-4:] == ['-HooksRunner', runner, '-Tier', 'standard']
 
 
 @pytest.mark.parametrize('runner', ['lefthook', 'pre-commit'])
 def test_shell_setup_forwards_selected_runner(tmp_path, runner):
     platform = tmp_path / 'platform'
-    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+    for folder in ('scripts', 'hooks', 'schemas', 'templates', 'configs'):
         shutil.copytree(ROOT / folder, platform / folder, ignore=shutil.ignore_patterns('__pycache__'))
     repo = tmp_path / 'repo'
     repo.mkdir()
@@ -66,7 +66,7 @@ def test_shell_setup_forwards_selected_runner(tmp_path, runner):
                f'-HooksRunner {runner}')
     result = powershell(command, tmp_path, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(trace.read_text(encoding='utf-8')) == ['-HooksRunner', runner]
+    assert json.loads(trace.read_text(encoding='utf-8')) == ['-HooksRunner', runner, '-Tier', 'standard']
 
 
 @pytest.mark.parametrize('runner', ['lefthook', 'pre-commit'])
@@ -78,14 +78,15 @@ def test_verifier_checks_selected_runner(tmp_path, runner, missing):
     config = 'lefthook.yml' if runner == 'lefthook' else '.pre-commit-config.yaml'
     content = ((ROOT / 'templates/lefthook/lefthook.yml').read_text(encoding='utf-8')
                if runner == 'lefthook' else
-               'terraform_trivy terraform_checkov terraform_tflint trivy-secrets detect-private-key')
+               (ROOT / 'templates/standard/pre-commit-config.yaml').read_text(encoding='utf-8'))
     if missing != 'config':
         (repo / config).write_text(content.replace('trivy-secrets', 'removed')
                                    if missing == 'security-hook' else content, encoding='utf-8')
     for hook in ('pre-commit', 'pre-push'):
         if missing != 'hook' or hook != 'pre-commit':
             (repo / '.git/hooks' / hook).write_text(f'#!/bin/sh\n# {runner}\n', encoding='utf-8')
-    (repo / '.checkov.yaml').write_text('{}', encoding='utf-8')
+    (repo / '.scanning/configs').mkdir(parents=True)
+    (repo / '.scanning/configs/.checkov.yaml').write_text('{}', encoding='utf-8')
     trusted = tmp_path / 'trusted.hcl'
     trusted.write_text('config {}', encoding='utf-8')
     env = clean_env()

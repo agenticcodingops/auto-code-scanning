@@ -191,7 +191,7 @@ def test_baseline_rejects_incomplete_skip_records_without_overwriting(tmp_path, 
 def test_shell_setup_records_runner_and_verification_failures(tmp_path, failed_step, failure):
     """Run the real shell setup and verifier process, including nonzero exits."""
     platform = tmp_path / 'platform'
-    for folder in ('scripts', 'hooks', 'schemas', 'templates'):
+    for folder in ('scripts', 'hooks', 'schemas', 'templates', 'configs'):
         shutil.copytree(ROOT / folder, platform / folder, ignore=shutil.ignore_patterns('__pycache__'))
     repo = tmp_path / 'repo'
     repo.mkdir()

@@ -191,6 +191,7 @@ python /path/to/auto-code-scanning/scripts/setup-scan-fix.py \
 | `scan-config.yaml` | **Your** config seam (languages, tools, fix_loop) | **Yes** — tune in Step 3 |
 | `hooks/` | Vendored dispatcher + per-tool `.sh`/`.ps1` + `lib/common.*` | No (re-vendored on upgrade) |
 | `lefthook.yml` *(or `.pre-commit-config.yaml`)* | Local runner config | Rarely |
+| `.scanning/configs/` | Provider configs selected by `--cloud-provider` / `-CloudProvider` (AWS when omitted) | Review on upgrade |
 | `scripts/` | `scan-and-fix.*`, `check-fix-allowlist.py`, `validate-scan-config.py`, `render-scan-config.py` | No |
 | `.claude/settings.json` + `.claude/hooks/*` | In-session self-correction bundle (fix-loop) | Keep local |
 | `.github/workflows/code-security-scan.yml` | Thin **scan** caller | Pin tag |
@@ -203,6 +204,13 @@ Setup also:
 - **verifies** (never creates) the `AUTOFIX_TOKEN` / `ANTHROPIC_API_KEY` secrets and prints exact
   creation steps if missing,
 - runs `verify-scanning` to prove the install.
+
+Verification uses the selected runner and tier's shipped template. When running
+it manually, pass `-HooksRunner lefthook` (or `pre-commit`) and `-Tier starter`,
+`standard`, or `strict` to match setup. It requires the installed policy at
+`.scanning/configs/.checkov.yaml` (or under `SCAN_CONFIG_DIR` when set).
+The external `SCAN_TFLINT_CONFIG` and `SCAN_TFLINT_PLUGIN_DIR` requirements
+still apply; the copied provider configs do not replace that external policy.
 
 ---
 
