@@ -105,8 +105,12 @@ Key enforcement (all mechanical, independent of the prompt):
   `Bash`, no build, test, package or interpreter commands, no `WebSearch`/`WebFetch`, no
   `git push/commit`). The model credentials reach that step only. The agent's config files
   (`.claude/`, `.mcp.json`, `CLAUDE.md`, …) are removed from the checkout, and the session
-  loads user-level settings only, with hooks off and only the action's own MCP servers. Its
-  Bun runtime is a checksum-verified download, never an Actions-cache entry. It emits a patch only.
+  loads user-level settings only, with a workflow-owned tool guard and only the action's own MCP servers.
+  The guard confines reads and writes to the checkout outside `.git`, resolves links and parent paths,
+  and permits only the four exact PR read commands in the prompt. Links and nested agent configuration
+  are removed before the session starts. Its Bun runtime is a checksum-verified download,
+  never an Actions-cache entry. Before upload, a checksum-verified secret scanner checks the patch outside the checkout,
+  without its configuration or ignore files. Findings, scanner errors and missing reports stop publication.
   The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of

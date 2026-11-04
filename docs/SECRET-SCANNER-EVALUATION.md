@@ -221,7 +221,7 @@ CI secret scans are Trivy only, severity HIGH,CRITICAL:
           exit-code: "1"
 ```
 
-`code-security-scan.yml` installs Trivy 0.71.0 and runs `trivy fs . --scanners secret --severity CRITICAL,HIGH` (the gate is the step at lines 245-250). `terraform-security-scan.yml` lines 73-78 run `aquasecurity/trivy-action` `scanners: secret`, `severity: HIGH,CRITICAL`. None of these workflows run Gitleaks.
+The supported CI paths are `code-security-scan.yml` for app code and `reusable-scan.yml` for Terraform/IaC, exercised in this repository by `reusable-scan-self-test.yml`. They use Trivy for CI secret scanning. None of these workflows run Gitleaks.
 
 Gitleaks maps every secret to HIGH:
 
@@ -310,7 +310,7 @@ the explicit local override, real findings, and a clean staged file.
 - `docs/HOOK-REFERENCE.md`. The gitleaks note currently says it complements trivy-secrets with different detection patterns (`docs/HOOK-REFERENCE.md` line 85). Replace that with the measured direction and the new command.
 - `docs/TESTING-GUIDE-CONSUMING-REPO.md` line 215, which tells an adopter that the AWS example key blocks the Gitleaks hook. That expectation is false for 8.30.1.
 
-No new scanner. No template edit. No scan-config default. No change to `reusable-scan.yml`, `code-security-scan.yml`, `terraform-security-scan.yml`, or `autonomous-fix.yml`. No schema or severity-map edit. No suppression-application change. `CHANGELOG.md`, `version.txt`, and `x-release-please-version` lines stay untouched.
+No new scanner. No template edit. No scan-config default. No change to the supported scan or fix-loop workflows. No schema or severity-map edit. No suppression-application change. `CHANGELOG.md`, `version.txt`, and `x-release-please-version` lines stay untouched.
 
 ### Tests
 

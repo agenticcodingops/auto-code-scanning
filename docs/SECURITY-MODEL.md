@@ -75,8 +75,12 @@ single job ever holds more than one.**
   `git push/commit/reset`, no `curl`/`wget`**. Before the agent starts, the files its CLI
   reads from the working directory (`.claude/`, `.mcp.json`, `CLAUDE.md`, …) are **removed**,
   and the session loads **user-level settings only** (`--setting-sources user`), with
-  **hooks disabled** and only the action's own MCP servers (`--strict-mcp-config`). Even a
-  base-branch hook or MCP server could run files of the PR head, so none runs. The Bun
+  **only the workflow's tool guard** and the action's own MCP servers (`--strict-mcp-config`). The
+  guard permits file access only inside the PR checkout, excluding git metadata and
+  paths that escape through links or parent traversal. Trusted helpers and base policy
+  live outside that checkout under `RUNNER_TEMP`, alongside the guard and its runtime.
+  User settings also live outside the checkout. The agent cannot write those files.
+  Even a base-branch hook or MCP server could run files of the PR head, so none runs. The Bun
   runtime the action needs is downloaded and checked against a recorded SHA-256 rather than
   restored from the Actions cache. Its only output is a **patch artifact** and the patch's
   SHA-256.
@@ -207,7 +211,7 @@ and somehow the `ai-autofix` label is present. They **still cannot**:
 | Attack | Why it fails |
 |---|---|
 | Exfiltrate secrets via the agent | The agent has **no egress tools** (`WebFetch`/`WebSearch`/`curl`/`wget` disallowed) and can't even *see* `AUTOFIX_TOKEN`. |
-| Read the model credentials with the PR's own code | The credentials reach **only the agent step**, whose tools run no build, test, package or interpreter command; the agent's config files are removed from the checkout and the session loads **user-level settings only**, with **hooks off** and only the action's own MCP servers; its Bun runtime is a checksum-verified download, not an Actions-cache entry; Python runs with `-I` in a virtual environment outside the checkout, so no module from the checkout is imported. The PR's code runs only in `verify`, which holds **no secret**. |
+| Read the model credentials with the PR's own code | The credentials reach **only the agent step**, whose tools run no build, test, package or interpreter command; the agent's config files are removed from the checkout and the session loads **user-level settings only**, with **only the workflow's tool guard** and the action's own MCP servers; its Bun runtime is a checksum-verified download, not an Actions-cache entry; Python runs with `-I` in a virtual environment outside the checkout, so no module from the checkout is imported. Trusted helpers, base policy and settings stay outside the agent's writable checkout. The PR's code runs only in `verify`, which holds **no secret**. |
 | Push arbitrary code | `analyze` has **no write token**; it only emits a patch. |
 | Run arbitrary build commands with the push token | `build_verify_cmd` is read from the **base ref** (not the PR head) and runs in the `verify` job, which holds **no secret**; the `AUTOFIX_TOKEN` exists only in the final push step's URL, in another job. A PR can neither change the command nor read the token by running it. |
 | Change the commit after the checks | The build runs in another job and hands over only its result. The push job builds one content-addressed **tree** from the head and the patch, gates and secret-scans that tree, commits it with `git commit-tree`, and pushes that commit by SHA with **hooks off**. Staged files, git config or hooks left by any build never reach it. |

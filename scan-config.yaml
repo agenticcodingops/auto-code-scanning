@@ -370,8 +370,8 @@ languages:
 # ============================================================================
 ci:
   # GitHub Actions workflow file(s) that run scanning in CI. App-code consumers use
-  # code-security-scan.yml; Terraform/IaC consumers use terraform-security-scan.yml
-  # (or the reusable reusable-scan.yml). Informational pointer to a real workflow.
+  # code-security-scan.yml; Terraform/IaC consumers call reusable-scan.yml.
+  # Informational pointer to a real workflow.
   workflow_file: ".github/workflows/code-security-scan.yml"
 
   # Upload results to GitHub Security tab
@@ -389,11 +389,17 @@ ci:
     - CRITICAL
     - HIGH
 
-  # Required checks for branch protection
+  # Informational branch-protection check names from this repository's ci.yml.
+  # Reusable workflow callers must use the check names emitted by their own jobs.
   required_checks:
-    - trivy-scan
-    - checkov-scan
-    - tflint-scan
+    - Lint & Validate
+    - Test Scripts
+    - Test Hooks (aws)
+    - Test Hooks (azure)
+    - Test Hooks (gcp)
+    - Test Gitleaks hook
+    - Integration Test
+    - Performance Check
 
 # ============================================================================
 # REPORTING
