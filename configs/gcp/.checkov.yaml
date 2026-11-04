@@ -26,9 +26,6 @@ output:
   - cli
   - json
 
-# Output directory for results
-output-file-path: .scan-results
-
 # Analysis options
 deep-analysis: true
 download-external-modules: false

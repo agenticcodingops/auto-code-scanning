@@ -57,7 +57,7 @@ languages:
     enabled: false
     file_patterns: ["**/*.sql"]
     tools:
-      sqlfluff: { enabled: true, config_file: ".sqlfluff", args: ["lint", "--dialect=ansi"], stage: pre-commit }
+      sqlfluff: { enabled: true, config_file: ".sqlfluff", stage: pre-commit }
 
 ci:
   sarif_upload: true

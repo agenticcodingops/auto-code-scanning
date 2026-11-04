@@ -17,7 +17,11 @@ one, so Python 3.8–3.10 and broken launchers are skipped. The shared configura
 reader (`scan_config.py`, called from `read_scan_config` and `Read-ScanConfigValue`) runs
 with the same flags, which keep the working and helper directories and Python environment
 overrides out of its imports while keeping the trusted user-site dependencies that the
-no-admin setup installs. Other helper scripts, including `pre-push.py`, run without them. Upgrade older interpreters before re-vendoring these hooks.
+no-admin setup installs. Staged and push snapshot launchers use `-I`, which also
+excludes the user site. Install PyYAML in the selected interpreter's site-packages
+or an active virtual environment; a user-site-only installation is insufficient
+for snapshots. Check that environment with `python -I -c "import yaml"` before
+running the hooks. Upgrade older interpreters before re-vendoring these hooks.
 
 Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
 this covers both the original Terraform/IaC hooks and the new app-code hooks
@@ -40,7 +44,25 @@ All hooks use a dual-wrapper architecture:
    - Windows (PowerShell available): `hooks/<hook-id>.ps1`
 4. Shared functions are loaded from `hooks/lib/common.sh` (Bash) or `hooks/lib/common.ps1` (PowerShell)
 
-Commit scanners select staged files from the index. Transaction-bound push
+Semgrep and Trivy's pre-commit IaC scanner run in temporary trees exported
+from the index, including their tracked policy inputs. Unstaged edits do not change
+the bytes they inspect. Export errors block; temporary trees are removed after
+reports are published. Formatters retain their existing worktree behavior.
+SQLFluff lints the staged file names in the working tree because it is a style
+linter, not a security gate; project configuration, macros and templates remain
+available in their original locations.
+When upgrading, provision Python 3.11+ for `semgrep-csharp`, `semgrep-typescript`
+and `trivy-iac-critical` before re-vendoring: their staged snapshot adapter needs
+it even when the scanner executable is installed. An unavailable, older or broken
+interpreter blocks before scanner launch with `Python is required for index
+snapshots`. `SCAN_ALLOW_TOOL_ERRORS=1` does not bypass this prerequisite.
+Parallel scanners capture private index copies. Repository-local Semgrep rule
+overrides (files or directories) are exported from that same index version.
+The pre-commit Terraform snapshot contains selected changed IaC files and policy,
+as the file-only push scanners do. Unchanged sibling files are excluded, so local
+evaluation has less module context for cross-file references. Use the complete
+CI scan as the authoritative result for module-wide analysis.
+Transaction-bound push
 scanners select changed files from each isolated pushed tree, alongside required
 tracked policy. Terraform directory scans exclude unchanged source files, including
 siblings and nested files of other IaC types. Both `.tf` and `.tf.json` changes
@@ -56,6 +78,19 @@ tracked policy. An unchanged, unrelated symlink or submodule is outside that
 snapshot and does not block these file-only scanners. A selected symlink or
 submodule blocks. TFLint and dotnet build copy the complete pushed tree for
 context, so any symlink or submodule in that tree blocks them, even if unchanged.
+
+Local Checkov entrypoints accept only passive configuration: `framework`,
+`skip-framework`, `skip-check`, `skip-path`, `deep-analysis`, `evaluate-variables`,
+`quiet`, `compact`, `skip-download`, `download-external-modules` (false only), and
+standard `output` formats. Output format selection is owned by the wrapper. A
+string `output-file-path`, which earlier setup releases wrote into consumer configs,
+is accepted and dropped, because the wrapper also owns the output location.
+Unknown keys, extension loading, module downloads, and extra hook arguments are
+rejected before launch. The scanner always receives an explicit
+temporary config so automatic configuration discovery cannot change the policy.
+`scripts/scan.py --policy-root` reads Checkov policy from that checkout's
+`.scanning/configs/.checkov.yaml`, ignoring consumer policy; a missing policy uses
+the same safe defaults.
 
 ## Exit Code Contract
 
@@ -106,6 +141,10 @@ The dispatcher sets these environment variables for hook scripts:
 - **Purpose**: Quick scan for CRITICAL Terraform misconfigurations only
 - **Stage**: pre-commit
 - **Tool**: Trivy (IaC scanner mode)
+- **Prerequisite when upgrading**: Python 3.11+ is required for the staged snapshot
+  adapter, including installations that previously ran this hook with only Bash,
+  Git and the standalone Trivy binary. Missing or unusable Python blocks before
+  Trivy starts, even with `SCAN_ALLOW_TOOL_ERRORS=1`.
 - **Target**: <5 seconds
 - **Severity filter**: CRITICAL only
 - **Flags**: `--skip-check-update`, `--severity CRITICAL`, `--exit-code 1`, `--quiet`
@@ -257,6 +296,11 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Behavior**: Runs when the push changes `.cs`/`.csproj` files. Builds the complete pushed solution and surfaces
   the first ~40 analyzer/build error/warning lines. Build or analyzer errors and
   a missing solution block by default (exit 1).
+- **Trust**: Runs the project's own build logic with the developer's permissions
+  and environment. Use local build hooks only in repositories the developer
+  already trusts. The source snapshot provides version fidelity, not host
+  isolation; CI is the authoritative security boundary. See
+  [the security model](SECURITY-MODEL.md#local-build-hooks-require-a-trusted-repository).
 
 ### TypeScript / JavaScript
 
@@ -300,7 +344,12 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Purpose**: SQL linting (staged `.sql` files)
 - **Stage**: pre-commit
 - **Tool**: `sqlfluff lint`
-- **Dialect**: `ansi` (default)
+- **Dialect**: Project configuration when a root `.sqlfluff` exists; otherwise
+  the hook supplies `--dialect ansi`, as in v3.0.2.
+- **Configuration**: SQLFluff reads the working tree with the project's own
+  configuration, ignore files, macro paths and template paths. The hook runs once
+  for all staged SQL file names. The scan-config `args` field is ignored; direct
+  hook arguments are forwarded.
 - **Behavior**: Lint issues -> exit 1; tool errors block by default (shared local opt-in applies).
 
 ### Config Validation

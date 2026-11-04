@@ -158,6 +158,7 @@ def test_powershell_semgrep_error_option_still_blocks_findings(tmp_path, hook_bu
         $global:LASTEXITCODE=1
     }; & '""" + hook + "' '--error'; exit $LASTEXITCODE"
     result = subprocess.run([pwsh, '-NoProfile', '-Command', command], cwd=tmp_path,
+                            env=dict(os.environ, SCAN_INDEX_SNAPSHOT='1'),
                             capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'FAIL:' in result.stdout
