@@ -34,7 +34,8 @@
     Overwrite existing baseline without prompting.
 
 .PARAMETER PolicyRoot
-    Separate trusted base checkout used by the gate to approve inline skips.
+    Separate trusted base checkout outside the scanned repository, used by the
+    gate to approve inline skips.
 
 .PARAMETER BaseCommit
     Explicit trusted base commit used when a separate policy checkout is unavailable.
@@ -84,11 +85,15 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ($PolicyRoot -and $BaseCommit) { throw 'Supply either PolicyRoot or BaseCommit, not both' }
-if ($PolicyRoot) { $PolicyRoot = (Resolve-Path -LiteralPath $PolicyRoot -ErrorAction Stop).Path }
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
 $sourceRoot = git rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { $sourceRoot = (Get-Location).Path }
+if ($PolicyRoot) {
+    $PolicyRoot = Resolve-ExternalRealPath (Resolve-Path -LiteralPath $PolicyRoot -ErrorAction Stop).Path
+    Assert-ExternalPath $PolicyRoot
+    if (-not (Test-Path -LiteralPath $PolicyRoot -PathType Container)) { throw 'PolicyRoot must be a trusted external checkout directory' }
+}
 if (-not $PSBoundParameters.ContainsKey('OutputDir')) {
     $OutputDir = Join-Path $sourceRoot '.scan-baseline'
 }

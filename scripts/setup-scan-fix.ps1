@@ -63,7 +63,7 @@ public static class SetupPathNative {
 $RepoPath = Resolve-SetupRealPath (Resolve-Path $RepoPath).Path
 
 function Resolve-SetupTool {
-    param([string]$Name)
+    param([string]$Name, [switch]$SkipUnresolved)
     $command = Get-Command $Name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $command) { return $null }
     if (-not [IO.Path]::IsPathRooted($command.Source)) { throw "$Name must resolve to an absolute executable path" }
@@ -76,8 +76,11 @@ function Resolve-SetupTool {
     catch {
         # Store application aliases expose no link target. Use the interpreter
         # already running this script rather than executing an unresolved alias.
-        if ($Name -ne 'pwsh' -or $PSVersionTable.PSEdition -ne 'Core') { throw }
-        $path = Resolve-SetupRealPath ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+        if ($Name -eq 'pwsh' -and $PSVersionTable.PSEdition -eq 'Core') {
+            $path = Resolve-SetupRealPath ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+        } elseif ($SkipUnresolved) {
+            return $null
+        } else { throw }
     }
     if ($path -eq $boundary -or $path.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
         throw "$Name must resolve outside the destination repository"
@@ -109,7 +112,7 @@ function Install-Step {
 }
 function Find-Py {
     foreach ($c in @('python', 'python3', 'py')) {
-        $path = Resolve-SetupTool $c
+        $path = Resolve-SetupTool $c -SkipUnresolved
         if ($path) { try { & $path -c "" 2>$null; if ($LASTEXITCODE -eq 0) { return $path } } catch {} }
     }
     return $null
@@ -263,7 +266,7 @@ if ((Test-Path $verify) -and $setupTools['pwsh']) {
     Push-Location $RepoPath
     try {
         Install-Step 'scan verification' {
-            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | Select-Object -First 30 -Wait
+            & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify -HooksRunner $HooksRunner 2>&1 | Select-Object -First 30 -Wait
         }
     } finally { Pop-Location }
 } else { Info "Verification needs verify-scanning.ps1 and an external pwsh; skipping" }

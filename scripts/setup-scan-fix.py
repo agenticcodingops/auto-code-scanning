@@ -196,7 +196,8 @@ def main(argv) -> int:
     step("Verify install")
     verify = PLATFORM_ROOT / "scripts/verify-scanning.ps1"
     if tools["pwsh"] and verify.exists():
-        install_step([tools["pwsh"], "-NoProfile", "-File", str(verify)], "scan verification")
+        install_step([tools["pwsh"], "-NoProfile", "-File", str(verify),
+                      "-HooksRunner", args.hooks_runner], "scan verification")
     else:
         info("verify-scanning.ps1 not run (needs pwsh); review scan-config.yaml manually")
 

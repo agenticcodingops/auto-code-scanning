@@ -35,6 +35,40 @@ public static class SetupShortPathFixture {
 
 AfterAll { $global:_CommonPS1Loaded = $savedCommonLoaded }
 
+Describe 'Setup Python discovery' {
+    BeforeEach {
+        $destination = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'repo') -Force
+        $PSScriptRoot = Join-Path $root 'scripts'
+        . $preflight -RepoPath $destination.FullName
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$tokens, [ref]$parseErrors)
+        $discovery = $ast.Find({ param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Find-Py'
+        }, $true)
+        . ([scriptblock]::Create($discovery.Extent.Text))
+        $script:launcher = Join-Path $TestDrive 'launcher.ps1'
+        Set-Content -LiteralPath $script:launcher -Value '$global:LASTEXITCODE = 0'
+    }
+
+    It 'Continues past unresolved external Python aliases to the launcher' {
+        Mock Get-Command {
+            [pscustomobject]@{ Source = $(if ($Name -eq 'py') { $script:launcher } else { Join-Path $TestDrive "$Name.exe" }) }
+        }
+        Mock Resolve-SetupRealPath {
+            if ($Path.EndsWith('.exe')) { throw 'Cannot resolve trusted path link' }
+            return $Path
+        }
+        Find-Py | Should -Be $script:launcher
+    }
+
+    It 'Still rejects an unresolved Python executable inside the repository' {
+        Mock Get-Command { [pscustomobject]@{ Source = Join-Path $RepoPath 'python.exe' } }
+        Mock Resolve-SetupRealPath { throw 'Cannot resolve trusted path link' }
+        { Find-Py } | Should -Throw '*must resolve outside*'
+    }
+}
+
 Describe 'Setup executable identity' -Skip:([Environment]::OSVersion.Platform -ne 'Win32NT') {
     It 'Rejects an internal tool with the existing short <Side> alias' -TestCases @(
         @{ Side = 'repository' }
