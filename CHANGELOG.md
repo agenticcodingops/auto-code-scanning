@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.6](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.5...v3.0.6) (2026-11-05)
+
+
+### Bug Fixes
+
+* **hooks:** require Bash 4.4 clearly and parse on older shells ([#102](https://github.com/agenticcodingops/auto-code-scanning/issues/102)) ([3445df7](https://github.com/agenticcodingops/auto-code-scanning/commit/3445df71cd2eb4ebab8e6de4f988c38bb3135775))
+
 ## [3.0.5](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.4...v3.0.5) (2026-11-05)
 
 
