@@ -150,16 +150,31 @@ function Ensure-ScanningDir {
 
 function Write-ScanJson {
     param([Parameter(Mandatory)][string]$JsonContent)
-    Ensure-ScanningDir
     $temporary = Resolve-HookPath (Join-Path '.scanning' ('.scan-write-' + [guid]::NewGuid()))
     $destination = Resolve-HookPath '.scanning/last-scan.json'
+    $prepared = $false
     try {
-        [IO.File]::WriteAllText($temporary, $JsonContent)
-        Assert-SafeWritePath '.scanning/last-scan.json'
-        if ([IO.File]::Exists($destination)) {
-            [IO.File]::Replace($temporary, $destination, [NullString]::Value)
-        } else {
-            [IO.File]::Move($temporary, $destination)
+        # Parallel hooks can create the directory/report or replace the destination
+        # between any two filesystem calls. Recheck safety on every bounded retry,
+        # including when a path check observes a concurrently removed file.
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            try {
+                Ensure-ScanningDir
+                if (-not $prepared -or -not [IO.File]::Exists($temporary)) {
+                    [IO.File]::WriteAllText($temporary, $JsonContent)
+                    $prepared = $true
+                }
+                Assert-SafeWritePath '.scanning/last-scan.json'
+                if ([IO.File]::Exists($destination)) {
+                    [IO.File]::Replace($temporary, $destination, [NullString]::Value)
+                } else {
+                    [IO.File]::Move($temporary, $destination)
+                }
+                return
+            } catch {
+                if ($attempt -eq 19) { throw }
+                Start-Sleep -Milliseconds 50
+            }
         }
     } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
 }
