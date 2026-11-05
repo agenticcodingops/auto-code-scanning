@@ -385,8 +385,11 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path, shell):
     common=tmp_path/'common.sh'; common.write_text((ROOT/'hooks/lib/common.sh').read_text(encoding='utf-8'),newline='\n')
     (tmp_path/'tool-paths.sh').write_text((ROOT/'hooks/lib/tool-paths.sh').read_text(encoding='utf-8'),newline='\n')
     shutil.copyfile(ROOT/'hooks/lib/scan_config.py', tmp_path/'scan_config.py')
-    env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
+    env.update(SCAN_CONFIG_FILE=str(config))
     if shell == 'sh':
+        # Only Bash can run the extensionless stub; on PATH for PowerShell, Windows
+        # would try to open it as a document and show an "open with" dialog.
+        env['PATH'] = str(tools)+os.pathsep+env['PATH']
         command = [bash,'-c',f'source "{common.as_posix()}"; read_scan_config setting missing']
     else:
         pwsh=shutil.which('pwsh')
