@@ -16,6 +16,7 @@ one-command orchestrator `setup-scan-fix`.
 |------------|----------------|---------|
 | Python | 3.11+ | `scan-config.yaml` rendering, several hooks |
 | Git | 2.0+ | hooks |
+| Bash | 4.4 or later | shell hooks and scripts |
 | Lefthook | 1.6+ | default local runner |
 | pre-commit | 3.0+ | alternative local runner (`--hooks pre-commit`) |
 | GitHub CLI (`gh`) | latest | fix-loop label + secret verification |
@@ -189,7 +190,14 @@ Uses Scoop and pip for tool installation. No administrator privileges required.
 1. Install required tools:
 
    **macOS**:
+
+   Shell hooks require **Bash 4.4 or later**. Run `brew install bash` and make
+   sure the installed Bash is first on PATH; the system `/bin/bash` is too old.
+
    ```bash
+   brew install bash
+   export PATH="$(brew --prefix bash)/bin:$PATH"
+   bash --version  # Confirm 4.4 or later; persist this PATH in your shell startup file.
    brew install trivy tflint gitleaks
    pip install pre-commit checkov
 

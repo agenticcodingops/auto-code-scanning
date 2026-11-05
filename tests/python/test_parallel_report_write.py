@@ -285,3 +285,82 @@ Write-ScanJson '{}'
     assert result.returncode != 0, result.stdout + result.stderr
     assert report.is_dir()
     assert not list(report.parent.glob('.scan-write-*'))
+
+
+@pytest.mark.parametrize('exception', ['IOException', 'UnauthorizedAccessException'])
+@pytest.mark.parametrize('existing', [False, True])
+@pytest.mark.parametrize('lasting', [False, True])
+def test_powershell_publication_retries_filesystem_errors(writers, exception, existing, lasting):
+    """Inject a publication fault, then use the real Move/Replace on recovery."""
+    report = writers / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    if existing:
+        report.write_text('{"previous":true}', encoding='utf-8')
+    exception_type = 'System.IO.IOException' if exception == 'IOException' else 'System.UnauthorizedAccessException'
+    body = '''Add-Type @'
+public static class RetryPublication {
+    public static int Attempts;
+    public static int Failures;
+    public static void Publish(string source, string destination) {
+        Attempts++;
+        if (Attempts <= Failures) { throw new EXCEPTION("publication fault"); }
+        if (System.IO.File.Exists(destination)) {
+            System.IO.File.Replace(source, destination, null);
+        } else {
+            System.IO.File.Move(source, destination);
+        }
+    }
+}
+'@
+[RetryPublication]::Failures = FAILURES
+$writer = ${function:Write-ScanJson}.ToString().Replace(
+    '[IO.File]::Replace($temporary, $destination, [NullString]::Value)',
+    '[RetryPublication]::Publish($temporary, $destination)').Replace(
+    '[IO.File]::Move($temporary, $destination)',
+    '[RetryPublication]::Publish($temporary, $destination)')
+Set-Item Function:Write-ScanJson ([scriptblock]::Create($writer))
+$script:sleeps = 0
+function Start-Sleep { param($Milliseconds) $script:sleeps++ }
+$failed = $false
+try { Write-ScanJson '{"new":true}' } catch { $failed = $true }
+@{attempts=[RetryPublication]::Attempts; sleeps=$script:sleeps; failed=$failed} | ConvertTo-Json -Compress
+'''.replace('EXCEPTION', exception_type).replace('FAILURES', '20' if lasting else '1')
+    result = subprocess.run(command(writers, 'pwsh', body), cwd=writers,
+                            capture_output=True, text=True, encoding='utf-8', timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {
+        'attempts': 20 if lasting else 2, 'sleeps': 19 if lasting else 1, 'failed': lasting}
+    if lasting:
+        assert report.exists() == existing
+        if existing:
+            assert json.loads(report.read_text()) == {'previous': True}
+    else:
+        assert json.loads(report.read_text()) == {'new': True}
+    assert not list(report.parent.glob('.scan-write-*'))
+
+
+@pytest.mark.parametrize('exception', ['IO.IOException', 'UnauthorizedAccessException'])
+def test_powershell_retryable_exception_during_path_check_is_terminal(writers, exception):
+    report = writers / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"previous":true}', encoding='utf-8')
+    body = '''$originalCheck = ${function:Assert-SafeWritePath}
+$script:checks = 0
+$script:sleeps = 0
+function Assert-SafeWritePath {
+    param([string]$Path)
+    & $originalCheck $Path
+    $script:checks++
+    if ($script:checks -eq 2) { throw [EXCEPTION]::new('path check fault') }
+}
+function Start-Sleep { param($Milliseconds) $script:sleeps++ }
+$failed = $false
+try { Write-ScanJson '{"new":true}' } catch { $failed = $true }
+@{checks=$script:checks; sleeps=$script:sleeps; failed=$failed} | ConvertTo-Json -Compress
+'''.replace('EXCEPTION', exception)
+    result = subprocess.run(command(writers, 'pwsh', body), cwd=writers,
+                            capture_output=True, text=True, encoding='utf-8', timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {'checks': 2, 'sleeps': 0, 'failed': True}
+    assert json.loads(report.read_text()) == {'previous': True}
+    assert not list(report.parent.glob('.scan-write-*'))

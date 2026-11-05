@@ -129,7 +129,7 @@ flowchart TD
 
 ## Local CI parity
 
-Run these before pushing. They are what CI runs on a pull request. Prerequisites: Python 3.11 with `pip install pytest pytest-cov pyyaml jsonschema`, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. CI installs Trivy, Checkov and PyYAML unpinned on the runner, so the versions are close, not exact; the pinned ones are named per job.
+Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11 with `pip install pytest pytest-cov pyyaml jsonschema`, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI installs Trivy, Checkov and PyYAML unpinned on the runner, so the versions are close, not exact; the pinned ones are named per job.
 
 ```bash
 set -euo pipefail   # a failed check stays a failure, loops included
