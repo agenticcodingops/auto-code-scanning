@@ -152,18 +152,50 @@ function Ensure-ScanningDir {
 
 function Write-ScanJson {
     param([Parameter(Mandatory)][string]$JsonContent)
-    Ensure-ScanningDir
     $temporary = Resolve-HookPath (Join-Path '.scanning' ('.scan-write-' + [guid]::NewGuid()))
     $destination = Resolve-HookPath '.scanning/last-scan.json'
-    try {
-        [IO.File]::WriteAllText($temporary, $JsonContent)
-        Assert-SafeWritePath '.scanning/last-scan.json'
-        if ([IO.File]::Exists($destination)) {
-            [IO.File]::Replace($temporary, $destination, [NullString]::Value)
-        } else {
-            [IO.File]::Move($temporary, $destination)
+    $prepared = $false
+    $assertReportPath = {
+        Assert-SafeWritePath '.scanning'
+        # FileInfo.Attributes can return -1 after another writer removes the
+        # report, falsely setting every flag. Read the leaf attributes directly;
+        # a vanished report is expected, but an observed reparse point is fatal.
+        try { $attributes = [IO.File]::GetAttributes($destination) }
+        catch [IO.FileNotFoundException] { return }
+        catch [IO.DirectoryNotFoundException] { return }
+        if ($attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Refusing a symlink or reparse point in output path'
         }
-    } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
+    }
+    try {
+        # Parallel hooks can create the directory/report or replace the destination
+        # between any two filesystem calls. Only filesystem mutations retry;
+        # safety-check failures must terminate the write immediately.
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            $checkingPath = $true
+            try {
+                & $assertReportPath
+                $checkingPath = $false
+                [IO.Directory]::CreateDirectory((Resolve-HookPath '.scanning')) | Out-Null
+                if (-not $prepared -or -not [IO.File]::Exists($temporary)) {
+                    [IO.File]::WriteAllText($temporary, $JsonContent)
+                    $prepared = $true
+                }
+                $checkingPath = $true
+                & $assertReportPath
+                $checkingPath = $false
+                if ([IO.File]::Exists($destination)) {
+                    [IO.File]::Replace($temporary, $destination, [NullString]::Value)
+                } else {
+                    [IO.File]::Move($temporary, $destination)
+                }
+                return
+            } catch [IO.IOException] {
+                if ($checkingPath -or $attempt -eq 19) { throw }
+                Start-Sleep -Milliseconds 50
+            }
+        }
+    } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
 }
 
 function Resolve-ExternalRealPath {
