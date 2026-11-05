@@ -8,6 +8,8 @@ $global:_CommonPS1Loaded = $true
 
 $ErrorActionPreference = 'Stop'
 
+. "$PSScriptRoot/tool-paths.ps1"
+
 function Invoke-PushSnapshot {
     param([string]$HookPath, [object[]]$HookArguments)
     if ($env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_LEGACY_PUSH_STATE -eq '1') { return }
@@ -212,13 +214,17 @@ function Resolve-ExternalRealPath {
                     # Windows PowerShell 5.1 exposes link targets as an adapted
                     # property; .NET Framework has no ResolveLinkTarget method.
                     $targets = @($item.Target)
-                    if ($targets.Count -ne 1) { throw 'Cannot resolve trusted path link' }
+                    if ($targets.Count -ne 1) {
+                        Write-Error 'Cannot resolve trusted path link' -ErrorId UnresolvableTrustedPathLink -ErrorAction Stop
+                    }
                     $target = $targets[0]
                     if ($target -and -not [IO.Path]::IsPathRooted($target)) {
                         $target = Join-Path ([IO.Path]::GetDirectoryName($current)) $target
                     }
                 }
-                if (-not $target) { throw 'Cannot resolve trusted path link' }
+                if (-not $target) {
+                    Write-Error 'Cannot resolve trusted path link' -ErrorId UnresolvableTrustedPathLink -ErrorAction Stop
+                }
                 $suffix = $full.Substring($current.Length).TrimStart('/', '\')
                 $full = [IO.Path]::GetFullPath($(if ($suffix) { Join-Path $target $suffix } else { $target }))
                 $resolved = $true
@@ -574,10 +580,17 @@ function Export-StagedFilesToTempDir {
 # launcher shims and older interpreters without disabling trusted user packages.
 function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
-        if (Get-Command $cand -ErrorAction SilentlyContinue) {
+        if (Get-Command $cand -CommandType Application -ErrorAction SilentlyContinue) {
+            try { $candidate = Resolve-VerifiedPython -Name $cand }
+            catch {
+                # The resolver checks lexical and invoked identities before
+                # returning this error. Only opaque external aliases may skip.
+                if ($_.FullyQualifiedErrorId -like 'UnresolvableTrustedPathLink*') { continue }
+                throw
+            }
             try {
-                & $cand -E -P -c "pass" 2>$null
-                if ($LASTEXITCODE -eq 0) { return $cand }
+                & $candidate -E -P -c "pass" 2>$null
+                if ($LASTEXITCODE -eq 0) { return $candidate }
             } catch { }
         }
     }
@@ -683,13 +696,15 @@ function Resolve-ScanConfig {
 function Invoke-TrivyWithRetry {
     param(
         [Parameter(Mandatory)]
+        [string]$ToolPath,
+        [Parameter(Mandatory)]
         [string[]]$ArgumentList
     )
 
     $diagnostics = New-TemporaryFile
     try {
         for ($attempt = 1; $attempt -le 2; $attempt++) {
-            $output = & trivy @ArgumentList 2> $diagnostics
+            $output = & $ToolPath @ArgumentList 2> $diagnostics
             $exitCode = $LASTEXITCODE
             $stderr = [System.IO.File]::ReadAllText($diagnostics)
             if ($exitCode -ne 0 -and $stderr -match 'database.*locked|cache may be in use by another process') {
@@ -715,14 +730,13 @@ function Test-ToolAvailable {
         [string]$ToolName
     )
 
-    if (-not (Get-Command $ToolName -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command $ToolName -CommandType Application -ErrorAction SilentlyContinue)) {
         if ($env:SCAN_ALLOW_TOOL_ERRORS -ne '1') { throw "$ToolName not found; scan incomplete" }
         Write-HookWarn "$ToolName unavailable; explicit local fail-open opt-in"
         return $false
     }
-    $command = Get-Command $ToolName -ErrorAction Stop
-    if ($command.CommandType -in @('Application', 'ExternalScript')) { Assert-ExternalPath $command.Source }
-    return $true
+    # Return the verified path so callers never resolve the bare name again.
+    return Resolve-VerifiedTool -Name $ToolName -Label $ToolName
 }
 
 function Start-ScanTimer {

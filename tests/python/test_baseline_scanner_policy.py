@@ -150,6 +150,7 @@ def test_baseline_verifies_interpreter_before_any_probe(tmp_path, baseline_case,
     stub = folder / 'interpreter.py'
     stub.write_text(
         'import json, subprocess, sys\n'
+        f'if sys.argv[1:] == ["-0p"]:\n    print(" -V:3.13 * " + {str(folder / "selected-python.cmd")!r}); sys.exit(0)\n'
         f'with open({str(marker)!r}, "a", encoding="utf-8") as f:\n'
         '    f.write(json.dumps(sys.argv[1:]) + "\\n")\n'
         f'sys.exit(subprocess.call([{sys.executable!r}, *sys.argv[1:]]))\n', encoding='utf-8')
@@ -158,6 +159,8 @@ def test_baseline_verifies_interpreter_before_any_probe(tmp_path, baseline_case,
         f'@"{sys.executable}" "{stub}" %*\n@exit /b %errorlevel%\n' if os.name == 'nt' else
         f'#!/bin/sh\nexec "{sys.executable}" "{stub}" "$@"\n', encoding='utf-8')
     launcher.chmod(0o755)
+    if os.name == 'nt':
+        shutil.copyfile(launcher, folder / 'selected-python.cmd')
     env['PATH'] = str(folder) + os.pathsep + env['PATH']
     env['SELECT_PYTHON'] = name
     extra = ''

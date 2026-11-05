@@ -12,6 +12,7 @@ import scan
 from safe_io import write_text
 from scan_policy import suppression_file
 from .baseline_helpers import scanner_stub
+from .tool_helpers import application
 
 ROOT = Path(__file__).resolve().parents[2]
 ZERO = '0' * 40
@@ -155,24 +156,23 @@ def test_python_probe_rejects_interpreters_without_safe_path_flag(package, tmp_p
     if not executable:
         pytest.skip('shell unavailable')
     common = (package / f'hooks/lib/common.{shell}').as_posix()
-    python = Path(sys.executable).as_posix()
     # Model Python 3.8-3.10: -I works, but -P is an unsupported option.
+    binary = tmp_path.parent / (tmp_path.name + '-old-python')
+    for name in ('python', 'python3', 'py'):
+        application(binary, name, 'import subprocess,sys\n'
+                    'if "-P" in sys.argv: sys.exit(2)\n'
+                    f'sys.exit(subprocess.call([{sys.executable!r}, *sys.argv[1:]]))\n')
     if shell == 'sh':
         command = (f'source "{common}"; '
-                   'old_python() { for arg in "$@"; do [[ "$arg" != -P ]] || return 2; done; '
-                   f'"{python}" "$@"; }}; '
-                   'python() { old_python "$@"; }; python3() { old_python "$@"; }; py() { old_python "$@"; }; '
                    'find_python')
         args = [executable, '-c', command]
     else:
-        command = (f". '{common}'; function python {{ "
-                   "if ($args -contains '-P') { $global:LASTEXITCODE=2; return }; "
-                   f"& '{python}' @args }}; "
-                   "Set-Item function:python3 (Get-Item function:python).ScriptBlock; "
-                   "Set-Item function:py (Get-Item function:python).ScriptBlock; "
+        command = (f". '{common}'; "
                    "$candidate=Find-WorkingPython; if ($candidate) { Write-Output $candidate; exit 0 }; exit 1")
         args = [executable, '-NoProfile', '-Command', command]
-    result = subprocess.run(args, cwd=tmp_path, env=clean_env(), text=True, capture_output=True)
+    env = dict(clean_env(), PATH=str(binary)+os.pathsep+os.environ['PATH'])
+    env.pop('VIRTUAL_ENV', None)
+    result = subprocess.run(args, cwd=tmp_path, env=env, text=True, capture_output=True)
     assert result.returncode == 1, result.stdout + result.stderr
     assert not result.stdout.strip(), 'unsupported interpreter was selected'
 

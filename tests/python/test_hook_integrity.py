@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import pytest
+from .tool_helpers import application
 ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
@@ -14,6 +15,7 @@ def bash_common(tmp_path):
         pytest.skip("bash unavailable")
     common = tmp_path / "common.sh"
     common.write_text((ROOT / "hooks/lib/common.sh").read_text(), encoding="utf-8", newline="\n")
+    (tmp_path / 'tool-paths.sh').write_text((ROOT / 'hooks/lib/tool-paths.sh').read_text(), encoding='utf-8', newline='\n')
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     # MSYS understands a forward-slash Windows absolute path in a shell string.
     return bash, f'source "{common.as_posix()}"; '
@@ -91,7 +93,7 @@ def test_powershell_retry_preserves_findings_exit_status(tmp_path):
     common = (ROOT / 'hooks/lib/common.ps1').as_posix()
     result = subprocess.run([pwsh, '-NoProfile', '-Command',
         f". '{common}'; function trivy {{ $global:LASTEXITCODE=1; '{{\"Target\":\"database locked\"}}' }}; "
-        "(Invoke-TrivyWithRetry -ArgumentList @('config', '--', '.')).ExitCode"],
+        "(Invoke-TrivyWithRetry -ToolPath trivy -ArgumentList @('config', '--', '.')).ExitCode"],
         cwd=tmp_path, capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == '1'
@@ -123,7 +125,7 @@ def test_powershell_retries_exit_one_lock_diagnostics(tmp_path):
     result = subprocess.run([pwsh, '-NoProfile', '-Command',
         f". '{common}'; $global:attempts=0; function Start-Sleep {{ }}; "
         "function trivy { $global:attempts++; Write-Error 'database locked' -ErrorAction Continue; $global:LASTEXITCODE=1 }; "
-        "$result=Invoke-TrivyWithRetry -ArgumentList @('config', '--', '.'); "
+        "$result=Invoke-TrivyWithRetry -ToolPath trivy -ArgumentList @('config', '--', '.'); "
         "@{code=$result.ExitCode;attempts=$global:attempts} | ConvertTo-Json -Compress"],
         cwd=tmp_path, capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 0, result.stderr
@@ -152,13 +154,14 @@ def test_powershell_semgrep_error_option_still_blocks_findings(tmp_path, hook_bu
     (tmp_path / name).write_text('// fixture\n')
     subprocess.run(['git', 'add', '--', name], cwd=tmp_path, check=True)
     hook = (hook_bundle / f'hooks/semgrep-{language}.ps1').as_posix()
-    command = """function semgrep {
-        $index=[Array]::IndexOf($args, '--output')
-        '{"results":[{"check_id":"sample","extra":{"severity":"ERROR","message":"fixture"},"path":"main","start":{"line":1}}],"errors":[]}' | Set-Content -LiteralPath $args[$index+1]
-        $global:LASTEXITCODE=1
-    }; & '""" + hook + "' '--error'; exit $LASTEXITCODE"
+    binary = tmp_path.parent / (tmp_path.name + '-tools')
+    application(binary, 'semgrep', 'import pathlib,sys\n'
+                'pathlib.Path(sys.argv[sys.argv.index("--output")+1]).write_text('
+                + repr('{"results":[{"check_id":"sample","extra":{"severity":"ERROR","message":"fixture"},"path":"main","start":{"line":1}}],"errors":[]}')
+                + ')\nsys.exit(1)\n')
+    command = "& '" + hook + "' '--error'; exit $LASTEXITCODE"
     result = subprocess.run([pwsh, '-NoProfile', '-Command', command], cwd=tmp_path,
-                            env=dict(os.environ, SCAN_INDEX_SNAPSHOT='1'),
+                            env=dict(os.environ, SCAN_INDEX_SNAPSHOT='1', PATH=str(binary)+os.pathsep+os.environ['PATH']),
                             capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'FAIL:' in result.stdout
@@ -174,15 +177,18 @@ def test_tflint_runtime_errors_use_explicit_compatibility_only(tmp_path, hook_bu
     (tmp_path / 'main.tf').write_text('# fixture\n')
     subprocess.run(['git', 'add', '--', 'main.tf'], cwd=tmp_path, check=True)
     hook = (hook_bundle / f'hooks/tflint.{shell}').as_posix()
+    binary = tmp_path.parent / (tmp_path.name + '-tools')
+    application(binary, 'tflint', f'import sys\nsys.exit(0 if "--init" in sys.argv else {status})\n')
     if shell == 'sh':
-        command = f'tflint() {{ for arg in "$@"; do [[ "$arg" == --init ]] && return 0; done; return {status}; }}; export -f tflint; bash "{hook}"'
+        command = f'bash "{hook}"'
         args = [executable, '-c', command]
     else:
-        command = f"function tflint {{ $global:LASTEXITCODE=0; if ($args -notcontains '--init') {{ $global:LASTEXITCODE={status} }} }}; & '{hook}'; exit $LASTEXITCODE"
+        command = f"& '{hook}'; exit $LASTEXITCODE"
         args = [executable, '-NoProfile', '-Command', command]
     trusted = tmp_path.parent / (tmp_path.name + '-trusted.hcl')
     trusted.write_text('# trusted fixture\n')
     result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ,
+                            PATH=str(binary)+os.pathsep+os.environ['PATH'],
                             SCAN_LEGACY_PUSH_STATE='1',
                             SCAN_TFLINT_CONFIG=str(trusted),
                             SCAN_TFLINT_PLUGIN_DIR=str(tmp_path.parent / 'trusted-plugins'),
@@ -202,13 +208,17 @@ def test_optional_scanner_runs_in_each_selected_directory(tmp_path, hook_bundle,
     subprocess.run(['git', 'add', '--', 'module space/main.tf'], cwd=tmp_path, check=True)
     trace = tmp_path / 'trace'
     hook = (hook_bundle / f'hooks/snyk-iac.{shell}').as_posix()
+    binary = tmp_path.parent / (tmp_path.name + '-tools')
+    application(binary, 'snyk', 'import os,pathlib\n'
+                'pathlib.Path(os.environ["TRACE"]).write_text(str(pathlib.Path.cwd()))\n'
+                'print(\'{"infrastructureAsCodeIssues":[]}\')\n')
     if shell == 'sh':
-        command = f'snyk() {{ pwd > "$TRACE"; printf \'{{"infrastructureAsCodeIssues":[]}}\'; }}; export -f snyk; bash "{hook}"'
+        command = f'bash "{hook}"'
         args = [executable, '-c', command]
     else:
-        command = "function snyk { (Get-Location).Path | Set-Content -LiteralPath $env:TRACE; $global:LASTEXITCODE=0; '{\"infrastructureAsCodeIssues\":[]}' }; & '" + hook + "'; exit $LASTEXITCODE"
+        command = "& '" + hook + "'; exit $LASTEXITCODE"
         args = [executable, '-NoProfile', '-Command', command]
-    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ, SCAN_LEGACY_PUSH_STATE='1', TRACE=str(trace), SNYK_TOKEN='fixture'),
+    result = subprocess.run(args, cwd=tmp_path, env=dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], SCAN_LEGACY_PUSH_STATE='1', TRACE=str(trace), SNYK_TOKEN='fixture'),
                             capture_output=True, text=True, encoding='utf-8')
     assert result.returncode == 0, result.stdout + result.stderr
     actual = trace.read_text(encoding='utf-8-sig').strip().replace('\\','/')

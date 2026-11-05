@@ -14,10 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def writers(tmp_path):
     """Use LF sources for the native Windows Bash runtime as well as POSIX."""
-    for suffix in ('ps1', 'sh'):
-        (tmp_path / f'common.{suffix}').write_text(
-            (ROOT / f'hooks/lib/common.{suffix}').read_text(encoding='utf-8'),
-            encoding='utf-8', newline='\n')
+    # common.* load their sibling libraries, so copy every hook library they source.
+    for name in ('common', 'tool-paths'):
+        for suffix in ('ps1', 'sh'):
+            (tmp_path / f'{name}.{suffix}').write_text(
+                (ROOT / f'hooks/lib/{name}.{suffix}').read_text(encoding='utf-8'),
+                encoding='utf-8', newline='\n')
     return tmp_path
 
 
