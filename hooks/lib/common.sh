@@ -450,6 +450,11 @@ find_python() {
                 interpreter="${defaults[0]}"
                 interpreter="${interpreter#\"}"; interpreter="${interpreter%\"}"
             fi
+            if [[ "${OSTYPE:-}" == cygwin* ]]; then
+                interpreter="$(cygpath -u -- "$interpreter")" || {
+                    hook_error 'Cannot convert py interpreter path'; return 1;
+                }
+            fi
             [[ -f "$interpreter" ]] || { hook_error 'Cannot verify py virtual environment or default'; return 1; }
             candidate="$(verify_tool_path "$interpreter")" || return 1
         fi

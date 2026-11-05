@@ -316,6 +316,49 @@ def test_bash_converts_windows_path_before_deriving_invoked_parent(consumer, pac
         assert result.stdout.strip() == raw
 
 
+@pytest.mark.parametrize('mode', ['default', 'venv', 'conversion-error'])
+@pytest.mark.parametrize('inside', [False, True])
+def test_cygwin_launcher_selection_uses_posix_interpreter_paths(consumer, package, tmp_path, mode, inside):
+    trace = tmp_path / 'interpreter-trace'
+    launcher_trace = tmp_path / 'launcher-trace'
+    binary = tmp_path / 'launcher'
+    actual = (consumer if inside else tmp_path) / 'environment' / 'effective-python'
+    application(actual.parent, actual.name, 'import pathlib,sys\n'
+                f'pathlib.Path({str(trace)!r}).touch()\n'
+                'if sys.argv[-1] != "": print("EFFECTIVE_INTERPRETER")\n')
+    raw = r'C:\fixture\python.exe'
+    application(binary, 'py', 'import pathlib,sys\n'
+                f'if sys.argv[1:] == ["-0p"]: print(" -V:3.13 * " + {raw!r}); sys.exit(0)\n'
+                f'pathlib.Path({str(launcher_trace)!r}).touch()\n')
+    env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], RAW_DEFAULT=raw,
+               RAW_VENV=r'C:\fixture/Scripts/python.exe', REAL_INTERPRETER=actual.as_posix(),
+               FAIL_CONVERSION='1' if mode == 'conversion-error' else '0')
+    env.pop('VIRTUAL_ENV', None)
+    if mode == 'venv':
+        env['VIRTUAL_ENV'] = r'C:\fixture'
+    command = ('OSTYPE=cygwin; real_cygpath="$(builtin type -P cygpath || true)"; '
+               'type() { case "${*: -1}" in python|python3) return 1;; *) builtin type "$@";; esac; }; '
+               'cygpath() { local p="${*: -1}"; '
+               'if [[ "$p" == "$RAW_DEFAULT" || "$p" == "$RAW_VENV" ]]; then '
+               '[[ "$1" != -u || "$FAIL_CONVERSION" != 1 ]] || return 1; p="$REAL_INTERPRETER"; fi; '
+               'if [[ -n "$real_cygpath" ]]; then "$real_cygpath" "$1" -- "$p"; else printf "%s\\n" "$p"; fi; }; '
+               'selected="$(find_python)" || exit 1; "$selected" -c inspect')
+    result = run_library(package, 'sh', command, consumer, env)
+    assert not launcher_trace.exists(), 'Launcher ran an interpreter probe'
+    if mode == 'conversion-error':
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'Cannot convert py interpreter path' in result.stderr
+        assert not trace.exists()
+    elif inside:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'outside' in result.stderr
+        assert not trace.exists()
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.strip() == 'EFFECTIVE_INTERPRETER'
+        assert trace.exists()
+
+
 @pytest.mark.skipif(os.name != 'nt', reason='Windows launcher selection')
 @pytest.mark.parametrize('scope', ['source', 'scan', 'external'])
 @pytest.mark.parametrize('active', [True, False])
