@@ -24,6 +24,19 @@ or its trusted user site. Check that environment with
 `python -E -P -c "import yaml"` before running the hooks. Upgrade older
 interpreters before re-vendoring these hooks.
 
+Both shells verify executable paths before probing Python or launching a scanner.
+The invoked path and its canonical target must be outside the scanned checkout
+and, during snapshots, the original consumer checkout. Functions and aliases
+cannot override the verified application. External virtual environments keep
+their invoked interpreter path so their installed packages remain available.
+Re-vendor the complete `hooks/lib` directory when upgrading.
+
+On Windows, the `py` fallback selects an active `VIRTUAL_ENV`'s `Scripts/python.exe`,
+or the single default marked by the launcher's `-0p` inventory. That inventory
+does not run Python. The hooks and baseline creator verify the selected interpreter
+and run its path directly. An interpreter inside a protected checkout, or an
+ambiguous launcher selection, is rejected before any Python probe.
+
 Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
 this covers both the original Terraform/IaC hooks and the new app-code hooks
 (C#/.NET, TypeScript/JavaScript, SQL) plus config validation.

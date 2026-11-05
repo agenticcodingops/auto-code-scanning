@@ -448,6 +448,7 @@ def test_hook_validates_configured_registry_even_with_setup_copy(tmp_path, shell
     bundle = tmp_path / 'bundle'
     for name in ['hooks/validate-suppressions.sh', 'hooks/validate-suppressions.ps1',
                  'hooks/validate-suppressions.py', 'hooks/lib/common.sh', 'hooks/lib/common.ps1',
+                 'hooks/lib/tool-paths.sh', 'hooks/lib/tool-paths.ps1',
                  'scripts/scan_policy.py', 'scripts/validate-suppressions.py']:
         target = bundle / name
         target.parent.mkdir(parents=True, exist_ok=True)

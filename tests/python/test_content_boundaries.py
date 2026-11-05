@@ -75,6 +75,7 @@ def test_hook_output_refuses_directory_link(tmp_path, shell):
     common = ROOT / ('hooks/lib/common.sh' if shell == 'bash' else 'hooks/lib/common.ps1')
     if shell == 'bash':
         local = tmp_path / 'common.sh'; local.write_text(common.read_text(), newline='\n')
+        (tmp_path/'tool-paths.sh').write_text((ROOT/'hooks/lib/tool-paths.sh').read_text(encoding='utf-8'),newline='\n')
         args = [command, '-c', f'source "{local.as_posix()}"; write_scan_json "new"']
     else:
         args = [command, '-NoProfile', '-Command', f"$ErrorActionPreference='Stop'; . '{common.as_posix()}'; Write-ScanJson 'new'"]
@@ -382,6 +383,7 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path, shell):
     tools=tmp_path/'tools'; tools.mkdir()
     wrapper=tools/'python'; wrapper.write_text(f'#!/usr/bin/env bash\nexec "{Path(base_python).as_posix()}" "$@"\n',newline='\n'); wrapper.chmod(0o755)
     common=tmp_path/'common.sh'; common.write_text((ROOT/'hooks/lib/common.sh').read_text(encoding='utf-8'),newline='\n')
+    (tmp_path/'tool-paths.sh').write_text((ROOT/'hooks/lib/tool-paths.sh').read_text(encoding='utf-8'),newline='\n')
     shutil.copyfile(ROOT/'hooks/lib/scan_config.py', tmp_path/'scan_config.py')
     env.update(PATH=str(tools)+os.pathsep+env['PATH'],SCAN_CONFIG_FILE=str(config))
     if shell == 'sh':

@@ -12,6 +12,7 @@ import check_fix_allowlist as gate
 from .test_content_boundaries import link_or_skip
 from .test_local_scanner_trust import consumer, git, load_runner
 from .test_validation_targets import package, hook
+from .tool_helpers import application
 
 
 @pytest.mark.parametrize('hook_name,setting', [
@@ -180,14 +181,21 @@ def test_powershell_commit_filter_preserves_unicode_pipeline(consumer, package, 
     report_file = tmp_path / 'scanner.json'
     report_file.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
     script = (package / 'hooks/trivy-iac-critical.ps1').as_posix()
+    binary = tmp_path / 'tools'
+    application(binary, 'trivy', 'import os,pathlib,sys\n'
+                'print(pathlib.Path(os.environ["FIXTURE_REPORT"]).read_text(encoding="utf-8"))\n'
+                'sys.exit(1)\n')
     # Model the legacy native-pipeline encoding even on a modern host.
+    # Decode the external fixture's UTF-8 report before testing the separate
+    # PowerShell-to-Python pipeline governed by $OutputEncoding.
     command = ("$env:PSModulePath = (Join-Path $PSHOME 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath; "
-               "$OutputEncoding = [Text.Encoding]::ASCII; function trivy { "
-               "$global:LASTEXITCODE=1; [IO.File]::ReadAllText($env:FIXTURE_REPORT) }; "
+               "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
+               "$OutputEncoding = [Text.Encoding]::ASCII; "
                f"& '{script}'; exit $LASTEXITCODE")
     result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=consumer,
                             env=dict(os.environ, SCAN_INDEX_SNAPSHOT='1', SCAN_PUSH_FILES=str(manifest),
-                                     FIXTURE_REPORT=str(report_file)), capture_output=True)
+                                     FIXTURE_REPORT=str(report_file), PYTHONIOENCODING='utf-8',
+                                     PATH=str(binary)+os.pathsep+os.environ['PATH']), capture_output=True)
     assert result.returncode == 1, result.stdout + result.stderr
     report_path = consumer / '.scanning/last-scan.json'
     assert report_path.exists(), result.stdout + result.stderr
