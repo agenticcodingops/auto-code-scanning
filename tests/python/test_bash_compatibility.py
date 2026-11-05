@@ -1,10 +1,11 @@
 """Shell libraries reject unsupported Bash before parsing newer syntax."""
 from pathlib import Path
 import re
-import shutil
 import subprocess
 
 import pytest
+
+from .test_autofix_file_guard import bash_executable
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,7 +55,7 @@ def test_extglob_guard_allows_explicit_enablement_and_literal_patterns(source):
 
 @pytest.mark.parametrize('major,minor,status', [(3, 2, 1), (4, 3, 1), (4, 4, 0), (5, 0, 0)])
 def test_common_bash_version_floor(tmp_path, major, minor, status):
-    bash = shutil.which('bash')
+    bash = bash_executable()
     if not bash:
         pytest.skip('bash unavailable')
     for name in ('common.sh', 'tool-paths.sh'):
