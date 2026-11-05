@@ -29,6 +29,8 @@ The invoked path and its canonical target must be outside the scanned checkout
 and, during snapshots, the original consumer checkout. Functions and aliases
 cannot override the verified application. External virtual environments keep
 their invoked interpreter path so their installed packages remain available.
+Opaque external execution aliases are skipped without probing; a checkout-boundary
+rejection still stops interpreter discovery.
 Re-vendor the complete `hooks/lib` directory when upgrading.
 
 On Windows, the `py` fallback selects an active `VIRTUAL_ENV`'s `Scripts/python.exe`,

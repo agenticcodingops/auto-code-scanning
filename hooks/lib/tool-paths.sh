@@ -42,7 +42,7 @@ verify_tool_path() {
     }
     lexical="$(_tool_identity "$path" lexical)" || return 1
     canonical="$(_tool_identity "$path")" || return 1
-    parent="$(_tool_identity "$(dirname -- "$path")")" || return 1
+    parent="$(_tool_identity "$(dirname -- "$lexical")")" || return 1
     invoked="$parent/$(basename -- "$lexical")"
     local roots=()
     if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]]; then

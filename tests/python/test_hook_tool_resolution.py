@@ -261,6 +261,61 @@ def test_verified_tool_keeps_boundary_when_git_checkout_discovery_fails(package,
         assert result.stderr == ''
 
 
+@pytest.mark.parametrize('shell', ['pwsh', 'powershell'])
+@pytest.mark.parametrize('inside', [False, True])
+@pytest.mark.parametrize('target', ['missing', 'null-method'])
+def test_python_skips_only_external_opaque_aliases(consumer, package, tmp_path, shell, inside, target):
+    executable = shutil.which(shell)
+    if not executable:
+        pytest.skip(shell + ' unavailable')
+    trace = tmp_path / 'trace'
+    alias = stub((consumer if inside else tmp_path) / 'alias', 'python', trace)
+    env = dict(os.environ, OPAQUE_ALIAS=str(alias), SAFE_PYTHON=sys.executable)
+    command = (f'. {quote(package / "hooks/lib/common.ps1")}; '
+               'function Get-Command { param($Name,$CommandType,$ErrorAction) '
+               'if ($Name -eq "python") { [pscustomobject]@{Source=$env:OPAQUE_ALIAS} } '
+               'elseif ($Name -eq "python3") { [pscustomobject]@{Source=$env:SAFE_PYTHON} } '
+               'elseif ($Name -ne "py") { Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters } }; '
+               'function Get-Item { param($LiteralPath,[switch]$Force,$ErrorAction) '
+               'if ($LiteralPath -eq $env:OPAQUE_ALIAS) { '
+               '$item=[pscustomobject]@{Attributes=[IO.FileAttributes]::ReparsePoint;Target=@()}; '
+               + ('$item | Add-Member ScriptMethod ResolveLinkTarget { param($final) return $null }; '
+                  if target == 'null-method' else '') +
+               '$item } else { Microsoft.PowerShell.Management\\Get-Item @PSBoundParameters } }; '
+               '$py=Find-WorkingPython; if ($py) { Write-Output $py } else { exit 1 }')
+    result = subprocess.run([executable, '-NoProfile', '-Command', command], cwd=consumer,
+                            env=env, text=True, capture_output=True, timeout=60)
+    assert not trace.exists(), 'Opaque alias was executed'
+    if inside:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'must resolve outside' in result.stderr
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert Path(result.stdout.strip()) == Path(sys.executable)
+
+
+@pytest.mark.parametrize('inside', [False, True])
+def test_bash_converts_windows_path_before_deriving_invoked_parent(consumer, package, tmp_path, inside):
+    trace = tmp_path / 'trace'
+    tool = stub((consumer if inside else tmp_path) / 'bin', 'python', trace)
+    raw = r'C:\external\python.exe'
+    env = dict(os.environ, RAW_TOOL=raw, REAL_TOOL=tool.as_posix())
+    command = ('real_cygpath="$(type -P cygpath || true)"; '
+               'cygpath() { local p="${*: -1}"; [[ "$p" != "$RAW_TOOL" ]] || p="$REAL_TOOL"; '
+               'if [[ -n "$real_cygpath" ]]; then "$real_cygpath" "$1" -- "$p"; else printf "%s\\n" "$p"; fi; }; '
+               # Model a POSIX dirname implementation that treats backslashes literally.
+               'dirname() { if [[ "${*: -1}" == "$RAW_TOOL" ]]; then printf ".\\n"; '
+               'else command dirname "$@"; fi; }; verify_tool_path "$RAW_TOOL"')
+    result = run_library(package, 'sh', command, consumer, env)
+    assert not trace.exists()
+    if inside:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert 'outside' in result.stderr
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.strip() == raw
+
+
 @pytest.mark.skipif(os.name != 'nt', reason='Windows launcher selection')
 @pytest.mark.parametrize('scope', ['source', 'scan', 'external'])
 @pytest.mark.parametrize('active', [True, False])

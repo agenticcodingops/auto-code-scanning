@@ -182,13 +182,17 @@ function Resolve-ExternalRealPath {
                     # Windows PowerShell 5.1 exposes link targets as an adapted
                     # property; .NET Framework has no ResolveLinkTarget method.
                     $targets = @($item.Target)
-                    if ($targets.Count -ne 1) { throw 'Cannot resolve trusted path link' }
+                    if ($targets.Count -ne 1) {
+                        Write-Error 'Cannot resolve trusted path link' -ErrorId UnresolvableTrustedPathLink -ErrorAction Stop
+                    }
                     $target = $targets[0]
                     if ($target -and -not [IO.Path]::IsPathRooted($target)) {
                         $target = Join-Path ([IO.Path]::GetDirectoryName($current)) $target
                     }
                 }
-                if (-not $target) { throw 'Cannot resolve trusted path link' }
+                if (-not $target) {
+                    Write-Error 'Cannot resolve trusted path link' -ErrorId UnresolvableTrustedPathLink -ErrorAction Stop
+                }
                 $suffix = $full.Substring($current.Length).TrimStart('/', '\')
                 $full = [IO.Path]::GetFullPath($(if ($suffix) { Join-Path $target $suffix } else { $target }))
                 $resolved = $true
@@ -545,7 +549,13 @@ function Export-StagedFilesToTempDir {
 function Find-WorkingPython {
     foreach ($cand in @('python', 'python3', 'py')) {
         if (Get-Command $cand -CommandType Application -ErrorAction SilentlyContinue) {
-            $candidate = Resolve-VerifiedPython -Name $cand
+            try { $candidate = Resolve-VerifiedPython -Name $cand }
+            catch {
+                # The resolver checks lexical and invoked identities before
+                # returning this error. Only opaque external aliases may skip.
+                if ($_.FullyQualifiedErrorId -like 'UnresolvableTrustedPathLink*') { continue }
+                throw
+            }
             try {
                 & $candidate -E -P -c "pass" 2>$null
                 if ($LASTEXITCODE -eq 0) { return $candidate }

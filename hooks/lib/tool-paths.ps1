@@ -52,7 +52,15 @@ function Resolve-VerifiedTool {
     # Python can load pyvenv.cfg and startup files relative to the invoked path.
     # Keep the final link unresolved when checking that environment's directory.
     $invoked = Join-Path (Resolve-SetupRealPath ([IO.Path]::GetDirectoryName($path))) ([IO.Path]::GetFileName($path))
-    $identities = @((Resolve-SetupRealPath $path), (Resolve-SetupRealPath $path -PreserveLinks), $invoked)
+    $canonical = $null
+    $unresolved = $null
+    try { $canonical = Resolve-SetupRealPath $path }
+    catch {
+        if ($_.FullyQualifiedErrorId -notlike 'UnresolvableTrustedPathLink*') { throw }
+        $unresolved = $_
+    }
+    $identities = @((Resolve-SetupRealPath $path -PreserveLinks), $invoked)
+    if ($canonical) { $identities += $canonical }
     $snapshot = $env:SCAN_PUSH_SNAPSHOT -eq '1' -or $env:SCAN_INDEX_SNAPSHOT -eq '1'
     $repoRoot = if ($snapshot) { (Get-Location).Path } else {
         Assert-GitAvailable
@@ -84,6 +92,9 @@ function Resolve-VerifiedTool {
             }
         }
     }
+    # An opaque target is never executed. Check its known identities first so an
+    # in-checkout alias cannot turn a boundary rejection into a fallback.
+    if ($unresolved) { throw $unresolved }
     return $path
 }
 
