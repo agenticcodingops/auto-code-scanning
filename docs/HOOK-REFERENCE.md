@@ -11,6 +11,10 @@ runner configuration and vendored files together; see
 [validation target migration](CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration)
 for runner setup, manual invocations, prerequisites and explicit legacy opt-ins.
 
+Shell hooks require **Bash 4.4 or later**. On macOS, run `brew install bash`
+and make sure the installed Bash is first on PATH; the system `/bin/bash` is
+too old. The shared Bash library rejects older versions with an installation hint.
+
 Local hooks require **Python 3.11 or newer**, with PyYAML and jsonschema available
 to that interpreter. Both shells probe candidates with `-E -P` before selecting
 one, so Python 3.8–3.10 and broken launchers are skipped. The shared configuration
