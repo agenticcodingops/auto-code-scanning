@@ -102,6 +102,22 @@ def test_scanners_check_invoked_and_canonical_paths(consumer, package, tmp_path,
     assert not trace.exists()
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX resolves a link before a following `..`')
+def test_invoked_parent_follows_a_link_before_dot_dot(consumer, package, tmp_path):
+    # /tools/link -> /external/child, so /tools/link/../env/bin/trivy runs /external/env/bin/trivy.
+    external = tmp_path / 'external'
+    (external / 'child').mkdir(parents=True)
+    trace = tmp_path / 'trace'
+    stub(external / 'env/bin', 'trivy', trace)
+    tools = tmp_path / 'tools'
+    tools.mkdir()
+    link_or_skip(external / 'child', tools / 'link', True)
+    tool = f'{tools.as_posix()}/link/../env/bin/trivy'
+    result = run_library(package, 'sh', f'verify_tool_path {quote(tool)}', consumer, dict(os.environ))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == tool
+
+
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
 def test_tool_error_allowance_never_admits_a_checkout_tool(consumer, package, tmp_path, shell):
     # SCAN_ALLOW_TOOL_ERRORS tolerates a missing tool, not one that resolves inside the checkout.

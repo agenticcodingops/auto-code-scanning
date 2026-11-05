@@ -42,7 +42,12 @@ verify_tool_path() {
     }
     lexical="$(_tool_identity "$path" lexical)" || return 1
     canonical="$(_tool_identity "$path")" || return 1
-    parent="$(_tool_identity "$(dirname -- "$lexical")")" || return 1
+    # Resolve the parent the system will actually use. POSIX follows a link before a later
+    # `..`, so derive it from the original path there; Windows applies `..` lexically, so
+    # the converted lexical path is both correct and the only form dirname can split.
+    local parent_source="$path"
+    command -v cygpath >/dev/null 2>&1 && parent_source="$lexical"
+    parent="$(_tool_identity "$(dirname -- "$parent_source")")" || return 1
     invoked="$parent/$(basename -- "$lexical")"
     local roots=()
     if [[ "${SCAN_PUSH_SNAPSHOT:-0}" == 1 || "${SCAN_INDEX_SNAPSHOT:-0}" == 1 ]]; then
