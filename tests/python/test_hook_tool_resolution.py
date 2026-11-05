@@ -103,6 +103,20 @@ def test_scanners_check_invoked_and_canonical_paths(consumer, package, tmp_path,
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+def test_tool_error_allowance_never_admits_a_checkout_tool(consumer, package, tmp_path, shell):
+    # SCAN_ALLOW_TOOL_ERRORS tolerates a missing tool, not one that resolves inside the checkout.
+    trace = tmp_path / 'trace'
+    inside = consumer / 'bin'
+    stub(inside, 'trivy', trace)
+    env = dict(os.environ, PATH=str(inside) + os.pathsep + os.environ['PATH'], SCAN_ALLOW_TOOL_ERRORS='1')
+    command = 'require_tool trivy' if shell == 'sh' else 'Test-ToolAvailable trivy'
+    result = run_library(package, shell, command, consumer, env)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'outside' in result.stderr
+    assert not trace.exists()
+
+
+@pytest.mark.parametrize('shell', ['sh', 'ps1'])
 def test_external_virtual_environment_keeps_its_invoked_identity(consumer, package, tmp_path, shell):
     venv = tmp_path / 'external environment'
     subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(venv)], check=True)
