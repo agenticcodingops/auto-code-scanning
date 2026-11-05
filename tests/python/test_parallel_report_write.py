@@ -118,7 +118,9 @@ def test_concurrent_report_creation_and_replacement(writers, shell, existing):
             if shell == 'bash':
                 body = f'''touch ready{index}
 while [[ ! -f go ]]; do sleep 0.01; done
-for ((i=0; i<30; i++)); do write_scan_json '{{"writer":{index}}}'; done'''
+# Each publication starts path-check interpreters; keep this a concurrency
+# regression rather than a process-startup stress benchmark.
+for ((i=0; i<10; i++)); do write_scan_json '{{"writer":{index}}}'; done'''
             else:
                 body = f'''[IO.File]::WriteAllText('ready{index}', '')
 while (-not [IO.File]::Exists('go')) {{ Start-Sleep -Milliseconds 10 }}
@@ -153,12 +155,16 @@ def test_permanent_report_write_failure_is_bounded_and_cleans_temporary(writers,
 
 
 @pytest.mark.parametrize('shell', ['pwsh', 'bash'])
-def test_report_writer_refuses_linked_output(writers, shell):
+@pytest.mark.parametrize('location', ['directory', 'report'])
+def test_report_writer_refuses_linked_output(writers, shell, location):
     outside = writers / 'outside'
     outside.mkdir()
     report = outside / 'last-scan.json'
     report.write_text('{"previous":true}', encoding='utf-8')
     link = writers / '.scanning'
+    if location == 'report':
+        link.mkdir()
+        link = link / 'last-scan.json'
     try:
         link.symlink_to(outside, target_is_directory=True)
     except OSError:
@@ -201,4 +207,79 @@ def test_lasting_sharing_violation_fails_without_changing_report(writers, shell)
             cwd=writers, capture_output=True, text=True, encoding='utf-8', timeout=15)
     assert result.returncode != 0, result.stdout + result.stderr
     assert json.loads(report.read_text()) == {'previous': True}
+    assert not list(report.parent.glob('.scan-write-*'))
+
+
+@pytest.mark.parametrize('shell', ['pwsh', 'bash'])
+def test_fresh_path_safety_rejection_is_terminal(writers, shell):
+    """A safety rejection after staging must never be swallowed by retry logic."""
+    report = writers / '.scanning/last-scan.json'
+    report.parent.mkdir()
+    report.write_text('{"previous":true}', encoding='utf-8')
+    outside = writers / 'outside'
+    outside.mkdir()
+    sentinel = outside / 'last-scan.json'
+    sentinel.write_text('{"outside":true}', encoding='utf-8')
+    link = writers / 'linked'
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        if os.name != 'nt':
+            pytest.skip('directory links unavailable')
+        result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(outside)], capture_output=True)
+        if result.returncode:
+            pytest.skip('junction unavailable')
+    # The second real validation observes a linked path once. Subsequent calls
+    # would see the original safe path, modelling an attacker removing the link.
+    if shell == 'bash':
+        body = '''eval "$(declare -f assert_safe_write_path | sed '1s/assert_safe_write_path/check_original/')"
+checks=0
+assert_safe_write_path() {
+    check_original "$@"
+    checks=$((checks + 1))
+    if [[ $checks == 2 ]]; then check_original linked/last-scan.json; fi
+}
+write_scan_json '{}'
+'''
+    else:
+        body = '''$originalCheck = ${function:Assert-SafeWritePath}
+$script:checks = 0
+function Assert-SafeWritePath {
+    param([string]$Path)
+    & $originalCheck $Path
+    $script:checks++
+    if ($script:checks -eq 2) { & $originalCheck 'linked/last-scan.json' }
+}
+Write-ScanJson '{}'
+'''
+    result = subprocess.run(command(writers, shell, body), cwd=writers,
+                            capture_output=True, text=True, encoding='utf-8', timeout=15)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert json.loads(report.read_text(encoding='utf-8')) == {'previous': True}
+    assert json.loads(sentinel.read_text(encoding='utf-8')) == {'outside': True}
+    assert not list(report.parent.glob('.scan-write-*'))
+
+
+def test_powershell_cleans_hidden_staging_file_on_failure(writers):
+    """Dot files are hidden on POSIX; emulate that attribute on Windows too."""
+    report = writers / '.scanning/last-scan.json'
+    report.mkdir(parents=True)
+    body = '''$originalCheck = ${function:Assert-SafeWritePath}
+$script:checks = 0
+function Assert-SafeWritePath {
+    param([string]$Path)
+    & $originalCheck $Path
+    $script:checks++
+    if ($script:checks -eq 2 -and [Environment]::OSVersion.Platform -eq 'Win32NT') {
+        foreach ($item in Get-ChildItem -LiteralPath '.scanning' -Force -File) {
+            $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
+        }
+    }
+}
+Write-ScanJson '{}'
+'''
+    result = subprocess.run(command(writers, 'pwsh', body), cwd=writers,
+                            capture_output=True, text=True, encoding='utf-8', timeout=15)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert report.is_dir()
     assert not list(report.parent.glob('.scan-write-*'))
