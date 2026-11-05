@@ -134,14 +134,30 @@ ensure_scanning_dir() {
     mkdir -p .scanning
 }
 
-write_scan_json() {
-    local json_content="${1:?JSON content required}" temporary
+write_scan_json() (
+    local json_content="${1:?JSON content required}" temporary attempt started
     ensure_scanning_dir
     temporary="$(mktemp .scanning/.scan-write-XXXXXX)" || exit 1
-    printf '%s\n' "$json_content" > "$temporary"
-    assert_safe_write_path .scanning/last-scan.json
-    mv -f -- "$temporary" .scanning/last-scan.json
-}
+    # A subshell keeps cleanup local and preserves the caller's traps.
+    trap 'rm -f -- "$temporary"' EXIT
+    printf '%s\n' "$json_content" > "$temporary" || exit 1
+    started=-1
+    for ((attempt=0; attempt<20; attempt++)); do
+        assert_safe_write_path .scanning/last-scan.json
+        # mv otherwise treats a directory as an output folder and reports success.
+        [[ ! -d .scanning/last-scan.json ]] || { hook_error 'Report destination is a directory'; exit 1; }
+        if mv -f -- "$temporary" .scanning/last-scan.json; then
+            exit 0
+        fi
+        # Windows can deny rename while another hook is publishing the report.
+        # Some mv implementations also retry internally; cap elapsed time as well.
+        if (( started < 0 )); then started=$SECONDS; fi
+        if (( attempt == 19 || SECONDS - started >= 2 )); then break; fi
+        sleep 0.05
+    done
+    hook_error 'Could not publish scan report after bounded retries'
+    exit 1
+)
 
 assert_external_path() {
     local py
