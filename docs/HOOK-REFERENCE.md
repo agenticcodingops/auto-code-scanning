@@ -3,8 +3,10 @@
 Pre-push hooks require the complete Git stdin transaction and scan isolated object
 snapshots of changed files. Existing refs compare the remote object with the pushed
 object. New branches compare with the merge base of the destination remote's tracked
-default branch; without one, only commits absent from all remote-tracking refs
-contribute paths. Deleted refs and deleted files scan nothing. File bytes and policy
+default branch. Without a usable merge base, only commits absent from direct
+tracking refs unambiguously owned by that destination contribute paths. Unknown
+destinations or unsafe/ambiguous mappings conservatively scan reachable ancestry.
+Other remotes never exclude destination-bound changes. Deleted refs and deleted files scan nothing. File bytes and policy
 come from the pushed objects, regardless of the index or working tree.
 Config validation reads the consumer's staged root config. Upgrade the
 runner configuration and vendored files together; see
@@ -35,7 +37,8 @@ cannot override the verified application. External virtual environments keep
 their invoked interpreter path so their installed packages remain available.
 Opaque external execution aliases are skipped without probing; a checkout-boundary
 rejection still stops interpreter discovery.
-Re-vendor the complete `hooks/lib` directory when upgrading.
+Re-vendor the complete `hooks/lib` directory when upgrading. Checkout-owned or
+unverified executables are refused even with `SCAN_ALLOW_TOOL_ERRORS=1`.
 
 On Windows, the `py` fallback selects an active `VIRTUAL_ENV`'s `Scripts/python.exe`,
 or the single default marked by the launcher's `-0p` inventory. That inventory
@@ -147,6 +150,11 @@ by each reporting hook; last report wins). The output conforms to
 without writing a report, including `checkov`, `tflint` and `dotnet-build` when
 no matching files exist.
 
+Shared writers use atomic replacement and bounded retries for concurrent sharing
+and access-denied conflicts. Persistent publication failures block and preserve an
+existing report; staging files are cleaned. Fresh path-safety failures stop immediately
+and are never retried. This is a shared last-writer-wins report, not an aggregate.
+
 Push scanners export their reports from the isolated snapshot to this location in
 the consumer repository before snapshot cleanup, including on scan failure. Earlier
 reports are cleared before a new transaction, object or scanner attempt; if that
@@ -197,7 +205,7 @@ The dispatcher sets these environment variables for hook scripts:
 - **Tool**: Gitleaks 8.19 or newer (`gitleaks git --staged`)
 - **Target**: <5 seconds
 - **Flags**: `--report-format json --report-path - --redact --no-banner --exit-code 1 --log-level error`
-- **Note**: Prints each staged finding's rule, file, and line. It does not print the secret. A config Gitleaks cannot load warns and allows the commit (fail-open) and is not counted as a finding. If the report is a JSON array and the bash hook has neither Python nor jq, it blocks with one finding and does not print the report. On the inputs in [SECRET-SCANNER-EVALUATION.md](SECRET-SCANNER-EVALUATION.md), Trivy found AWS access-key ids that Gitleaks did not. Gitleaks' extra hit on that file was a Slack webhook, which Trivy rates MEDIUM and the CI HIGH,CRITICAL gate does not block. CI secret scans stay on Trivy.
+- **Note**: Prints each staged finding's rule, file, and line, without the secret. A configuration error is an incomplete scan and blocks by default. Invalid findings reports block even with tool-error opt-in; known leaks remain findings. On the inputs in [SECRET-SCANNER-EVALUATION.md](SECRET-SCANNER-EVALUATION.md), the tools detect different patterns. CI secret scans stay on Trivy at HIGH/CRITICAL severity.
 
 #### validate-suppressions
 
@@ -287,7 +295,7 @@ default Lefthook manifest.
 
 The corresponding language plugins in `scan-config.yaml` (`languages.csharp`,
 `languages.typescript`, `languages.sql`) ship **disabled by default** — enable
-them per repo (e.g. `setup-scanning --languages csharp`).
+them per repo (e.g. `setup-scan-fix.py --languages csharp`).
 
 ### C# / .NET
 
@@ -350,8 +358,9 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Tool**: `eslint --fix`
 - **Working dir**: Reads `languages.typescript.build.working_dir` from
   `scan-config.yaml` (monorepo-aware); staged paths are relativized to it
-- **Runner resolution**: `<working_dir>/node_modules/.bin/eslint` -> `eslint` on PATH
-  -> `npx --no-install eslint`; none found -> warn and exit 0 (fail-open)
+- **Runner resolution**: trusted external `SCAN_ESLINT_BIN` and `SCAN_ESLINT_CONFIG`
+  by default (ESLint 9+). Missing trusted inputs block. Repository-local/npx
+  resolution requires explicit `SCAN_TRUST_REPO_CODE=1` in a trusted repository.
 - **Behavior**: Auto-fixes in place. Remaining errors -> exit 1 (re-stage and
   re-commit). Under Lefthook, `stage_fixed: true` re-stages auto-fixed files
 
@@ -361,8 +370,9 @@ them per repo (e.g. `setup-scanning --languages csharp`).
 - **Stage**: pre-commit
 - **Tool**: `prettier --write --ignore-unknown`
 - **Files**: `.ts/.tsx/.js/.jsx/.json/.css/.scss/.md`
-- **Working dir**: Reads `languages.typescript.build.working_dir`; same runner
-  resolution (`node_modules/.bin/prettier` -> `prettier` -> `npx --no-install prettier`)
+- **Working dir**: Reads `languages.typescript.build.working_dir`; trusted external
+  `SCAN_PRETTIER_BIN` and `SCAN_PRETTIER_CONFIG` are required by default. The explicit
+  trusted-repository opt-in permits local package resolution.
 - **Behavior**: Reformats in place. Under Lefthook, `stage_fixed: true` re-stages;
   under pre-commit a modified file fails the hook so you re-stage and re-commit.
   A non-zero `prettier` exit (e.g. syntax error) -> exit 1

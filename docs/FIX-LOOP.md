@@ -94,11 +94,13 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 > or the executed build command via its own head diff. `build_verify_cmd` runs in the `verify`
 > job, which holds **no secret** and hands the push job nothing but its result. `apply-and-push`
 > runs no project code: it checks the artifacts' digests, builds one tree from the head and the
-> patch, gates and secret-scans that tree, commits it with `git commit-tree`, and pushes that
+> patch, gates fix paths and secret-scans changed files from that tree, commits it with `git commit-tree`, and pushes that
 > commit with hooks off; `AUTOFIX_TOKEN` is injected only into the final push URL. Point
 > `build_verify_cmd` at a checked-in script under a gated path (e.g.
-> `bash scripts/ci-build-verify.sh`) so it can't be altered in-PR either. See
-> [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
+> `bash scripts/ci-build-verify.sh`) so the fix-loop's own generated patch cannot alter it.
+> `verify` still runs PR-head code, so a PR's own commits can still change that script
+> before the fix-loop runs; the gate protects against the agent, not against the PR itself.
+> See [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
 
 Key enforcement (all mechanical, independent of the prompt):
 - `analyze` runs `claude-code-action` **FIX-ONLY** with a **scoped tool allowlist** (no umbrella
@@ -109,8 +111,16 @@ Key enforcement (all mechanical, independent of the prompt):
   The guard confines reads and writes to the checkout outside `.git`, resolves links and parent paths,
   and permits only the four exact PR read commands in the prompt. Links and nested agent configuration
   are removed before the session starts. Its Bun runtime is a checksum-verified download,
-  never an Actions-cache entry. Before upload, a checksum-verified secret scanner checks the patch outside the checkout,
-  without its configuration or ignore files. Findings, scanner errors and missing reports stop publication.
+  never an Actions-cache entry. Patch capture rejects binary files and any byte outside supported
+  regular text, without printing the rejected content; links are removed earlier, from the pre-agent
+  checkout, not rejected here. `apply-and-push` separately rejects a submodule entry, on the vetted
+  tree it builds from the head and the patch. Diff generation disables
+  external drivers and text conversion. Before upload, a checksum-verified secret scanner
+  checks the patch outside the checkout,
+  without its configuration or ignore files. Findings, scanner errors and missing reports stop artifact upload. After upload,
+  `apply-and-push` scans changed, non-deleted files from the vetted tree under
+  original and neutral filenames before pushing. This retains filename-sensitive
+  detection without allowing default filename exclusions to hide those files.
   The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of
@@ -124,12 +134,17 @@ Key enforcement (all mechanical, independent of the prompt):
   client may treat the refused request as an error and fail the build, which fails `verify`
   and stops the push. Keep `build_verify_cmd` free of Actions cache saves. The workflow sets
   `cache-mode: none` for its other jobs too, since none of them uses the cache.
-- `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
+- `apply-and-push` checks out the same SHA, re-gates fix paths and secret-scans added/modified files from the exact tree it
   commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
   It restores nothing from the Actions cache, which the PR's code can write to in other runs
   (for example the PR's own CI).
 - The reusable workflow refuses to run for the shared `github-actions[bot]` identity, whatever
   the caller's `if:` says.
+
+A build runs only when the trusted base sets a nonempty `build_verify_cmd`.
+The standard template leaves it empty, so a successful `verify` job alone does
+not prove a build ran. Configure the reviewed command and inspect its step output
+if build verification is required.
 
 ## 4. Enable it (checklist)
 
