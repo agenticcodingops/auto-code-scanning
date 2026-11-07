@@ -127,18 +127,19 @@ Keep all existing standard hooks as-is:
 
 When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 
-1. Compare `scan-config.yaml` with the target tier's configuration defaults and
+1. Save reviewed `.scanning/configs/`, caller workflows and runner configuration
+   (`lefthook.yml` or `.pre-commit-config.yaml`) externally, including full-SHA pins
+   and customized editor hooks, before making any of the changes below: this captures
+   the pre-upgrade state, not a copy already modified by them
+2. Compare `scan-config.yaml` with the target tier's configuration defaults and
    merge reviewed settings deliberately. Setup preserves an existing config unless
    forced; `--enable-fix-loop` alone does not change an existing disabled setting
-2. Open your current runner config and the target tier template side by side
-3. Add only the new hooks listed above
-4. Keep any custom `args`, `exclude`, or `files` overrides you have added
-5. Keep any additional third-party hooks your team has added
-6. Review custom settings against the current security contract; the setup verifier
+3. Open your current runner config and the target tier template side by side
+4. Add only the new hooks listed above
+5. Keep any custom `args`, `exclude`, or `files` overrides you have added
+6. Keep any additional third-party hooks your team has added
+7. Review custom settings against the current security contract; the setup verifier
    checks exact shipped hook settings, so customized manifests need separate review
-7. Save reviewed `.scanning/configs/`, caller workflows and runner configuration
-   (`lefthook.yml` or `.pre-commit-config.yaml`) externally, including full-SHA pins
-   and customized editor hooks, before rerunning setup
 8. Begin setup/verification with the required entries from the new tier template;
    reinstall the push transaction adapter through setup
 9. Compare overwritten policy/workflows, restore approved customizations and full

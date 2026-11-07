@@ -284,6 +284,9 @@ relative to that directory (for example `api` and `App.slnx`). Local .NET build 
 format hooks execute project logic; enable them only for repositories you trust.
 
 Now enter the consumer repository root (it must already be a Git repository).
+Before running setup, save copies of any existing `lefthook.yml` and other files
+setup can replace (see the list below): setup replaces them without a prompt on
+every run, including the first, and including uncommitted edits.
 Run **one** setup command. If selecting strict for scanning only, explicitly set
 `fix_loop.enabled: false` afterwards: the strict template defaults it to true. These examples use Terraform on AWS and standard tier:
 
@@ -310,9 +313,9 @@ Do not replace that adapter with a plain `pre-commit install --hook-type pre-pus
 The setup script copies hooks, schemas, shared scripts, provider policy, an optional
 editor integration bundle under `.claude/`, and caller workflows. It overwrites
 vendored hooks, schemas, shared scripts, provider policy, the Lefthook manifest,
-caller workflows and the four shipped `.claude/hooks/` files. Before any rerun,
-save external copies of every file it can replace, including uncommitted edits.
-Compare the result and restore reviewed consumer settings afterwards; shared core
+caller workflows and the four shipped `.claude/hooks/` files, on every run including
+the first. Save external copies of every file it can replace before running it,
+including uncommitted edits. Compare the result and restore reviewed consumer settings afterwards; shared core
 code must match the selected revision. Git cannot recover an uncommitted overwritten edit.
 An existing `scan-config.yaml` is kept unless `--force` is supplied. Tool installation
 is separate from setup. A nonzero setup result needs investigation before continuing.
