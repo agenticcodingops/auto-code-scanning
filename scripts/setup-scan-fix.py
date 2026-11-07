@@ -46,6 +46,13 @@ def copy(src: Path, dst: Path):
 
 
 def main(argv) -> int:
+    # Captured tool output is decoded as UTF-8 with errors="replace" (see install_step), so
+    # forwarding it can itself raise UnicodeEncodeError if stdout/stderr are redirected to a
+    # narrower code page, e.g. Windows cp1252. Relax the write side the same way.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--languages", default="")
     ap.add_argument("--tier", default="standard", choices=["starter", "standard", "strict"])
