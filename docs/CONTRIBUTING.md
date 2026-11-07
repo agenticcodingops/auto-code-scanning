@@ -18,6 +18,10 @@ PowerShell 7. Keep Python environments and scanner installations outside the che
 
 Clone with LF line endings on every platform (the commands work in PowerShell or Bash):
 
+The example below clones upstream for contributors with push access. If you lack
+that access, first fork the repository and substitute your fork's clone URL in the
+same command; the checkout directory and remaining local steps stay the same.
+
 ```bash
 git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git
 cd auto-code-scanning
@@ -115,7 +119,21 @@ On Windows, open Git Bash or launch it explicitly from PowerShell:
 An existing CRLF checkout needs the README's LF archive procedure before shell tests.
 `git archive HEAD` includes only committed content: commit your change before exporting.
 Commands that inspect the index must run in an actual Git checkout instead. Verify
-`command -v bash` and `bash --version` inside the selected shell.
+`command -v bash` and `bash --version` inside the selected shell. If opening Git
+Bash independently rather than launching it from the configured PowerShell session,
+prepare that new shell explicitly before the README commands:
+
+```bash
+source "$HOME/.venvs/acs-contribute/Scripts/activate"
+export PATH="$HOME/.local-scanning-tools/bin:$PATH"
+export CHECKOV_PYTHON="$HOME/.venvs/acs-checkov/Scripts/python.exe"
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
+python --version
+"$CHECKOV_PYTHON" -m checkov.main --version
+```
+
+Use the paths you actually created if they differ. Environment changes made in
+one terminal do not configure an independently opened terminal.
 
 Two tests in `tests/python/test_hook_integrity.py` have previously failed on Windows
 because console encoding changed non-ASCII output:
@@ -164,7 +182,7 @@ commit, then verify hosted checks on an adoption pull request. See
 
 ## How to Contribute
 
-1. Fork this repository
+1. Use the upstream checkout above if you have push access; otherwise fork first and clone your fork
 2. Create a feature branch
 3. Make your changes, with [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) messages
 4. Ensure all tests pass

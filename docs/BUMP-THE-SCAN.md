@@ -194,7 +194,12 @@ LC_ALL=C comm -23 before.tsv after.tsv > gone.tsv    # failing only before the b
 ```
 
 The TSV identity includes resource, line range and occurrence fingerprint;
-duplicate records are retained rather than collapsed by `sort -u`.
+duplicate records are retained rather than collapsed by `sort -u`. Across aggregate
+format changes, these are candidate differences rather than proof of new/resolved
+findings: older releases can omit end lines and fingerprints. Reconcile using the
+fields present in both reports, review ambiguous matches manually, and retain the
+new report's full occurrence detail. Do not approve or dismiss a finding solely
+because a format change altered its comparison identity.
 `comm` needs both files sorted in the collation it runs under, so keep `LC_ALL=C` on every
 `sort` and `comm`. If you made `before.tsv` without it, re-sort it first with
 `LC_ALL=C sort -o before.tsv before.tsv`. If `comm` prints "not in sorted order", do

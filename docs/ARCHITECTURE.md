@@ -192,6 +192,11 @@ model is: *untrusted PR/review text must never reach a job that can push or exfi
 classic "lethal trifecta" (untrusted input + secrets/write + egress) is broken by splitting it
 across jobs.
 
+A build runs only when the trusted base sets a nonempty `build_verify_cmd`.
+The standard template leaves it empty, so a successful `verify` job alone does
+not prove a build ran. Configure the reviewed command and inspect its step output
+if build verification is required.
+
 ### Per-job capabilities
 
 ```mermaid

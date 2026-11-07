@@ -35,7 +35,8 @@ finding.
   `scanning-repo-ref`; the default is the published platform, not a same-owner copy.
 - Code scanning available on the module repository, if you want the SARIF results there.
   Upload failures fail the separate Upload SARIF job by default. Require that
-  check when enabled if delivery must block merging; the five scan checks alone
+  check when enabled and leave `allow-sarif-upload-errors: false` if delivery must
+  block merging; the five scan checks alone
   do not guarantee delivery. If private code scanning is unavailable, set
   `upload-sarif: false`; scanning and finding gates still run. By default three uploads run: the Snyk upload is
   skipped unless the Snyk job, which needs `enable-snyk: true`, wrote a SARIF file

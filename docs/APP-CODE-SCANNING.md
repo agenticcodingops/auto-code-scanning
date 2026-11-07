@@ -40,6 +40,9 @@ For a new config, `setup-scan-fix --languages csharp,typescript,sql` renders the
 selected languages from a tier template. An existing `scan-config.yaml` is kept:
 edit its language enablement and build/tool settings deliberately instead of
 assuming setup changed them. Review any full replacement before using `--force`.
+With hosted automatic detection, merge reviewed language enablement into the base
+before submitting code in that language: enabling a language and adding its code
+in the same PR does not authorize that new language's scan from the PR head.
 
 ---
 
@@ -50,7 +53,9 @@ consumer. Set `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG`, `SCAN_PRETTIER_BIN` and
 `SCAN_PRETTIER_CONFIG` to absolute reviewed external paths. ESLint config discovery
 from the consumer is disabled. Prettier uses the external config but may also read
 consumer `.editorconfig` settings that the external config does not override. Missing trusted inputs block. Lefthook also invokes
-Prettier for generated JSON and Markdown in a Terraform-only adoption.
+Prettier for generated JSON and Markdown in a Terraform-only adoption. Use the
+[external formatter ignore rule](SETUP-GUIDE.md#5-install-local-hooks) to preserve
+vendored schema bytes when the formatter's working directory is the repository root.
 
 For a developer-owned repository whose executable configuration and dependencies
 are already trusted, `SCAN_TRUST_REPO_CODE=1` explicitly permits repository-local

@@ -147,11 +147,16 @@ pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module P
 
 # ci.yml "test-hooks": verified Trivy 0.75.0, Checkov 3.3.19, TFLint 0.64.0 (setup-tflint v4.1.1). Matrix aws, azure, gcp.
 : "${CHECKOV_PYTHON:?Set CHECKOV_PYTHON to the external scanner Python - see Contributing}"
+"$CHECKOV_PYTHON" -m checkov.main --version   # missing interpreter/module must stop the loop
 for cloud in aws azure gcp; do
   FIXTURE="tests/fixtures/terraform-valid/"; [ -d "${FIXTURE}${cloud}" ] && FIXTURE="${FIXTURE}${cloud}"   # the cloud's own fixture, as CI selects it
   trivy config "$FIXTURE" --severity CRITICAL --exit-code 1 --quiet --skip-check-update
   trivy fs "$FIXTURE" --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet
-  "$CHECKOV_PYTHON" -m checkov.main -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
+  checkov_status=0
+  "$CHECKOV_PYTHON" -m checkov.main -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || checkov_status=$?
+  printf 'Checkov (%s) raw exit: %s\n' "$cloud" "$checkov_status"
+  # Exit 1 may be a finding or an error: inspect the scanner output before accepting it.
+  if [ "$checkov_status" -gt 1 ]; then exit "$checkov_status"; fi
   tflint --init --config="configs/${cloud}/.tflint.hcl"
 done
 
@@ -266,6 +271,10 @@ flowchart TD
 ---
 
 ## LAYER B — Agentic fix-loop (opt-in)
+
+Build verification runs only when the trusted base sets a nonempty
+`build_verify_cmd`. The standard template leaves it empty; a successful verification
+job alone does not prove a build ran. Configure the reviewed command if required.
 
 When enabled (`fix_loop.enabled: true` + the `ai-autofix` PR label), an AI agent proposes a
 **minimal** fix and separate jobs build it without secrets and verify the exact tree before pushing it. It is engineered to be safe

@@ -127,17 +127,20 @@ Keep all existing standard hooks as-is:
 
 When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 
-1. Open your current config and the target tier template side by side
-2. Add only the new hooks listed above
-3. Keep any custom `args`, `exclude`, or `files` overrides you have added
-4. Keep any additional third-party hooks your team has added
-5. Review custom settings against the current security contract; the setup verifier
+1. Compare `scan-config.yaml` with the target tier's configuration defaults and
+   merge reviewed settings deliberately. Setup preserves an existing config unless
+   forced; `--enable-fix-loop` alone does not change an existing disabled setting
+2. Open your current runner config and the target tier template side by side
+3. Add only the new hooks listed above
+4. Keep any custom `args`, `exclude`, or `files` overrides you have added
+5. Keep any additional third-party hooks your team has added
+6. Review custom settings against the current security contract; the setup verifier
    checks exact shipped hook settings, so customized manifests need separate review
-6. Save reviewed `.scanning/configs/` and caller workflows externally, including
-   full-SHA pins, before rerunning setup
-7. Begin setup/verification with the required entries from the new tier template;
+7. Save reviewed `.scanning/configs/` and caller workflows externally, including
+   full-SHA pins, plus any customized editor hooks, before rerunning setup
+8. Begin setup/verification with the required entries from the new tier template;
    reinstall the push transaction adapter through setup
-8. Compare overwritten policy/workflows, restore approved customizations and full
+9. Compare overwritten policy/workflows, restore approved customizations and full
    SHA pins after template verification, then stage a real change and make a scanned commit as in [consumer acceptance](TESTING-GUIDE-CONSUMING-REPO.md)
 
 ## Version Pinning

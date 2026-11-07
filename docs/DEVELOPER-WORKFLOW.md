@@ -87,6 +87,10 @@ git commit -m "fix: restrict security group egress to VPC CIDR"
 
 ## Option 2: Suppress the Finding
 
+First check `suppressions.file` in `scan-config.yaml`. The examples below use its
+default, `.scan-suppressions.yaml`; if customized, create, validate and commit that
+configured path instead. A registry at an unused default path has no scan effect.
+
 For a reviewed false positive or accepted risk, create a schema-2.0 occurrence
 entry in `.scan-suppressions.yaml`, using the fingerprint emitted by the current
 scan. It binds the tool, rule, path, resource, lines and source-content hash.

@@ -14,6 +14,11 @@ way it is. This document explains the threat model, the controls, and — concre
 
 ---
 
+A build runs only when the trusted base sets a nonempty `build_verify_cmd`.
+The standard template leaves it empty, so a successful `verify` job alone does
+not prove a build ran. Configure the reviewed command and inspect its step output
+if build verification is required.
+
 ## 1. Two layers, two risk profiles
 
 | Layer | What it does | Risk |
@@ -88,8 +93,10 @@ jobs, and constrain the remaining tool and publication boundaries.**
   Capture rejects unsupported file types and binary content, with diff drivers and
   text conversion disabled. An isolated scan of the patch must succeed before artifact
   upload. After upload, `apply-and-push` scans changed, non-deleted files from the
-  vetted tree under original and neutral filenames before pushing. Failures stop
-  publication without printing rejected content.
+  vetted tree under original and neutral filenames before pushing. Patch capture and
+  the isolated patch scan avoid printing rejected patch content. The later publication
+  scan can print finding lines and surrounding source context, even when matched
+  secrets are masked; treat its job logs as potentially sensitive.
 - **`verify`** runs the base-sourced **`build_verify_cmd`** on the PR head with the patch
   applied. It is the only job that runs the PR's code, so it holds **no secret**, declares
   **no outputs** and uploads **nothing**: only its pass/fail result reaches the push job,

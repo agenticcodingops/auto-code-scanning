@@ -3,7 +3,7 @@
 Complete [Getting started](SETUP-GUIDE.md) first. This reference tests the installed
 system; it replaces the historical setup walkthrough and its old result counts.
 
-> Pin the
+> **Pin the
 > consuming repo to `@v3.0.6` (or a SHA) — never `@main`.** <!-- x-release-please-version -->
 
 ## Local acceptance
@@ -16,7 +16,7 @@ credentials in test data. A skipped hook does not prove a scanner ran.
 |---|---|---|
 | Installation | Run the external clone's `scripts/verify-scanning.ps1` with the actual runner and tier | Exit 0; no failed checks |
 | Configuration | `python scripts/validate-scan-config.py` | Exit 0 for valid config |
-| Commit | Make and stage a new clean change to the Terraform example, then `git commit` | Secret and IaC hooks run; clean commit succeeds |
+| Commit | Make and stage a new clean change to the Terraform example, then `git commit` | Secret hooks run; IaC security also runs with Lefthook or standard/strict pre-commit; a clean commit succeeds |
 | Staged security input | Stage a known scanner fixture, then change only its worktree contents and run the security hook | Security decision follows staged content; SQLFluff/formatters follow worktree content |
 | Terraform on demand | `python scripts/scan.py . --tools trivy --format json` | One JSON document on stdout; diagnostics on stderr; 0 clean, 1 findings, 2 tool error |
 | Suppression | `python scripts/validate-suppressions.py .scan-suppressions.yaml --ci` after creating a schema-2.0 registry | Valid entries pass; invalid metadata/expiry blocks |
@@ -51,7 +51,28 @@ printf 'refs/heads/main %s refs/heads/main %040d\n' "$tip" 0 |
   python hooks/pre-push.py --remote origin --hooks checkov,tflint
 ```
 
-A clean tree with tracked Checkov policy and trusted external TFLint inputs passes.
+The explicit batch command tests those two scanners, independently of runner
+configuration. Also feed the same transaction to the **installed** push hook,
+checking the scanners configured for that runner and tier. Adjust the hook path
+if `core.hooksPath` points elsewhere. PowerShell with the verified Git Bash on PATH:
+
+```powershell
+$PushHook = (git rev-parse --git-path hooks/pre-push).Trim()
+$Transaction | bash $PushHook origin local-test
+```
+
+macOS/Linux:
+
+```bash
+push_hook="$(git rev-parse --git-path hooks/pre-push)"
+printf 'refs/heads/main %s refs/heads/main %040d\n' "$tip" 0 |
+  bash "$push_hook" origin local-test
+```
+
+This invokes the local hook without a network push. Starter pre-commit has no
+IaC security hook to expect here. For other tiers/runners, inspect selected files,
+scanner output and raw exits; a successful skipped hook is not scan evidence.
+A lint/security-clean tree with tracked Checkov policy and trusted external TFLint inputs passes.
 With no known destination tracking refs this conservatively scans reachable ancestry.
 A direct `pre-commit run --hook-stage pre-push --all-files` has no transaction and
 is not a valid substitute. For existing refs, use the real advertised old SHA,

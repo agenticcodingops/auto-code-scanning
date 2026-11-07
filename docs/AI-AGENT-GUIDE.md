@@ -98,7 +98,7 @@ scan.py writes results to `.scanning/last-scan.json` (configurable via `--output
   "schema_version": "1.0",
   "scan_id": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
   "scan_timestamp": "2026-11-07T01:11:19Z",
-  "scan_directory": ".",
+  "scan_directory": "/absolute/path/to/consumer",
   "tools_executed": [
     "trivy"
   ],

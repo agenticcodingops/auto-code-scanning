@@ -28,11 +28,16 @@ combination has been tested; the release's exact scanner versions are in
 | Gitleaks | 8+; release lock selects 8.30.1 | Additional local secret checks |
 | Lefthook **or** pre-commit | 1.6+ **or** 3.0+ | Git hook runner; Lefthook is the default |
 | Terraform | Match your project's `required_version` | Terraform formatting, validation and setup verification |
+| terraform-docs | Compatible with the pinned pre-commit-terraform revision | Required only for the strict pre-commit runner's `terraform_docs` hook |
 | Node.js / npm | Supported long-term support (LTS) release | JavaScript runtime/package manager; external Prettier for Lefthook |
 | Semgrep | 1.60+ | C# and TypeScript security checks |
 | .NET SDK | 8+ or your project's required SDK | C# formatting and builds |
 | SQLFluff | 3+ | SQL linting, if selected |
 | GitHub CLI (`gh`) | Current supported release | Optional fix-loop labels and secret verification |
+
+For strict pre-commit, install `terraform-docs` from your managed package source
+and check `terraform-docs --version` before staging Terraform. Lefthook does not
+require it merely because its configuration tier is strict.
 
 The setup verifier currently checks Terraform tools even in an application-only
 consumer. Provision them when using that verifier. Local tool versions come from
@@ -128,7 +133,8 @@ reports to the Security > Code scanning view. For a private repository, confirm
 code scanning is available and enabled for that repository under its plan. If it
 is unavailable, set `upload-sarif: false` on **both** scan callers; scans and their
 gates still run. Terraform upload failures fail its separate Upload SARIF job by
-default; require that check if delivery must block merging. Application SARIF upload
+default; require that check and keep `allow-sarif-upload-errors: false` if delivery
+must block merging. Application SARIF upload
 steps tolerate delivery failures, so successful app scan jobs do not prove upload.
 Inspect their upload logs separately. `fail-on-findings: false` only
 relaxes finding thresholds; incomplete scans still fail.
@@ -293,12 +299,18 @@ For application code, replace the language/provider arguments with
 `--languages csharp,typescript`. These arguments render a new config only. If
 `scan-config.yaml` exists, edit the relevant `languages.<name>.enabled` and build/tool
 settings explicitly, preserving reviewed settings; do not assume setup enabled them.
-Use `--force` only after reviewing what replacing the entire config would change. For the alternative runner use
+Use `--force` only after reviewing what replacing the entire config would change.
+With hosted automatic language detection, merge reviewed language enablement into
+the base before adding code in that language. A PR that enables a language and
+adds its code still uses the base's earlier language selection. For the alternative runner use
 `--hooks-runner pre-commit`; setup installs its push transaction adapter too.
 Do not replace that adapter with a plain `pre-commit install --hook-type pre-push`.
 The setup script copies hooks, schemas, shared scripts, provider policy, an optional
 editor integration bundle under `.claude/`, and caller workflows. It overwrites
-vendored files and caller templates; review existing integrations before rerunning.
+vendored files and caller templates, including the four shipped `.claude/hooks/`
+files. Before any rerun, save customized editor hooks externally, including
+uncommitted edits, then review and reapply approved customizations. Review existing
+integrations before rerunning; Git cannot recover an uncommitted overwritten edit.
 An existing `scan-config.yaml` is kept unless `--force` is supplied. Tool installation
 is separate from setup. A nonzero setup result needs investigation before continuing.
 
@@ -346,7 +358,14 @@ This keeps policy approval separate from the changes it authorizes.
 
 These are the release-managed tag examples; use their resolved full SHA in consumers:
 
+Use **two separate caller files** with distinct workflow names, as setup copies
+them. Combining these jobs under one caller can make their reusable concurrency
+groups cancel each other. Retain/adapt the copied triggers in each file.
+
 ```yaml
+# .github/workflows/code-security-scan.yml
+name: App Code Security Scan
+on: [pull_request, push, workflow_dispatch]
 permissions:
   contents: read
   actions: read
@@ -358,6 +377,18 @@ jobs:
     with:
       fail-on-findings: true
       # upload-sarif: false  # private repository without code scanning
+```
+
+```yaml
+# .github/workflows/terraform-scan.yml
+name: Terraform Security Scan
+on: [pull_request, push, workflow_dispatch]
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  pull-requests: write
+jobs:
   terraform-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.6 # x-release-please-version
     with:
@@ -413,7 +444,11 @@ a fresh local test repository, this minimal file needs no cloud credentials:
 terraform {
   required_version = ">= 1.0"
 }
+```
 
+Save that as `main.tf`. Save the variable in `variables.tf`:
+
+```hcl
 variable "example" {
   type        = string
   description = "A non-secret onboarding value."
@@ -421,7 +456,16 @@ variable "example" {
 }
 ```
 
-Save it as `main.tf`, then run these commands from the consumer root on any OS:
+Reference it in `outputs.tf` so the push linter sees a complete, used declaration:
+
+```hcl
+output "example" {
+  description = "The non-secret onboarding value."
+  value       = var.example
+}
+```
+
+Run these commands from the consumer root on any OS:
 
 ```bash
 git add .
@@ -459,6 +503,9 @@ full emitted check names in [branch protection](consumer-repo-setup-guide.md#bra
 A local-only walkthrough stops before pushing and does not prove hosted upload.
 
 ## 9. Suppressions and baselines
+
+Check `suppressions.file` in `scan-config.yaml` and use that registry path in
+creation, validation and commits. Examples here use the default `.scan-suppressions.yaml`.
 
 Fix new findings first. A **suppression** is an approved, expiring exception for an
 exact finding. A **baseline** records reviewed existing debt so new occurrences

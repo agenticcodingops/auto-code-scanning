@@ -3,7 +3,11 @@
 For current shipped contracts and later corrections to these milestones, use the
 [v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md). Begin adoption with [Getting started](SETUP-GUIDE.md).
 
-## v2.0.0 (Current Release) — Reusable scan→fix platform
+> The delivered checklists below are historical milestones. Their original job,
+> network and error-handling descriptions are not current operating instructions;
+> the audit and linked current references describe the shipped contracts.
+
+## v2.0.0 milestone — Reusable scan→fix platform
 
 A major evolution from a Terraform-only, scan-only POC into a reusable, configurable,
 multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchanged.

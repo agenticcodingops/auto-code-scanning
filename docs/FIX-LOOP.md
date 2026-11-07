@@ -137,6 +137,11 @@ Key enforcement (all mechanical, independent of the prompt):
 - The reusable workflow refuses to run for the shared `github-actions[bot]` identity, whatever
   the caller's `if:` says.
 
+A build runs only when the trusted base sets a nonempty `build_verify_cmd`.
+The standard template leaves it empty, so a successful `verify` job alone does
+not prove a build ran. Configure the reviewed command and inspect its step output
+if build verification is required.
+
 ## 4. Enable it (checklist)
 
 1. `setup-scan-fix … -EnableFixLoop` (creates labels, verifies secrets, copies the caller).

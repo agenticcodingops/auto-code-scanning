@@ -69,6 +69,9 @@ selection and broad exception examples have been updated to the current contract
 
 ## Local walkthrough evidence
 
+The [command ledger, captured output and matching file hashes](V3-WALKTHROUGH-RESULTS.md)
+record the final local run and the installed push-hook test.
+
 On 7 November 2026, the Windows path was repeated in a fresh temporary Terraform
 consumer with no remote. It used the exact post-release setup-fix pin above,
 the standard tier and Lefthook. All 29 recorded command steps exited 0. Setup and
@@ -76,6 +79,9 @@ the separate verifier each reported zero failed checks; the optional missing
 `.trivyignore` produced a warning. The commit ran configuration validation,
 Gitleaks, Trivy secrets, Trivy IaC and Prettier successfully. The on-demand Trivy
 scan returned zero findings and `scan_complete: true`.
+
+The final three-file example also passed the installed pre-push hook's Checkov
+and TFLint scans on a local transaction, without contacting a remote.
 
 After the commit, all 61 vendored hook, schema and script files matched the
 external platform clone byte for byte, and the consumer working tree was clean.
