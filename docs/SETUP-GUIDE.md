@@ -425,14 +425,14 @@ setup does not vendor all of its dependencies. Choose your actual runner and tie
 
 ```powershell
 pwsh -NoProfile -File "$Platform/scripts/verify-scanning.ps1" -HooksRunner lefthook -Tier standard
-python scripts/validate-scan-config.py
+$env:STRICT = '1'; python scripts/validate-scan-config.py
 ```
 
 macOS/Linux:
 
 ```bash
 pwsh -NoProfile -File "$PLATFORM/scripts/verify-scanning.ps1" -HooksRunner lefthook -Tier standard
-python scripts/validate-scan-config.py
+STRICT=1 python scripts/validate-scan-config.py
 ```
 
 Expect exit 0 and zero failed verifier checks. An optional missing `.trivyignore`
