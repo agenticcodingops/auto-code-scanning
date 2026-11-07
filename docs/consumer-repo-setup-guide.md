@@ -25,7 +25,10 @@ without path filters that could prevent a required check from running.
 If Terraform scanning is enabled, also require `Setup Scanning Tools`, `Trivy IaC Scan`,
 `Checkov Policy Scan`, `TFLint Scan` and `Aggregate Results`, plus `Snyk IaC Scan (Optional)` if enabled.
 When Terraform SARIF delivery must block merging, also require `Upload SARIF`
-when uploads are enabled, and leave `allow-sarif-upload-errors: false`. App-code upload steps tolerate delivery failures, so
+when uploads are enabled, and leave `allow-sarif-upload-errors: false`. Missing
+SARIF files can still skip individual uploads, so a successful check does not
+prove every expected category was delivered; inspect artifacts/categories too.
+App-code upload steps tolerate delivery failures, so
 their passing jobs do not guarantee delivered alerts; inspect upload logs separately.
 For first adoption, bootstrap base-approved configuration as described in
 [Getting started CI callers](SETUP-GUIDE.md#6-configure-ci-callers).

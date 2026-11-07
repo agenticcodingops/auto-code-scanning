@@ -51,7 +51,7 @@ Exact file writes and SHA substitutions followed the guide; no hook bypass was u
 | 2026-11-07T01:57:50.2757421Z | `python scripts/scan.py . --tools trivy --format json` | 0 |
 | 2026-11-07T01:57:50.3314754Z | `git remote -v` | 0 |
 | 2026-11-07T01:57:50.3991404Z | `git log -1 --format="%H %s"` | 0 |
-| 2026-11-07T01:58:55.7338318Z | `$Transaction | bash $PushHook origin local-test` | 0 |
+| 2026-11-07T01:58:55.7338318Z | `$Transaction \| bash $PushHook origin local-test` | 0 |
 
 ## Selected captured output
 

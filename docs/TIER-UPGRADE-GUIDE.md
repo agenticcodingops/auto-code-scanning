@@ -136,8 +136,9 @@ When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 5. Keep any additional third-party hooks your team has added
 6. Review custom settings against the current security contract; the setup verifier
    checks exact shipped hook settings, so customized manifests need separate review
-7. Save reviewed `.scanning/configs/` and caller workflows externally, including
-   full-SHA pins, plus any customized editor hooks, before rerunning setup
+7. Save reviewed `.scanning/configs/`, caller workflows and runner configuration
+   (`lefthook.yml` or `.pre-commit-config.yaml`) externally, including full-SHA pins
+   and customized editor hooks, before rerunning setup
 8. Begin setup/verification with the required entries from the new tier template;
    reinstall the push transaction adapter through setup
 9. Compare overwritten policy/workflows, restore approved customizations and full

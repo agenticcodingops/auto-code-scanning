@@ -134,7 +134,9 @@ code scanning is available and enabled for that repository under its plan. If it
 is unavailable, set `upload-sarif: false` on **both** scan callers; scans and their
 gates still run. Terraform upload failures fail its separate Upload SARIF job by
 default; require that check and keep `allow-sarif-upload-errors: false` if delivery
-must block merging. Application SARIF upload
+must block merging. The required check still does not prove delivery of every category:
+missing SARIF files can skip individual uploads. Inspect expected artifacts and
+categories as well as the check result. Application SARIF upload
 steps tolerate delivery failures, so successful app scan jobs do not prove upload.
 Inspect their upload logs separately. `fail-on-findings: false` only
 relaxes finding thresholds; incomplete scans still fail.
@@ -307,10 +309,11 @@ adds its code still uses the base's earlier language selection. For the alternat
 Do not replace that adapter with a plain `pre-commit install --hook-type pre-push`.
 The setup script copies hooks, schemas, shared scripts, provider policy, an optional
 editor integration bundle under `.claude/`, and caller workflows. It overwrites
-vendored files and caller templates, including the four shipped `.claude/hooks/`
-files. Before any rerun, save customized editor hooks externally, including
-uncommitted edits, then review and reapply approved customizations. Review existing
-integrations before rerunning; Git cannot recover an uncommitted overwritten edit.
+vendored hooks, schemas, shared scripts, provider policy, the Lefthook manifest,
+caller workflows and the four shipped `.claude/hooks/` files. Before any rerun,
+save external copies of every file it can replace, including uncommitted edits.
+Compare the result and restore reviewed consumer settings afterwards; shared core
+code must match the selected revision. Git cannot recover an uncommitted overwritten edit.
 An existing `scan-config.yaml` is kept unless `--force` is supplied. Tool installation
 is separate from setup. A nonzero setup result needs investigation before continuing.
 

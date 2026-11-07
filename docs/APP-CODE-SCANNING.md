@@ -43,6 +43,9 @@ assuming setup changed them. Review any full replacement before using `--force`.
 With hosted automatic detection, merge reviewed language enablement into the base
 before submitting code in that language: enabling a language and adding its code
 in the same PR does not authorize that new language's scan from the PR head.
+Hosted application scanning supports C# and TypeScript only. SQLFluff runs in
+the local commit hook; enabling SQL does not create a hosted SQL scan, and SQL is
+not a supported forced `languages` input for the application workflow.
 
 ---
 
@@ -61,6 +64,9 @@ For a developer-owned repository whose executable configuration and dependencies
 are already trusted, `SCAN_TRUST_REPO_CODE=1` explicitly permits repository-local
 package resolution and configuration. Do not use it for an untrusted checkout.
 This opt-in does not relax other scanners' verified executable boundaries.
+In this mode, the formatter runs from the consumer working directory and does
+not read the external ignore file. Add an equivalent `**/schemas/**` rule to
+`.prettierignore` in that working directory when it includes vendored schemas.
 See [trusted-input migration](CONSUMER-MIGRATION.md#trusted-execution-and-output-migration).
 
 ## 2. The build path is **config**, never hardcoded

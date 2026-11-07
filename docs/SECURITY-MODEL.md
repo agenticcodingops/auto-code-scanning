@@ -144,7 +144,10 @@ repo-controlled command — see §7.1.)
    (`src/`, `tests/`, …), preserving exact path whitespace, **and**
 2. does **not** contain any gated substring (`auth`, `payment`, `crypto`, `security`,
    `identity`, `secret`, `credential`, `.github/`, `.claude/`, `hooks`, `lefthook.yml`,
-   `scripts/`, `scan-and-fix.*`, `.env`, `LICENSE`) — case-insensitive, **fail-closed**.
+   `scripts/`, `scan-and-fix.ps1`, `.env`, `LICENSE`) — case-insensitive, **fail-closed**.
+
+Gated entries are literal substrings, not globs. The separate `scripts/` entry
+covers both the shell and PowerShell helper variants.
 
 A new sensitive file added tomorrow is gated by default because it must *opt in* to the
 allowlist. The gate runs **twice** (analyze and apply) — defense in depth — and **both runs read
@@ -233,7 +236,7 @@ and somehow the `ai-autofix` label is present. They **still cannot**:
 | Influence the gate via PR-head config | The allowlist/gated lists are read from the **trusted base config** in both gate runs; editing `scan-config.yaml` in the PR head is ignored. |
 | Push a malicious patch to a sensitive area | `apply-and-push` re-runs the **allowlist gate** (base config); anything touching `.github/`, `.claude/`, auth/crypto/secrets, `scripts/`, `LICENSE`, … is **rejected → needs-human-review**. |
 | Smuggle a secret into committed code | `apply-and-push` scans the changed files **as stored in the tree it commits** with Trivy and **fails closed** on a CRITICAL/HIGH secret. Trivy runs outside the PR's checkout, so no `trivy.yaml` or `.trivyignore` of the PR's changes what it reports. |
-| Break the build to slip something through | `build_verify_cmd` must pass in `verify` before the push job runs at all. |
+| Break the build to slip something through | When the trusted base sets `build_verify_cmd`, it must pass in `verify` before pushing. An empty command succeeds without a build and does not block a broken build. |
 | Leave a cache entry from the fix-loop for a later, more trusted run | Every fix-loop job, and `verify` explicitly, runs with `cache-mode: none`. The cache service gives each job a token that can neither save nor restore, so the build `verify` runs cannot create a cache entry in any scope. This covers this workflow only: the PR's code can still save cache entries in other workflows, such as its own CI, so a workflow that restores a cache must treat it as untrusted, as `apply-and-push` does by restoring nothing. |
 | Run forever / brute-force the gate | Hard `max_iterations` cap → `needs-human-review`. |
 | Swap the action for a malicious version | `claude-code-action` and every other action in `autonomous-fix.yml` are **SHA-pinned**. |

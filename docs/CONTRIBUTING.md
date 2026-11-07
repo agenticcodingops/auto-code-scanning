@@ -23,7 +23,7 @@ that access, first fork the repository and substitute your fork's clone URL in t
 same command; the checkout directory and remaining local steps stay the same.
 
 ```bash
-git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git
+git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git auto-code-scanning
 cd auto-code-scanning
 git switch -c docs/my-change
 ```

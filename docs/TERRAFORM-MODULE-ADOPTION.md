@@ -37,12 +37,14 @@ finding.
   Upload failures fail the separate Upload SARIF job by default. Require that
   check when enabled and leave `allow-sarif-upload-errors: false` if delivery must
   block merging; the five scan checks alone
-  do not guarantee delivery. If private code scanning is unavailable, set
+  do not guarantee delivery. Even a successful upload check can skip missing SARIF
+  files; inspect every expected category and artifact. If private code scanning is unavailable, set
   `upload-sarif: false`; scanning and finding gates still run. By default three uploads run: the Snyk upload is
   skipped unless the Snyk job, which needs `enable-snyk: true`, wrote a SARIF file
   (`reusable-scan.yml:70-74`, `904`).
 
-This example uses the layout below. `OWNER` stands for your user or organisation.
+This example uses the layout below. `OWNER` means the reviewed platform owner,
+`agenticcodingops` by default, rather than the consumer owner.
 
 ```text
 .
