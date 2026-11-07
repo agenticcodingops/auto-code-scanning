@@ -160,3 +160,46 @@ def test_setup_reports_install_failures_and_finishes_remaining_steps(
         assert 're-run setup' in output
     else:
         assert '=== SETUP COMPLETE ===' in output
+
+
+def test_install_step_forwards_non_ascii_output_without_crashing_on_narrow_stdout(
+        monkeypatch, tmp_path):
+    """Decoded tool output (incl. errors='replace' artifacts) must still print safely when
+    stdout/stderr encode to a narrow code page, e.g. Windows cp1252."""
+    import io
+
+    lefthook = "lefthook-stub"
+    monkeypatch.setattr(setup_scan_fix, "resolve_tool",
+                         lambda name, _repo: lefthook if name == "lefthook" else None)
+
+    def fake_run(cmd, **kwargs):
+        if any(str(part).endswith("render-scan-config.py") for part in cmd):
+            return subprocess.CompletedProcess(cmd, 0)
+        if cmd[:2] == [lefthook, "install"]:
+            # Non-cp1252 text, plus a literal replacement character as errors="replace" would
+            # produce from undecodable bytes -- neither must crash on the way back out.
+            return subprocess.CompletedProcess(cmd, 0, stdout="non-ascii: 日本語 �\n",
+                                                stderr="")
+        raise AssertionError(f"unexpected subprocess.run call: {cmd}")
+
+    monkeypatch.setattr(setup_scan_fix.subprocess, "run", fake_run)
+
+    narrow_stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    monkeypatch.setattr(sys, "stdout", narrow_stdout)
+
+    assert setup_scan_fix.main(["setup-scan-fix.py", "--repo-path", str(tmp_path)]) == 0
+
+
+def test_setup_decodes_captured_output_as_utf8():
+    """Captured tool output must not use the locale code page: on Windows cp1252 cannot decode UTF-8 output."""
+    import ast
+    source = (Path(__file__).resolve().parents[2] / "scripts" / "setup-scan-fix.py").read_text(encoding="utf-8")
+    calls = [node for node in ast.walk(ast.parse(source))
+             if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "run"]
+    texts = [call for call in calls
+             if any(k.arg == "text" and getattr(k.value, "value", None) is True for k in call.keywords)]
+    assert texts, "expected subprocess.run calls that decode text"
+    for call in texts:
+        keywords = {k.arg: getattr(k.value, "value", None) for k in call.keywords}
+        assert keywords.get("encoding") == "utf-8", f"line {call.lineno} lacks encoding='utf-8'"
+        assert keywords.get("errors") == "replace", f"line {call.lineno} lacks errors='replace'"
