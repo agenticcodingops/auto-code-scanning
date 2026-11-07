@@ -1,4 +1,9 @@
 # Reusable Terraform Security Scanning Solution
+
+> Historical design/presentation material. Its fail-open examples and early job/setup
+> descriptions are not current operating instructions. Use [Getting started](SETUP-GUIDE.md),
+> [the hook contract](HOOK-REFERENCE.md) and [the v3 audit](V3-BEHAVIOUR-AUDIT.md)
+> for released behaviour.
 ## Presentation Slides
 
 **Feature Branch**: `001-security-scanning-spec`

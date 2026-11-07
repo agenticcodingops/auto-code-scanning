@@ -25,7 +25,8 @@ The scanning solution provides several integration paths:
 4. **CI fix-loop** (`autonomous-fix.yml`): an opt-in, hardened workflow where an agent
    proposes a minimal fix for a labelled PR (Layer B — see [CI Fix-Loop](#ci-fix-loop-autonomous-fixyml))
 
-The first two paths produce the same JSON output format, enabling consistent tooling.
+Both paths share core structured JSON fields, with different optional metadata. Use [the hook report contract](HOOK-REFERENCE.md#json-output)
+for `.scanning/last-scan.json` and the `scan.py` output described below.
 
 ## scan.py Usage
 
@@ -84,7 +85,7 @@ When `--auto-fix` is specified:
 |------|---------|
 | `0` | No findings above threshold |
 | `1` | Findings detected above threshold |
-| `2` | Tool error (fail-open: couldn't determine findings) |
+| `2` | Tool error: scan incomplete; callers must not treat it as clean |
 
 ## JSON Output Format
 
@@ -94,63 +95,30 @@ scan.py writes results to `.scanning/last-scan.json` (configurable via `--output
 
 ```json
 {
-  "scan_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "scan_timestamp": "2026-02-10T14:30:00Z",
-  "directory": "terraform/",
-  "cloud_provider": "aws",
-  "tools_executed": ["trivy", "checkov"],
-  "severity_filter": ["CRITICAL", "HIGH"],
-  "duration_ms": 4523,
+  "schema_version": "1.0",
+  "scan_id": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
+  "scan_timestamp": "2026-11-07T01:11:19Z",
+  "scan_directory": "/absolute/path/to/consumer",
+  "tools_executed": [
+    "trivy"
+  ],
+  "duration_ms": 9742,
+  "auto_fix_applied": false,
+  "auto_fix_count": 0,
   "summary": {
-    "total_findings": 3,
+    "total_findings": 0,
     "by_severity": {
-      "CRITICAL": 1,
-      "HIGH": 2,
+      "CRITICAL": 0,
+      "HIGH": 0,
       "MEDIUM": 0,
       "LOW": 0
     },
-    "suppressed": 0,
-    "baselined": 1,
-    "auto_fix_applied": true,
-    "auto_fix_count": 1
+    "by_tool": {},
+    "fixable": 0,
+    "unfixable": 0
   },
-  "findings": [
-    {
-      "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
-      "tool": "checkov",
-      "rule_id": "CKV_AWS_19",
-      "severity": "CRITICAL",
-      "original_severity": "CRITICAL",
-      "title": "S3 bucket missing encryption",
-      "file": "terraform/main.tf",
-      "line": 42,
-      "resource": "aws_s3_bucket.data",
-      "remediation": "Add server_side_encryption_configuration block",
-      "remediation_url": "https://docs.checkov.io/docs/CKV_AWS_19",
-      "suppressed": false,
-      "baseline": false,
-      "fixable": true,
-      "fixed": true,
-      "detected_by": ["checkov"]
-    },
-    {
-      "id": "a9b8c7d6-e5f4-3210-abcd-ef0987654321",
-      "tool": "trivy",
-      "rule_id": "AVD-AWS-0107",
-      "severity": "HIGH",
-      "original_severity": "HIGH",
-      "title": "Security group allows unrestricted ingress",
-      "file": "terraform/main.tf",
-      "line": 58,
-      "resource": "aws_security_group.web",
-      "remediation": "Restrict ingress CIDR blocks",
-      "suppressed": false,
-      "baseline": false,
-      "fixable": false,
-      "fixed": false,
-      "detected_by": ["trivy"]
-    }
-  ]
+  "findings": [],
+  "scan_complete": true
 }
 ```
 
@@ -158,14 +126,16 @@ scan.py writes results to `.scanning/last-scan.json` (configurable via `--output
 
 | Field | Usage |
 |-------|-------|
-| `summary.total_findings` | Quick pass/fail check |
-| `summary.auto_fix_count` | Number of findings automatically remediated |
+| `scan_complete` and process exit | Confirm scan health before interpreting finding counts |
+| `summary.total_findings` | Count returned findings in a complete scan |
+| `auto_fix_count` | Number of findings automatically remediated |
 | `findings[].fixable` | Whether the agent can auto-fix this finding |
 | `findings[].fixed` | Whether auto-fix was already applied |
 | `findings[].file` + `findings[].line` | Exact location for manual remediation |
 | `findings[].remediation` | Human-readable fix guidance |
 | `findings[].remediation_url` | Link to detailed documentation |
-| `findings[].rule_id` | Stable identifier for suppression or baseline |
+| `findings[].rule_id` | Identifier for the scanner rule |
+| `findings[].fingerprint` | Exact occurrence identity for schema-2.0 approvals |
 
 ## Typical Agent Workflow
 
@@ -222,9 +192,9 @@ twins exist for hosts without PowerShell 7):
 
 The hooks are deliberately **thin** — they route to the right tool/ruleset and the
 heavy logic lives in the versioned shared scripts (`scripts/scan-and-fix.{ps1,sh}`
-and `hooks/`). They **fail open** if a tool (semgrep/trivy) is missing, so a
-developer without the tools is never hard-blocked, but **fail closed** on real
-findings.
+and `hooks/`). Commit/push security hooks block incomplete scans by default.
+Editor feedback is a separate early signal and does not establish a complete scan.
+Secret feedback exposes rule/location/count metadata rather than raw matched values.
 
 ### How an agent experiences it
 
@@ -266,7 +236,7 @@ code only in a job that holds no secret:
 |-----|---------|-------|--------------|
 | **analyze** | untrusted PR/review text | **read-only**, no push creds; model credentials in the agent step only | Runs `claude-code-action` with a scoped tool allowlist that runs no build, test or package command; treats every PR/review/issue comment as **untrusted data** (never as instructions); emits a vetted **patch artifact** and its SHA-256 only |
 | **verify** | the PR's code + the patch | read-only, **no secrets** | Runs the base-sourced `build_verify_cmd`; hands the push job nothing but its pass/fail result |
-| **apply-and-push** | trusted artifact only; runs no project code | `AUTOFIX_TOKEN` (push step) | Checks the artifact digests, builds one tree from the **exact analyzed SHA** + patch, re-enforces the allowlist gate via `scripts/check-fix-allowlist.py` and the **secret scan** on that tree, commits it with `.fix-attempts` bumped, and pushes that commit with hooks off |
+| **apply-and-push** | trusted artifact only; runs no project code | `AUTOFIX_TOKEN` (push step) | Checks the artifact digests, builds one tree from the **exact analyzed SHA** + patch, re-enforces the allowlist gate via `scripts/check-fix-allowlist.py` and the **secret scan** on added/modified fix files from that tree, commits it with `.fix-attempts` bumped, and pushes that commit with hooks off |
 | **flag-human-review** | — | issues/PR write | Labels `needs-human-review` and comments on cap / gate / failure |
 
 Key guarantees for an agent operating in this flow:

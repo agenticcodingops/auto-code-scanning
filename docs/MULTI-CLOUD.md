@@ -32,101 +32,35 @@ These tools work across all clouds without provider-specific configuration:
 
 ## Single-Cloud Setup
 
-For repositories targeting a single cloud provider:
-
-```bash
-# AWS
-python scripts/setup-scanning.py --cloud-provider aws --tier standard
-
-# Azure
-python scripts/setup-scanning.py --cloud-provider azure --tier standard
-
-# GCP
-python scripts/setup-scanning.py --cloud-provider gcp --tier standard
-```
-
-This copies the provider-specific configs to `.scanning/configs/` in the consuming repository.
+Use [Getting started](SETUP-GUIDE.md), selecting `aws`, `azure` or `gcp` consistently
+for provider policy and external TFLint configuration. Keep scanner installations
+and plugin caches outside the consumer.
 
 ## Multi-Cloud Repositories
 
-For repositories containing Terraform for multiple cloud providers (e.g., AWS + Azure), you need to configure per-directory scanning.
-
-### Example: AWS + Azure Repository
-
-Repository structure:
-```
-my-infra-repo/
-  aws/
-    main.tf          # AWS resources
-    variables.tf
-  azure/
-    main.tf          # Azure resources
-    variables.tf
-  shared/
-    modules/         # Cloud-agnostic modules
-```
+Separate cloud roots, for example `aws/` and `azure/`, so each hosted caller can
+select its own directory and reviewed provider policy.
 
 ### Step 1: Set Up Primary Provider
 
-Run setup for your primary cloud:
-```bash
-python scripts/setup-scanning.py --cloud-provider aws --tier standard
-```
+Install through Getting started with the primary provider. Its setup selects one
+provider policy; it does not automatically choose policy per changed directory.
 
 ### Step 2: Add Secondary Provider Configs
 
-Manually copy additional provider configs:
-```bash
-# Copy Azure configs alongside AWS configs
-mkdir -p .scanning/configs/azure
-cp configs/azure/.checkov.yaml .scanning/configs/azure/
-cp configs/azure/.tflint.hcl .scanning/configs/azure/
-cp configs/azure/policy-overlay.yaml .scanning/configs/azure/
-```
+Provision a separate reviewed external TFLint config and plugin cache for each
+provider. Keep the pushed Checkov policy tracked. Copying extra configuration
+files into the consumer alone does not change the policy selected by local hooks.
 
 ### Step 3: Configure Per-Directory Scanning
 
-Override hook file patterns in your `.pre-commit-config.yaml` to scope tools per directory:
-
-```yaml
-repos:
-  - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.0.6  # x-release-please-version
-    hooks:
-      # AWS-scoped hooks
-      - id: trivy-iac-critical
-        name: "Trivy IaC CRITICAL (AWS)"
-        files: '^aws/.*\.tf$'
-      - id: checkov
-        name: "Checkov (AWS)"
-        files: '^aws/.*\.tf$'
-        args: ["--config-file", ".scanning/configs/.checkov.yaml"]
-      - id: tflint
-        name: "tflint (AWS)"
-        files: '^aws/.*\.tf$'
-        args: ["--config-file", ".scanning/configs/.tflint.hcl"]
-
-      # Azure-scoped hooks
-      - id: trivy-iac-critical
-        alias: trivy-iac-critical-azure
-        name: "Trivy IaC CRITICAL (Azure)"
-        files: '^azure/.*\.tf$'
-      - id: checkov
-        alias: checkov-azure
-        name: "Checkov (Azure)"
-        files: '^azure/.*\.tf$'
-        args: ["--config-file", ".scanning/configs/azure/.checkov.yaml"]
-      - id: tflint
-        alias: tflint-azure
-        name: "tflint (Azure)"
-        files: '^azure/.*\.tf$'
-        args: ["--config-file", ".scanning/configs/azure/.tflint.hcl"]
-
-      # Cloud-agnostic hooks (run on all directories)
-      - id: trivy-secrets
-      - id: gitleaks
-      - id: validate-suppressions
-```
+The current shared hooks select their own index or push-object inputs. A runner's
+`files:` expression controls whether it starts a hook; it does not redefine that
+hook's scan selection or trusted policy. Do not pass in-repository executable
+TFLint config or arbitrary Checkov arguments to create separate provider profiles.
+Use the separate hosted callers below for per-directory provider policy. Any
+custom local multi-cloud runner needs independent transaction and policy tests;
+the shipped setup verifier validates the exact single-provider runner template.
 
 ### Step 4: CI/CD for Multi-Cloud
 
@@ -161,16 +95,17 @@ jobs:
       scanning-repo-ref: v3.0.6 # x-release-please-version
 ```
 
-`OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
-repository named `auto-code-scanning` under the owner of the calling repository, whatever
-`uses:` names (`reusable-scan.yml:123-131`). That copy must be public (a private copy
-cannot be read) and must hold the ref you pass as `scanning-repo-ref`. Without it, Setup
-Scanning Tools fails, the scan jobs are skipped, Aggregate Results still passes, and the
-pull request comment says "All security checks passed!". Create the copy as in
-[step 2 of TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#2-create-your-owners-copy-of-the-platform).
-Require Setup Scanning Tools as well as Aggregate Results
-([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+In the retained release-managed caller example, set `OWNER` to `agenticcodingops`
+for the published platform. For a reviewed mirror, use its owner and set
+`scanning-repository` explicitly. Do not substitute the consumer owner unless
+that reviewed platform copy exists there.
+
+`reusable-scan.yml` reads configuration from the reviewed platform repository,
+`agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.
+Set `scanning-repo-ref` to the same full commit SHA as the workflow pin. A reviewed
+mirror needs an explicit `scanning-repository` input and must contain that commit.
+Require setup and scanner jobs as well as aggregation; incomplete scans block.
+See [workflow configuration sources](REUSABLE-WORKFLOWS.md#configs-come-from-the-reviewed-platform-revision).
 
 Copy it to `.github/workflows/terraform-scan-azure.yml` with
 `name: Terraform Security Scan (Azure)`, `terraform-directory: azure` and

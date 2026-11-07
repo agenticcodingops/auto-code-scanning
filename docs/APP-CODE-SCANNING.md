@@ -36,9 +36,38 @@ languages:
       sqlfluff: { enabled: true, stage: pre-commit }
 ```
 
-`setup-scan-fix --languages csharp,typescript,sql` writes this for you from a tier template.
+For a new config, `setup-scan-fix --languages csharp,typescript,sql` renders the
+selected languages from a tier template. An existing `scan-config.yaml` is kept:
+edit its language enablement and build/tool settings deliberately instead of
+assuming setup changed them. Review any full replacement before using `--force`.
+With hosted automatic detection, merge reviewed language enablement into the base
+before submitting code in that language: enabling a language and adding its code
+in the same PR does not authorize that new language's scan from the PR head.
+Hosted application scanning supports C# and TypeScript only. SQLFluff runs in
+the local commit hook; enabling SQL does not create a hosted SQL scan, and SQL is
+not a supported forced `languages` input for the application workflow.
 
 ---
+
+## Trusted application tooling
+
+By default, install ESLint 9+ and Prettier with their parsers/plugins outside the
+consumer. Set `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG`, `SCAN_PRETTIER_BIN` and
+`SCAN_PRETTIER_CONFIG` to absolute reviewed external paths. ESLint config discovery
+from the consumer is disabled. Prettier uses the external config but may also read
+consumer `.editorconfig` settings that the external config does not override. Missing trusted inputs block. Lefthook also invokes
+Prettier for generated JSON and Markdown in a Terraform-only adoption. Use the
+[external formatter ignore rule](SETUP-GUIDE.md#5-install-local-hooks) to preserve
+vendored schema bytes when the formatter's working directory is the repository root.
+
+For a developer-owned repository whose executable configuration and dependencies
+are already trusted, `SCAN_TRUST_REPO_CODE=1` explicitly permits repository-local
+package resolution and configuration. Do not use it for an untrusted checkout.
+This opt-in does not relax other scanners' verified executable boundaries.
+In this mode, the formatter runs from the consumer working directory and does
+not read the external ignore file. Add an equivalent `**/schemas/**` rule to
+`.prettierignore` in that working directory when it includes vendored schemas.
+See [trusted-input migration](CONSUMER-MIGRATION.md#trusted-execution-and-output-migration).
 
 ## 2. The build path is **config**, never hardcoded
 
@@ -70,14 +99,15 @@ on worktree files. Push scanners read the selected pushed objects.
 | `semgrep-typescript` | `semgrep --config p/typescript --error` | pre-commit | override via `SEMGREP_RULESET_TYPESCRIPT` |
 | `dotnet-format` | `dotnet format <sln> --verify-no-changes` | pre-commit | solution/working_dir from config |
 | `dotnet-build` | `dotnet build <sln> /p:AnalysisMode=AllEnabledByDefault` | pre-push | Roslyn analyzers; heavier |
-| `eslint` | `eslint --fix` (local/npx) | pre-commit | gates on remaining errors; `stage_fixed` under Lefthook |
+| `eslint` | `eslint --fix` (trusted external tooling by default) | pre-commit | gates on remaining errors; `stage_fixed` under Lefthook |
 | `prettier` | `prettier --write` | pre-commit | auto-format; `stage_fixed` under Lefthook |
 | `sqlfluff` | `sqlfluff lint` | pre-commit | working tree; project dialect when root `.sqlfluff` exists, otherwise ANSI fallback (v3.0.2 behavior) |
 | `validate-scan-config` | validate `scan-config.yaml` vs schema | pre-commit | runs only when the config is staged |
 
-Both **Lefthook** (default) and **pre-commit** invoke these same scripts, so behaviour is
-identical across runners. Hooks stay **< 15s** by scanning staged files only (Semgrep startup
-dominates; the registry pack is cached after first run).
+Both runners can invoke these same scripts, but their shipped manifests differ.
+The pre-commit tier templates focus on Terraform and need explicit application hook
+entries. Performance depends on tool startup, rules, selected files and builds; the
+template budgets are targets rather than guaranteed timings.
 
 ### Windows + agentic friction
 

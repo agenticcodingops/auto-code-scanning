@@ -1,8 +1,13 @@
 # Agent Team Implementation Guide
 
+> Historical design/presentation material. Its fail-open examples and early job/setup
+> descriptions are not current operating instructions. Use [Getting started](SETUP-GUIDE.md),
+> [the hook contract](HOOK-REFERENCE.md) and [the v3 audit](V3-BEHAVIOUR-AUDIT.md)
+> for released behaviour.
+
 **Purpose**: Strategy and prompt for implementing the Terraform Security Scanning solution using Claude Code Agent Teams
 **Created**: 2026-02-10
-**Feature**: [spec.md](spec.md) | [tasks.md](tasks.md) | [plan.md](plan.md)
+**Feature**: [spec.md](../specs/001-security-scanning-spec/spec.md) | [tasks.md](../specs/001-security-scanning-spec/tasks.md) | [plan.md](../specs/001-security-scanning-spec/plan.md)
 
 ---
 
@@ -424,12 +429,12 @@ Validate each phase checkpoint before continuing.
 ## Reference Links
 
 - [Claude Code Agent Teams Documentation](https://code.claude.com/docs/en/agent-teams)
-- [Feature Specification](spec.md)
-- [Implementation Plan](plan.md)
-- [Task List (92 tasks)](tasks.md)
-- [Data Model](data-model.md)
-- [Hook Interface Contract](contracts/hook-interface.md)
-- [Workflow Interface Contract](contracts/workflow-interface.md)
-- [CLI Interface Contract](contracts/cli-interface.md)
-- [Suppression Format Contract](contracts/suppression-format.md)
-- [Quality Checklist (80 items)](checklists/quality.md)
+- [Feature Specification](../specs/001-security-scanning-spec/spec.md)
+- [Implementation Plan](../specs/001-security-scanning-spec/plan.md)
+- [Task List (92 tasks)](../specs/001-security-scanning-spec/tasks.md)
+- [Data Model](../specs/001-security-scanning-spec/data-model.md)
+- [Hook Interface Contract](../specs/001-security-scanning-spec/contracts/hook-interface.md)
+- [Workflow Interface Contract](../specs/001-security-scanning-spec/contracts/workflow-interface.md)
+- [CLI Interface Contract](../specs/001-security-scanning-spec/contracts/cli-interface.md)
+- [Suppression Format Contract](../specs/001-security-scanning-spec/contracts/suppression-format.md)
+- [Quality Checklist (80 items)](../specs/001-security-scanning-spec/checklists/quality.md)

@@ -58,16 +58,12 @@ jobs:
       scanning-repo-ref: <commit-sha>
 ```
 
-`OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
-repository named `auto-code-scanning` under the owner of the calling repository, whatever
-`uses:` names (`reusable-scan.yml:123-131`). That copy must be public (a private copy
-cannot be read) and must hold the ref you pass as `scanning-repo-ref`. Without it, Setup
-Scanning Tools fails, the scan jobs are skipped, Aggregate Results still passes, and the
-pull request comment says "All security checks passed!". Create the copy as in
-[step 2 of TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#2-create-your-owners-copy-of-the-platform).
-Require Setup Scanning Tools as well as Aggregate Results
-([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+`reusable-scan.yml` reads configuration from the reviewed platform repository,
+`agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.
+Set `scanning-repo-ref` to the same full commit SHA as the workflow pin. A reviewed
+mirror needs an explicit `scanning-repository` input and must contain that commit.
+Require setup and scanner jobs as well as aggregation; incomplete scans block.
+See [workflow configuration sources](REUSABLE-WORKFLOWS.md#configs-come-from-the-reviewed-platform-revision).
 
 Find the commit with `^{commit}`, which peels a tag to the commit it points to:
 
@@ -201,7 +197,10 @@ the upgrade.
 pre-commit autoupdate
 ```
 
-This updates the `rev:` field in `.pre-commit-config.yaml` to the latest tagged release.
+This updates only pre-commit `rev:` fields. It does not upgrade vendored files,
+workflow callers or helper pins. Review the target release, resolve its full SHA,
+then follow [the coordinated upgrade](SETUP-GUIDE.md#10-upgrade-between-releases)
+before committing. Do not treat this command alone as a platform upgrade.
 
 ### Manual Update
 
@@ -221,8 +220,17 @@ pre-commit run --all-files
 
 # Clear cache if hooks behave unexpectedly
 pre-commit clean
-pre-commit install
+pre-commit install --hook-type pre-commit
 ```
+
+Install any other configured non-push hook types explicitly. Leave the push
+transaction adapter installed by setup in place; default hook-type settings can
+otherwise move it into legacy hook wiring.
+
+Commit-stage security hooks still select the Git index; stage a real test change
+and make a scanned commit. Preserve the setup-installed push transaction adapter:
+`pre-commit install --hook-type pre-push` alone cannot replace it. Verify push
+objects with the [local transaction test](TESTING-GUIDE-CONSUMING-REPO.md#push-transaction-without-a-network-push).
 
 ## CI/CD Workflow Pinning
 
@@ -230,7 +238,9 @@ The reusable GitHub Actions workflows are pinned the same way, with `@<tag>` (or
 full SHA) — **never `@main`**. Put each call in its own caller workflow file; two calls
 from one caller workflow share a concurrency group (see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)). `OWNER` is the owner of
-your repository, and needs its own public copy of `auto-code-scanning`; see
+the published platform (`agenticcodingops`) by default. A reviewed mirror may use
+its own owner; set `scanning-repository` for IaC or `scanning_repo` for the fix
+workflow to that reviewed repository. No same-owner copy is required. See
 [Pin the Commit a Release Tag Points To](#pin-the-commit-a-release-tag-points-to).
 
 ```yaml
@@ -300,7 +310,7 @@ repository at the release they ship in. Releases up to and including v2.3.1 pinn
 `setup-scan-fix` copies `templates/<tier>/pre-commit-config.yaml` to
 `.pre-commit-config.yaml` when that file does not exist yet
 (`scripts/setup-scan-fix.py:91-95`, `scripts/setup-scan-fix.ps1:100-102`), and
-[SETUP-GUIDE.md](SETUP-GUIDE.md) has you copy the starter template by hand. If you copied
+[Getting started](SETUP-GUIDE.md) now uses the platform setup command. If you copied
 a template from one of those releases, change `rev:` to the current release before your
 first commit or `pre-commit run`, because until then pre-commit cannot fetch the hooks.
 
