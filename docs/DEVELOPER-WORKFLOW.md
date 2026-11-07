@@ -345,13 +345,12 @@ The cloud-specific templates (`templates/aws/`, `templates/azure/`, `templates/g
 | **standard** | All starter + terraform_validate, terraform_tflint, snyk-iac (optional) | Most teams | `--tier standard` |
 | **strict** | All standard + trivy-iac-full, checkov-strict, validate-suppressions, snyk-iac (optional) | Security-sensitive projects | `--tier strict` |
 
-Upgrade tiers by re-running setup with `--force`:
-
-```bash
-python scripts/setup-scan-fix.py --languages terraform --cloud-provider aws --tier strict --force
-```
-
-See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for detailed upgrade instructions.
+Do not upgrade tiers by just re-running setup with `--force`: `--hooks-runner` defaults
+to `lefthook`, so omitting it silently switches an existing pre-commit consumer's runner.
+Even passing `--hooks-runner pre-commit` explicitly does not add the new tier's hooks to
+an existing `.pre-commit-config.yaml` — setup only writes that file when it is absent.
+See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for the runner-preserving migration
+that actually adds them.
 
 ## Getting Help
 

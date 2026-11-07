@@ -69,7 +69,7 @@ Failed:        0
 Warnings:      1
 Overall Status: PASSED
 [validate-scan-config] VALID: <temporary-consumer>\scan-config.yaml conforms to scan-config.schema.json
-[validate-scan-config] VALID: C:\Users\hasan\AppData\Local\Temp\scan-config-yjp5928b\scan-config.yaml conforms to scan-config.schema.json
+[validate-scan-config] VALID: <temporary-consumer>\scan-config.yaml conforms to scan-config.schema.json
 [prettier] PASS: Prettier formatted (1672ms)
 [gitleaks] PASS: No findings above threshold
 [trivy-iac-critical] PASS: No findings above threshold
