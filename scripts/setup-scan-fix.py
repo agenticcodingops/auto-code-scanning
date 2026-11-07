@@ -69,7 +69,7 @@ def main(argv) -> int:
 
     def install_step(command, label):
         try:
-            result = subprocess.run(command, cwd=repo, check=True, text=True, capture_output=True)
+            result = subprocess.run(command, cwd=repo, check=True, text=True, encoding="utf-8", errors="replace", capture_output=True)
         except (OSError, subprocess.CalledProcessError) as exc:
             if isinstance(exc, subprocess.CalledProcessError):
                 if exc.stdout:
@@ -176,10 +176,10 @@ def main(argv) -> int:
                 ("needs-human-review", "B60205", "Autonomous fix loop stopped; needs a human"),
             ]:
                 r = subprocess.run([tools["gh"], "label", "create", name, "--color", color, "--description", desc, "--force"],
-                                   cwd=repo, capture_output=True, text=True)
+                                   cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
                 ok(f"label {name}") if r.returncode == 0 else warn(f"could not create {name}: {r.stderr.strip()}")
             present = []
-            r = subprocess.run([tools["gh"], "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True)
+            r = subprocess.run([tools["gh"], "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 try:
                     present = [s["name"] for s in json.loads(r.stdout)]
