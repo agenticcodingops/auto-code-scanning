@@ -74,7 +74,7 @@ record the final local run and the installed push-hook test.
 
 On 7 November 2026, the Windows path was repeated in a fresh temporary Terraform
 consumer with no remote. It used the exact post-release setup-fix pin above,
-the standard tier and Lefthook. All 29 recorded command steps exited 0. Setup and
+the standard tier and Lefthook. All 30 recorded command steps exited 0. Setup and
 the separate verifier each reported zero failed checks; the optional missing
 `.trivyignore` produced a warning. The commit ran configuration validation,
 Gitleaks, Trivy secrets, Trivy IaC and Prettier successfully. The on-demand Trivy

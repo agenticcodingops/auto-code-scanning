@@ -1,5 +1,10 @@
 # Quickstart 002 — scan→fix platform
 
+> Historical design/presentation material. Its Python version floor, pinned action version,
+> fix-loop job count and test count are not current operating instructions. Use
+> [Getting started](../../docs/SETUP-GUIDE.md), [the hook contract](../../docs/HOOK-REFERENCE.md)
+> and [the v3 audit](../../docs/V3-BEHAVIOUR-AUDIT.md) for released behaviour.
+
 The shortest path from zero to a working scan (+ optional fix) in a consumer repo. Full guide:
 [Getting started](../../docs/SETUP-GUIDE.md).
 

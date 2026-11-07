@@ -127,7 +127,8 @@ Keep all existing standard hooks as-is:
 
 When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 
-1. Save reviewed `.scanning/configs/`, caller workflows and runner configuration
+1. Save reviewed `.scanning/configs/`, `scan-config.yaml`, `hooks/`, `schemas/`, `scripts/`,
+   caller workflows and runner configuration
    (`lefthook.yml` or `.pre-commit-config.yaml`) externally, including full-SHA pins
    and customized editor hooks, before making any of the changes below: this captures
    the pre-upgrade state, not a copy already modified by them

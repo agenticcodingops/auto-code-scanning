@@ -369,7 +369,7 @@ own thresholds. See [tier selection](docs/SETUP-GUIDE.md#2-choose-a-tier-and-run
 - **Understand it:** **[ARCHITECTURE](docs/ARCHITECTURE.md)** (diagrams + component deep-dive) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
 - **Getting started:** **[Canonical onboarding](docs/SETUP-GUIDE.md)** · [Consumer operations](docs/consumer-repo-setup-guide.md) · [Terraform modules](docs/TERRAFORM-MODULE-ADOPTION.md)
 - **Scanning:** [APP-CODE-SCANNING](docs/APP-CODE-SCANNING.md) · [HOOK-REFERENCE](docs/HOOK-REFERENCE.md) · [MULTI-CLOUD](docs/MULTI-CLOUD.md) · [LOCAL-HOOKS-TOGGLE](docs/LOCAL-HOOKS-TOGGLE.md)
-- **Fix-loop:** [FIX-LOOP](docs/FIX-LOOP.md) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
+- **Fix-loop:** [FIX-LOOP](docs/FIX-LOOP.md) · [SECURITY-MODEL](docs/SECURITY-MODEL.md) · [AI-AGENT-GUIDE](docs/AI-AGENT-GUIDE.md)
 - **Adoption:** [ADOPTION-PLAYBOOK](docs/ADOPTION-PLAYBOOK.md) · [VERSION-PINNING](docs/VERSION-PINNING.md) · [BUMP-THE-SCAN](docs/BUMP-THE-SCAN.md) · [TESTING-GUIDE-CONSUMING-REPO](docs/TESTING-GUIDE-CONSUMING-REPO.md) · [CONSUMER-MIGRATION](docs/CONSUMER-MIGRATION.md)
 - **Reference:** [REUSABLE-WORKFLOWS](docs/REUSABLE-WORKFLOWS.md) · [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) · [SEVERITY-MAPPING](docs/SEVERITY-MAPPING.md) · [SUPPRESSION-GOVERNANCE](docs/SUPPRESSION-GOVERNANCE.md) · [ROADMAP](docs/ROADMAP.md) · [CHANGELOG](CHANGELOG.md)
 

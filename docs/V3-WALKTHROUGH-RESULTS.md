@@ -5,7 +5,7 @@ The fresh Windows Terraform consumer had no remote and was never pushed. Its fin
 The platform checkout was `8321adf7020025a5a7a6c7cd8d1780015b18a07a`, the post-release setup-output fix.
 The test used standard tier, Lefthook and the three-file Terraform example now in the guide.
 
-All 29 walkthrough command steps exited 0. Setup and separate verification each had zero failed checks.
+All 30 walkthrough command steps exited 0. Setup and separate verification each had zero failed checks.
 The optional missing `.trivyignore` was the only verifier warning. The scanned commit ran both secret hooks,
 the Terraform security hook, config validation and formatting. The on-demand report had zero findings and
 `scan_complete: true`. The installed push hook then passed Checkov and TFLint with a real local transaction,
