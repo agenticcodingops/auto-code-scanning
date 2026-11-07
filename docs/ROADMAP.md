@@ -1,5 +1,8 @@
 # Roadmap
 
+For current shipped contracts and later corrections to these milestones, use the
+[v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md). Begin adoption with [Getting started](SETUP-GUIDE.md).
+
 ## v2.0.0 (Current Release) — Reusable scan→fix platform
 
 A major evolution from a Terraform-only, scan-only POC into a reusable, configurable,

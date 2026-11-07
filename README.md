@@ -1,13 +1,16 @@
 # auto-code-scanning
 
+**[Getting started](docs/SETUP-GUIDE.md)** is the single adoption path.
+For repository changes, read [Contributing](docs/CONTRIBUTING.md).
+
 **A reusable, configurable scan→fix platform** for many repositories. One config file
 (`scan-config.yaml`), four enforcement points, two layers — engineered to be friction-free
 for **autonomous Claude Code** loops and safe for public adoption.
 
 - **LAYER A — Scanning** (always on): Terraform/IaC **and** application code (C#/.NET,
   TypeScript/JS, SQL) via shared OS-detecting local hooks **and** reusable CI workflows.
-- **LAYER B — Agentic fix-loop** (opt-in): a hardened, two-job workflow where an AI agent
-  proposes a *minimal* fix and a **separate** job re-verifies and pushes it — gated by a path
+- **LAYER B — Agentic fix-loop** (opt-in): a hardened workflow with separate analysis, verification and publication jobs where an AI agent
+  proposes a *minimal* fix and separate jobs build it without secrets and verify the exact tree before pushing it — gated by a path
   allowlist, a PR label, and SHA-pinned actions.
 
 > Apache-2.0. Terraform scanning is fully preserved. Pin consumers to a **released tag**
@@ -17,8 +20,9 @@ for **autonomous Claude Code** loops and safe for public adoption.
 
 ## The big picture
 
-One `scan-config.yaml` drives the **same checks** at four points in the lifecycle, so a finding
-is caught as early (and as cheaply) as possible — and CI is the authoritative backstop.
+`scan-config.yaml` supplies language and policy settings. Runner manifests select local
+hooks, and reusable workflows select hosted checks. Their scopes differ; CI is the
+authoritative backstop. A clean local hook run does not replace every hosted check.
 
 ```mermaid
 flowchart LR
@@ -53,33 +57,22 @@ flowchart LR
 
 ---
 
-## Adopt in 5 minutes (scan + fix)
+## Getting started
 
-```powershell
-# From your repo root. Picks Lefthook (default), C#/TS scanning, and the fix-loop.
-path/to/auto-code-scanning/scripts/setup-scan-fix.ps1 `
-  -Languages csharp,typescript -Tier standard -EnableFixLoop
-```
-```bash
-# Cross-platform twin:
-python path/to/auto-code-scanning/scripts/setup-scan-fix.py \
-  --languages csharp,typescript --tier standard --enable-fix-loop
-```
+Follow **[Getting started](docs/SETUP-GUIDE.md)** for prerequisites, choosing a tier,
+Terraform and application repositories, public/private CI permissions, full release
+commit pins, hooks, first scans, suppressions, baselines and upgrades. It includes
+Windows, macOS and Linux commands and starts with scanning before the optional fix loop.
 
-One idempotent command: writes `scan-config.yaml` from a tier template, installs the
-local runner + the Claude in-session bundle + thin caller workflows, creates the
-`ai-autofix` / `needs-human-review` labels, **verifies** (never creates) `AUTOFIX_TOKEN`
-/ `ANTHROPIC_API_KEY`, and runs verify-scanning. Terraform-only? `-Languages terraform -CloudProvider aws`.
-
-See **[QUICK-START-5MIN](docs/QUICK-START-5MIN.md)**, **[SETUP-GUIDE](docs/SETUP-GUIDE.md)**,
-and the full **[ARCHITECTURE](docs/ARCHITECTURE.md)** deep-dive.
+See the [v3.0.0–v3.0.6 behaviour audit](docs/V3-BEHAVIOUR-AUDIT.md) for shipped changes
+and the documentation that covers each one.
 
 ---
 
 ## LAYER A — Scanning
 
 **The config seam.** `scan-config.yaml` declares which languages and tools are enabled.
-The same config drives the local hooks **and** CI — no logic is duplicated.
+Local runner manifests also need review: a language flag does not remove their commands.
 
 ```yaml
 global:
@@ -99,7 +92,9 @@ fix_loop:  { enabled: false }                        # LAYER B (see below)
 
 Both runners call the **same** `hooks/dispatcher.sh`, which checks the off-switch, then
 OS-detects and execs the right per-tool implementation (`.ps1` on Windows, `.sh` on Unix).
-Pre-commit hooks discover **staged** files. Pre-push hooks consume Git's complete
+Commit-stage security scanners inspect captured **staged** bytes; Terraform retains indexed
+sibling/variable context and reports changed files. SQLFluff and formatters read the
+working tree. Pre-push hooks consume Git's complete
 ref transaction and scan private copies of the exact pushed trees. Upgrade the
 runner wiring with the hooks; see [validation target migration](docs/CONSUMER-MIGRATION.md#push-object-and-staged-config-validation-migration).
 Transaction-bound push validation is fail-closed: setup errors, malformed
@@ -129,11 +124,11 @@ flowchart TD
 
 ## Local CI parity
 
-Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11 with `pip install pytest pytest-cov pyyaml jsonschema`, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI installs Trivy, Checkov and PyYAML unpinned on the runner, so the versions are close, not exact; the pinned ones are named per job.
+Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11+ with the pinned test packages below, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI downloads Trivy 0.75.0 with a pinned SHA-256 and pins Checkov 3.3.19, TFLint 0.64.0 and PyYAML 6.0.3. Use the release lock and workflow files for exact pins; locally installed versions can differ.
 
 ```bash
 set -euo pipefail   # a failed check stays a failure, loops included
-# ci.yml "Lint & Validate": Python 3, PyYAML from `pip install pre-commit pyyaml` (unpinned)
+# ci.yml "Lint & Validate": Python 3, pre-commit 4.3.0 and PyYAML 6.0.3
 python -c "import yaml; yaml.safe_load(open('.pre-commit-hooks.yaml'))"
 python -c "import yaml; yaml.safe_load(open('configs/common/.scan-suppressions.yaml'))"
 for f in templates/*/pre-commit-config.yaml configs/*/.checkov.yaml configs/*/policy-overlay.yaml configs/common/noisy-checks-*.yaml; do python -c "import yaml; yaml.safe_load(open('$f'))"; done
@@ -141,13 +136,13 @@ for f in schemas/*.json; do python -c "import json; json.load(open('$f'))"; done
 for f in configs/*/.checkov.yaml; do python -c "import yaml,sys; d=yaml.safe_load(open('$f')); sys.exit(1 if d and 'check' in d else 0)"; done
 
 # ci.yml "Run Python tests": Python 3.11 (setup-python v5.6.0), pytest
-pip install pytest pytest-cov pyyaml jsonschema
+python -m pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 jsonschema==4.25.1 pre-commit==4.3.0
 pytest tests/python/ -v --tb=short
 
 # ci.yml "Run Pester tests": Pester 5, shell pwsh
 pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
 
-# ci.yml "test-hooks": Trivy from apt (unpinned), Checkov from `pip install checkov` (unpinned), TFLint latest (setup-tflint v4.1.1). Matrix aws, azure, gcp.
+# ci.yml "test-hooks": verified Trivy 0.75.0, Checkov 3.3.19, TFLint 0.64.0 (setup-tflint v4.1.1). Matrix aws, azure, gcp.
 for cloud in aws azure gcp; do
   FIXTURE="tests/fixtures/terraform-valid/"; [ -d "${FIXTURE}${cloud}" ] && FIXTURE="${FIXTURE}${cloud}"   # the cloud's own fixture, as CI selects it
   trivy config "$FIXTURE" --severity CRITICAL --exit-code 1 --quiet --skip-check-update
@@ -164,7 +159,7 @@ GITHUB_OUTPUT=$(mktemp) GITHUB_STEP_SUMMARY=$(mktemp) CHECKOV_SKIP_CHECKS=CKV_AZ
 trivy fs . --scanners secret --severity HIGH,CRITICAL --exit-code 1
 ```
 
-On Windows the checkout is CRLF. Run the commands on an LF copy: `tmp=$(mktemp -d) && git -c core.autocrlf=false archive HEAD | tar -x -C "$tmp" && cd "$tmp"` (`git archive` applies the checkout-time line-ending conversion unless told not to, and it copies the last commit only, so commit what you want checked first). A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
+If a Windows checkout has CRLF shell files, run shell checks on an LF copy: `tmp=$(mktemp -d) && git -c core.autocrlf=false archive HEAD | tar -x -C "$tmp" && cd "$tmp"` (`git archive` applies the checkout-time line-ending conversion unless told not to, and it copies the last commit only, so commit what you want checked first). A command that needs the git index (`git ls-files`, `git diff`) runs in the checkout itself, not in the copy. Where a tool reads a single file, strip `\r` with `sed 's/\r$//'`.
 
 Measured on a Windows machine on 2026-10-11: the applicable commands above passed after the consumer-options script was given output files (now part of the command). Terraform scanning is supported by `reusable-scan.yml` and exercised here by `reusable-scan-self-test.yml`.
 
@@ -269,9 +264,9 @@ flowchart TD
 ## LAYER B — Agentic fix-loop (opt-in)
 
 When enabled (`fix_loop.enabled: true` + the `ai-autofix` PR label), an AI agent proposes a
-**minimal** fix and a **separate** job re-verifies and pushes it. It is engineered to be safe
+**minimal** fix and separate jobs build it without secrets and verify the exact tree before pushing it. It is engineered to be safe
 on a shared workflow with write access across many repos by **splitting the dangerous
-capabilities across two jobs** ("breaking the lethal trifecta"):
+capabilities across separate jobs**:
 
 ```mermaid
 sequenceDiagram
@@ -287,9 +282,9 @@ sequenceDiagram
     PR->>Cfg: trigger
     Note over Cfg: reads fix_loop from the BASE ref —<br/>a PR cannot widen the gate via its own diff
     Cfg->>An: enabled == true (on main)
-    Note over An: read-only token · NO push creds · NO egress.<br/>Reads untrusted PR/review text →<br/>emits a vetted patch artifact
+    Note over An: read-only token · confined tools · no push credentials<br/>publishes a scanned text-only patch
     An->>Ap: patch artifact
-    Note over Ap: re-checkout exact SHA · NO untrusted input.<br/>Re-run path-allowlist gate + secret scan + build_verify
+    Note over Ap: separate verification job builds without secrets<br/>publication gates + scans the exact tree; runs no project code
     alt patch passes every gate
         Ap->>CI: push via AUTOFIX_TOKEN (re-triggers CI)
         CI-->>PR: ✅ green
@@ -298,9 +293,10 @@ sequenceDiagram
     end
 ```
 
-- **Two jobs break the "lethal trifecta"**: the `analyze` job that reads attacker-influenced
-  PR text has **no write token and no egress**; the `apply-and-push` job that can push has **no
-  untrusted input** and re-verifies everything.
+- **Separate trust boundaries**: analysis tools stay inside the source checkout;
+  trusted helpers/settings stay outside it. A healthy isolated secret scan is required
+  before publishing a regular-text patch. A separate job builds without secrets;
+  publication runs no project code and gates/scans the exact tree it commits.
 - **Allowlist (not denylist) path gate** from `fix_loop.allowlist_paths` / `gated_paths`.
 - **Activation reads the BASE ref** — a PR can't enable or widen the loop through its own diff.
 - **Label opt-in + non-fork + trusted reviewer** privilege boundary.
@@ -319,9 +315,9 @@ Read **[FIX-LOOP](docs/FIX-LOOP.md)** and **[SECURITY-MODEL](docs/SECURITY-MODEL
 ## Consumer ↔ platform
 
 Consumers **reference** the reusable workflows by pinned SHA and **vendor** byte-identical
-copies of `hooks/` and the shared `scripts/` (setup does not copy `schemas/`), so local hooks
-have no network dependency.
-Bump one pin + re-vendor to upgrade. See **[VERSION-PINNING](docs/VERSION-PINNING.md)**.
+copies of `hooks/`, `schemas/` and the shared `scripts/`, so local hook code is present without fetching the platform. Scanner rules, plugins and
+first-time caches can still need network access.
+Move every workflow and helper pin together and re-vendor to upgrade. See **[VERSION-PINNING](docs/VERSION-PINNING.md)**.
 
 ```mermaid
 flowchart LR
@@ -350,12 +346,15 @@ flowchart LR
 | **standard** (recommended) | CRITICAL, HIGH | + SAST (Semgrep) | wired, off |
 | **strict** | CRITICAL, HIGH, MEDIUM | + Roslyn build, full pre-push | **on** (still needs label) |
 
-`templates/scan-config/{starter,standard,strict}.yaml`.
+`templates/scan-config/{starter,standard,strict}.yaml` supplies these defaults.
+The strict template enables the fix-loop setting; a caller, credentials and label
+are still required. Runner manifests choose actual local hooks and may use their
+own thresholds. See [tier selection](docs/SETUP-GUIDE.md#2-choose-a-tier-and-runner).
 
 ## Documentation
 
 - **Understand it:** **[ARCHITECTURE](docs/ARCHITECTURE.md)** (diagrams + component deep-dive) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
-- **Adopt in a new repo:** **[Consumer Repo Setup Guide](docs/consumer-repo-setup-guide.md)** · [QUICK-START-5MIN](docs/QUICK-START-5MIN.md) · [SETUP-GUIDE](docs/SETUP-GUIDE.md) · [TERRAFORM-MODULE-ADOPTION](docs/TERRAFORM-MODULE-ADOPTION.md) · [AI-AGENT-GUIDE](docs/AI-AGENT-GUIDE.md)
+- **Getting started:** **[Canonical onboarding](docs/SETUP-GUIDE.md)** · [Consumer operations](docs/consumer-repo-setup-guide.md) · [Terraform modules](docs/TERRAFORM-MODULE-ADOPTION.md)
 - **Scanning:** [APP-CODE-SCANNING](docs/APP-CODE-SCANNING.md) · [HOOK-REFERENCE](docs/HOOK-REFERENCE.md) · [MULTI-CLOUD](docs/MULTI-CLOUD.md) · [LOCAL-HOOKS-TOGGLE](docs/LOCAL-HOOKS-TOGGLE.md)
 - **Fix-loop:** [FIX-LOOP](docs/FIX-LOOP.md) · [SECURITY-MODEL](docs/SECURITY-MODEL.md)
 - **Adoption:** [ADOPTION-PLAYBOOK](docs/ADOPTION-PLAYBOOK.md) · [VERSION-PINNING](docs/VERSION-PINNING.md) · [BUMP-THE-SCAN](docs/BUMP-THE-SCAN.md) · [TESTING-GUIDE-CONSUMING-REPO](docs/TESTING-GUIDE-CONSUMING-REPO.md) · [CONSUMER-MIGRATION](docs/CONSUMER-MIGRATION.md)
@@ -372,7 +371,7 @@ auto-code-scanning/
 ├── .github/workflows/
 │   ├── reusable-scan.yml           # IaC scan (workflow_call)
 │   ├── code-security-scan.yml      # app-code scan, distinct SARIF categories
-│   └── autonomous-fix.yml          # two-job agentic fix-loop (workflow_call)
+│   └── autonomous-fix.yml          # analysis, verification and publication (workflow_call)
 ├── templates/
 │   ├── scan-config/                # tier configs (starter/standard/strict)
 │   ├── lefthook/                   # default local runner

@@ -64,8 +64,11 @@ and non-HEAD/multiple refs. Each ref selects files changed between its remote
 object and pushed object; deleted refs and deleted files scan nothing. New branches
 compare against the merge base with the destination remote's tracked default branch
 (`refs/remotes/<remote>/HEAD`). Without a usable default/merge base, paths come from
-commits absent from every remote-tracking ref (`--not --remotes`); an empty remote
-therefore scans all new files. Keep remote-tracking refs current before pushing.
+commits absent from direct tracking refs unambiguously owned by the destination's
+fetch mappings. Negative refspecs are honoured. Symbolic refs, overlapping ownership
+and fetch targets outside `refs/remotes/` cannot prove destination ancestry. Unknown
+destinations or unsafe/ambiguous mappings conservatively scan all reachable ancestry;
+other remotes never exclude commits. Keep destination tracking refs current before pushing.
 Uncommitted files, checkout filters and archive attributes cannot replace the
 scanned bytes. Terraform scans exclude unchanged source files even in selected
 directories, so pre-existing findings elsewhere do not block a clean change.
@@ -91,7 +94,8 @@ back to defaults. This includes errors in the adapter's runner configuration.
 **Track scanner policy before upgrading.** Push scans require the policy scanner's
 `.checkov.yaml` in the pushed tree under
 `.scanning/configs`, or under a tracked repository-relative `SCAN_CONFIG_DIR`.
-The setup guide ignores `.scanning/`, so either force-add the required policy files
+Older guides ignored `.scanning/` entirely. The canonical guide now retains
+`.scanning/configs/`; for an existing installation either force-add the required policy files
 or commit them under another directory and configure `SCAN_CONFIG_DIR` accordingly.
 An absolute override must resolve inside the consumer repository. Missing required
 policies or an external policy directory blocks the push; the runner never silently
@@ -128,8 +132,8 @@ For manual validation, feed a real four-field transaction to a push wrapper or
 Direct Bash/PowerShell wrappers also accept `--remote origin`. Without a remote
 option, directly installed Git hooks consume Git's positional remote name and URL.
 For manual invocations without either form of remote argument,
-the runner uses a single tracked remote default, or the all-remotes
-fallback when that default is absent or ambiguous. A direct
+the runner cannot establish destination ownership and conservatively scans
+reachable ancestry for new refs. A direct
 `pre-commit run --hook-stage pre-push --all-files` has no transaction and blocks.
 During a reviewed migration only, `SCAN_LEGACY_PUSH_STATE=1` explicitly restores
 the old index/tracking-ref/worktree behavior for individual push wrappers. It is
@@ -233,7 +237,7 @@ on `main`. Workflow files are under `.github/workflows/`.
 ## Purpose
 
 After the migration the repository keeps `scan-config.yaml` and a few thin caller
-workflows. The hardened logic (the two-job fix loop, the path gate, the secret re-scan,
+workflows. The hardened logic (separate analysis, verification and publication, the path gate, the secret re-scan,
 the iteration cap) comes from the platform at a pinned release, so a fix to it reaches
 the repository through one pin change.
 
@@ -242,7 +246,7 @@ the repository through one pin change.
 - The repository has its own copy of a fix-loop workflow, a scan workflow, or hooks with
   hard-coded paths, solution names or build commands.
 - For a repository with no scan yet, use
-  [consumer-repo-setup-guide.md](consumer-repo-setup-guide.md) or, for a Terraform
+  [Getting started](SETUP-GUIDE.md) or, for a Terraform
   module, [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).
 
 ## Prerequisites
@@ -491,7 +495,7 @@ mergeable with no scan gate. The jobs to require:
   Keep `run-secret-scan: true` and `fail-on-findings: true`. Add every newly enabled
   language's matrix context to branch protection. One passing language check does
   not cover the other language or secrets. Enable callers on every pull request
-  without path filters. See [the setup guide](consumer-repo-setup-guide.md#branch-protection).
+  without path filters. See [consumer operations](consumer-repo-setup-guide.md#branch-protection).
 
 Use the names on the pull request's Checks tab. Never require the fix loop's jobs: they
 run only on a trusted review or a dispatch.
@@ -604,4 +608,5 @@ user-level packages installed by no-admin setup.
   works and what it trusts.
 - [VERSION-PINNING.md](VERSION-PINNING.md): pinning rules.
 - [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): later upgrades.
-- [consumer-repo-setup-guide.md](consumer-repo-setup-guide.md): first-time setup.
+- [Getting started](SETUP-GUIDE.md): first-time setup.
+- [Consumer operations](consumer-repo-setup-guide.md): branch protection and maintenance.

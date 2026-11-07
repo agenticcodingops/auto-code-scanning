@@ -8,13 +8,13 @@ If you are new to the project, read this top-to-bottom; the [README](../README.m
 
 ## 1. Design goals
 
-1. **One source of truth.** A single `scan-config.yaml` decides *what* runs. Local hooks and
-   CI read the **same** config — there is no second place to keep in sync.
+1. **One source of truth.** `scan-config.yaml` supplies language and policy settings. Local runner manifests
+   select hooks; hosted workflows select their own jobs. Review both during adoption.
 2. **Shift left, but trust CI.** Catch a finding at the earliest cheap point (a pre-commit
    hook), but treat **CI as the authoritative gate** — local hooks are an optimization, never
    the only line of defense.
 3. **Friction-free for autonomous agents.** Native Windows, no Python/`cp1252` fragility in
-   the hot path, fail-open on infra errors, and an in-session feedback loop so an AI agent
+   the hot path, actionable incomplete-scan errors, and an in-session feedback loop so an AI agent
    self-corrects before it ever opens a PR.
 4. **Safe to share with write access.** The fix-loop can push to many repos, so its dangerous
    capabilities are split across jobs and gated by an allowlist, a label, and SHA-pinned actions.
@@ -118,9 +118,10 @@ flowchart TD
 
 Design notes:
 
-- **Fail-open vs fail-closed.** Infra problems (a tool not installed, a transient 5xx) must
-  **never** block a developer → the hook warns and exits 0. A *real finding* fails closed.
-  This distinction is enforced consistently across the `.sh` and `.ps1` twins.
+- **Incomplete scans block.** Missing tools and infrastructure failures block by
+  default. `SCAN_ALLOW_TOOL_ERRORS=1` is a limited local compatibility setting;
+  snapshot setup, unsafe paths, invalid policy and malformed reports still block.
+  CI scanner/report health is mandatory even in report-only runs.
 - **Staged-file discovery is NUL-safe.** Changed files are enumerated with `git … -z` and read
   into arrays (`mapfile -d ''` / NUL split), so paths with spaces or newlines are never merged
   or skipped. (Capturing `-z` output into a plain `$(...)` scalar silently drops the NUL
@@ -231,9 +232,9 @@ sequenceDiagram
     PR->>Cfg: workflow trigger
     Note over Cfg: reads fix_loop.enabled from BASE ref<br/>(the PR diff cannot change the gate)
     Cfg->>An: enabled == true
-    Note over An: read-only token · no egress<br/>reads untrusted review → minimal patch
+    Note over An: read-only token · confined tools<br/>reads untrusted review → scanned text patch
     An->>Ap: patch artifact (+ .fix-attempts counter)
-    Note over Ap: re-checkout SHA · re-run<br/>check-fix-allowlist.py + secret scan + build_verify_cmd
+    Note over Ap: separate verify job builds without secrets<br/>publication gates + scans exact tree; no project code
     alt every gate passes & under max_iterations
         Ap->>CI: git push (AUTOFIX_TOKEN) → re-triggers CI
         CI-->>PR: ✅
@@ -340,7 +341,7 @@ flowchart LR
 | `hooks/<tool>.{sh,ps1}` | one pair per tool (Trivy, Checkov, TFLint, Semgrep, dotnet, eslint, …) |
 | `.github/workflows/reusable-scan.yml` | reusable IaC scan (`workflow_call`) |
 | `.github/workflows/code-security-scan.yml` | reusable app-code scan (`workflow_call`) |
-| `.github/workflows/autonomous-fix.yml` | two-job fix-loop (`workflow_call`) |
+| `.github/workflows/autonomous-fix.yml` | separate analysis, verification and publication jobs (`workflow_call`) |
 | `scripts/` | `setup-scan-fix`, `scan-and-fix`, `check-fix-allowlist`, `validate-scan-config`, … |
 | `templates/` | tier configs, lefthook config, the `.claude` bundle, thin callers |
 | `configs/` | cloud-specific IaC tool configs (`aws` / `azure` / `gcp` / `common`) |
@@ -353,12 +354,12 @@ A quick reference for "what happens when X breaks":
 
 | Situation | Behavior | Rationale |
 |---|---|---|
-| A scan tool isn't installed locally | hook **warns, exits 0** | infra ≠ a finding; don't block devs |
+| A selected scan tool is unavailable | block by default | the scan is incomplete; local compatibility is explicit and limited |
 | A tool download 5xx / rate-limits in CI | retry with backoff (e.g. tflint `--init` + `GITHUB_TOKEN`) | transient, not a code problem |
 | A *real* finding ≥ blocking severity | **exit 1 / fail the check** | that's the whole point |
-| `scan-config.yaml` malformed | `validate-scan-config` **fails closed** when it can load the schema, PyYAML and `jsonschema`; otherwise it warns and exits 0 unless `STRICT=1`, which no workflow sets | a broken gate is worse than a slow one |
+| `scan-config.yaml` malformed or validation prerequisites missing | staged validation **blocks by default** | validate the exact staged root blob; only prerequisite errors have a limited local compatibility option |
 | Fix-loop fed a malformed/over-broad patch | path gate **fails closed** → `needs-human-review` | never auto-push outside the allowlist |
-| `local_hooks_enabled: false` | all local hooks **skip (exit 0)** | deliberate pause; CI still enforces |
+| `local_hooks_enabled: false` | scanner hooks skip; staged config validation still runs | push reads the switch from the pushed tree; CI still enforces |
 
 ---
 

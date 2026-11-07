@@ -109,8 +109,13 @@ Key enforcement (all mechanical, independent of the prompt):
   The guard confines reads and writes to the checkout outside `.git`, resolves links and parent paths,
   and permits only the four exact PR read commands in the prompt. Links and nested agent configuration
   are removed before the session starts. Its Bun runtime is a checksum-verified download,
-  never an Actions-cache entry. Before upload, a checksum-verified secret scanner checks the patch outside the checkout,
-  without its configuration or ignore files. Findings, scanner errors and missing reports stop publication.
+  never an Actions-cache entry. Patch capture accepts only supported regular text and rejects binary, linked,
+  submodule and other unsupported content without printing it. Diff generation disables
+  external drivers and text conversion. Before upload, a checksum-verified secret scanner
+  checks the patch outside the checkout,
+  without its configuration or ignore files. Findings, scanner errors and missing reports stop publication. Vetted content is also
+  scanned under original and neutral filenames so filename-sensitive detection is
+  retained without allowing default filename exclusions to hide content.
   The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of

@@ -1,6 +1,9 @@
 # Troubleshooting Guide
 
-Common issues and their resolutions for the Terraform security scanning solution.
+For a new installation, follow [Getting started](SETUP-GUIDE.md). Its troubleshooting
+table covers the v3 Bash/Python floors, verified tools, external policy, tracked push
+configuration, formatter setup, report publication and SARIF permissions. This page
+adds operational cases for Terraform scans.
 
 ## Issue 1: Hook Timeout
 
@@ -8,7 +11,7 @@ Common issues and their resolutions for the Terraform security scanning solution
 
 **Causes and Fixes**:
 
-- **Trivy database download**: Hooks run with `--skip-check-update` (IaC scanning) to avoid downloading check bundles on every run, but the first run after installation requires an initial database. Run `trivy image --download-db-only` once to initialize.
+- **Trivy database download**: Hooks run with `--skip-check-update` (IaC scanning) to avoid downloading check bundles on every run, but the first run after installation requires an initial database. Run `trivy config .` once to initialize the misconfiguration checks bundle; the image vulnerability database is separate.
 - **Large repository**: If scanning many directories, use the `exclude` pattern in `.pre-commit-config.yaml` to limit scan scope to Terraform directories only.
 - **Network issues**: Trivy and Checkov may attempt external connections. Ensure `--skip-check-update` (for `trivy config`) and `download-external-modules: false` (for Checkov) are set.
 
@@ -210,4 +213,4 @@ If your issue is not listed above:
 3. Run the performance profiler: `.\scripts\profile-hook-performance.ps1`
 4. Generate a suppression report: `.\scripts\generate-suppression-report.ps1`
 5. Consult the [Hook Reference](HOOK-REFERENCE.md) for detailed hook behavior
-6. Review the [Setup Guide](SETUP-GUIDE.md) for installation steps
+6. Review [Getting started](SETUP-GUIDE.md) for installation steps

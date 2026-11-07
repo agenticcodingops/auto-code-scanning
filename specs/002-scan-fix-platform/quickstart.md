@@ -1,7 +1,7 @@
 # Quickstart 002 — scan→fix platform
 
 The shortest path from zero to a working scan (+ optional fix) in a consumer repo. Full guide:
-[`docs/QUICK-START-5MIN.md`](../../docs/QUICK-START-5MIN.md).
+[Getting started](../../docs/SETUP-GUIDE.md).
 
 ## Prerequisites
 

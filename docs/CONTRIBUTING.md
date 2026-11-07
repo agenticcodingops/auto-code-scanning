@@ -1,5 +1,126 @@
 # Contributing
 
+## Set up a contributor checkout
+
+A contributor changes the platform itself; a consumer adopts it in another repository.
+For adoption, start with [Getting started](SETUP-GUIDE.md).
+
+Read repository-level `CLAUDE.md` and `AGENTS.md` if present before editing, then this
+guide and the relevant [hook](HOOK-REFERENCE.md), [workflow](REUSABLE-WORKFLOWS.md) or
+[security](SECURITY-MODEL.md) reference. Some checkouts do not contain those rule files.
+
+Install Git, Python 3.11+, Bash 4.4+, PowerShell 7 and the scanners/runner listed in
+[Getting started prerequisites](SETUP-GUIDE.md#1-prerequisites). On Windows use Git
+for Windows and Git Bash, not the WSL launcher named `bash`. On macOS run
+`brew install bash` and put `$(brew --prefix bash)/bin` first on PATH. On Linux use
+the supported packages for your distribution, including Python venv support and
+PowerShell 7. Keep Python environments and scanner installations outside the checkout.
+
+Clone with LF line endings on every platform (the commands work in PowerShell or Bash):
+
+```bash
+git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git
+cd auto-code-scanning
+git switch -c docs/my-change
+```
+
+Use a suitable Conventional Commit branch/subject for the work you plan. Create an
+external Python environment. Windows, from PowerShell 7:
+
+```powershell
+python -m venv "$HOME/.venvs/acs-contribute"
+& "$HOME/.venvs/acs-contribute/Scripts/Activate.ps1"
+python -m pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 jsonschema==4.25.1 pre-commit==4.3.0
+pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
+```
+
+macOS/Linux:
+
+```bash
+python3 -m venv "$HOME/.venvs/acs-contribute"
+. "$HOME/.venvs/acs-contribute/bin/activate"
+python -m pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 jsonschema==4.25.1 pre-commit==4.3.0
+pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
+```
+
+For scanner checks, install the release-locked binaries with
+`scripts/install-scanner.py` and install the policy scanner as described in Getting
+started. Install Semgrep/.NET/Node tooling when exercising their integration suites.
+The exact hosted dependency versions live in `.github/workflows/ci.yml`.
+
+## Run checks before opening a pull request
+
+From the platform root, run the complete Python suite:
+
+```bash
+python -m pytest tests/python/ -v --tb=short
+```
+
+Run the PowerShell suite with Pester 5 (a PowerShell test framework):
+
+```bash
+pwsh -NoProfile -Command 'Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c'
+```
+
+Then run **every applicable command** in the README's
+[Local CI parity](../README.md#local-ci-parity) block from Bash. It contains YAML and
+JSON parsing, policy blocklist checks, the three-provider fixture scan loop, plugin
+initialization, consumer-option preparation and the repository secret scan. Leave
+`set -euo pipefail` enabled, record raw scanner exits as well as deliberately tolerated
+policy findings, and retain logs. Hosted-only jobs are listed immediately below that
+block; a local pass is not evidence of a hosted upload or permission check.
+
+On Windows, open Git Bash or launch it explicitly from PowerShell:
+
+```powershell
+& 'C:/Program Files/Git/bin/bash.exe' --noprofile --norc
+```
+
+An existing CRLF checkout needs the README's LF archive procedure before shell tests.
+`git archive HEAD` includes only committed content: commit your change before exporting.
+Commands that inspect the index must run in an actual Git checkout instead. Verify
+`command -v bash` and `bash --version` inside the selected shell.
+
+Two tests in `tests/python/test_hook_integrity.py` have previously failed on Windows
+because console encoding changed non-ASCII output:
+`test_powershell_reads_nul_paths_without_native_line_splitting` and
+`test_distinct_git_directory_names_survive_ordinal_deduplication`. Keep terminal and
+child-process output at UTF-8 and record the exact interpreter, shell and traceback
+if they recur. They are not expected failures to suppress; newer Windows runs and
+hosted Linux runs have passed them. Do not change scanner behavior to hide an encoding
+failure. Rerun a failed case in isolation to distinguish encoding from a real regression.
+
+For UTF-8 output in PowerShell, set `$env:PYTHONUTF8 = '1'` and
+`$env:PYTHONIOENCODING = 'utf-8'` before the test commands. In Git Bash use
+`export PYTHONUTF8=1 PYTHONIOENCODING=utf-8`.
+
+The repository currently has no dedicated Markdown lint or documentation link-check
+job. For documentation changes, run `git diff --check`, verify local links and anchors,
+and exercise any changed commands. A documented setup path must install real hooks
+and make a scanned commit in a disposable local consumer; do not push test data.
+
+## Prepare the pull request
+
+Review `git diff` and ensure shared consumer files remain compatible with both hook
+shells. Use the clone's Git identity and a Conventional Commit subject. Fill
+[the pull request template](../.github/pull_request_template.md), including changed
+docs, commands and exit codes, hosted evidence, risk and open questions. Explain
+any skipped check. Keep generated release files out of ordinary changes: release
+steps below own the changelog, version and marked lines.
+
+## How consumers upgrade
+
+The platform does not update installed consumers automatically. A consumer resolves
+the new release tag's full commit SHA, re-vendors complete `hooks/` (including its
+library), shared `scripts/` and `schemas/` byte for byte from that revision, then
+updates workflow `uses:`, pre-commit `rev:`, IaC `scanning-repo-ref` and optional
+fix-workflow `scanning_repo_ref` to that same SHA. Setup refreshes caller templates,
+so it runs **before** the consumer restores SHA pins and project-specific settings.
+Review policy/schema migration, repeat installation verification and a scanned
+commit, then verify hosted checks on an adoption pull request. See
+[Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releases) and
+[consumer migration](CONSUMER-MIGRATION.md).
+
 ## How to Contribute
 
 1. Fork this repository
@@ -198,5 +319,5 @@ Never move, delete or re-create a published tag: consumers pin the commit it poi
 
 - PowerShell scripts follow PSScriptAnalyzer rules
 - YAML files must be valid
-- All hooks must complete in <5 seconds
+- Aim for the documented per-tier performance budgets; first-run downloads are measured separately
 - Documentation required for all features

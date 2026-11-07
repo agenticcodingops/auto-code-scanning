@@ -25,7 +25,9 @@ The scanning solution provides several integration paths:
 4. **CI fix-loop** (`autonomous-fix.yml`): an opt-in, hardened workflow where an agent
    proposes a minimal fix for a labelled PR (Layer B — see [CI Fix-Loop](#ci-fix-loop-autonomous-fixyml))
 
-The first two paths produce the same JSON output format, enabling consistent tooling.
+Both paths produce structured JSON reports. Hook reports and the on-demand scan
+have separate schemas; use [the hook report contract](HOOK-REFERENCE.md#json-output)
+for `.scanning/last-scan.json` and the `scan.py` output described below.
 
 ## scan.py Usage
 
@@ -84,7 +86,7 @@ When `--auto-fix` is specified:
 |------|---------|
 | `0` | No findings above threshold |
 | `1` | Findings detected above threshold |
-| `2` | Tool error (fail-open: couldn't determine findings) |
+| `2` | Tool error: scan incomplete; callers must not treat it as clean |
 
 ## JSON Output Format
 
@@ -222,9 +224,9 @@ twins exist for hosts without PowerShell 7):
 
 The hooks are deliberately **thin** — they route to the right tool/ruleset and the
 heavy logic lives in the versioned shared scripts (`scripts/scan-and-fix.{ps1,sh}`
-and `hooks/`). They **fail open** if a tool (semgrep/trivy) is missing, so a
-developer without the tools is never hard-blocked, but **fail closed** on real
-findings.
+and `hooks/`). Commit/push security hooks block incomplete scans by default.
+Editor feedback is a separate early signal and does not establish a complete scan.
+Secret feedback exposes rule/location/count metadata rather than raw matched values.
 
 ### How an agent experiences it
 

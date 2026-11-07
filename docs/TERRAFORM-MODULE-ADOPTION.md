@@ -1,7 +1,9 @@
 # Runbook: Adopt the Scan in a Terraform Module Repository
 
-A worked example: add the Terraform scan to a repository that publishes a Terraform
-module.
+For installation, follow [Getting started](SETUP-GUIDE.md). This reference covers
+hosted acceptance for a repository that publishes a Terraform module. Its source
+line references describe the historical revision named below; current configuration
+sources and security contracts are in [the workflow reference](REUSABLE-WORKFLOWS.md).
 
 The current release is `v3.0.6`. <!-- x-release-please-version -->
 
@@ -29,15 +31,11 @@ finding.
 ## Prerequisites
 
 - Admin access to the module repository, to set branch protection.
-- A public repository named `auto-code-scanning` under the module repository's owner,
-  holding the release you will pin. The scan reads its configs from
-  `<owner of the calling repository>/auto-code-scanning` (`reusable-scan.yml:126`), and
-  cannot read a private copy (see
-  [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy)).
-  Step 2 creates it.
+- Access to the reviewed platform revision used by the caller and its
+  `scanning-repo-ref`; the default is the published platform, not a same-owner copy.
 - Code scanning available on the module repository, if you want the SARIF results there.
-  A failed upload does not fail the job; `sarif-uploaded` is `false` when no upload
-  succeeds (`reusable-scan.yml:875-922`). By default three uploads run: the Snyk upload is
+  Upload failures block by default. If private code scanning is unavailable, set
+  `upload-sarif: false`; scanning and finding gates still run. By default three uploads run: the Snyk upload is
   skipped unless the Snyk job, which needs `enable-snyk: true`, wrote a SARIF file
   (`reusable-scan.yml:70-74`, `904`).
 
@@ -82,23 +80,12 @@ should upload SARIF; see [MULTI-CLOUD.md](MULTI-CLOUD.md#step-4-cicd-for-multi-c
 
 ### 2. Create your owner's copy of the platform
 
-- **Who:** Operator (needs permission to create repositories under `OWNER`)
-- **Operator STOP:** no
-
-Skip this step if `OWNER/auto-code-scanning` already exists and holds the release you will
-pin. Otherwise create an empty **public** repository `OWNER/auto-code-scanning`, then copy
-every branch and tag into it:
-
-```bash
-git clone --mirror https://github.com/agenticcodingops/auto-code-scanning.git
-cd auto-code-scanning.git
-git push https://github.com/OWNER/auto-code-scanning.git --all
-git push https://github.com/OWNER/auto-code-scanning.git --tags
-```
-
-Push `--all` and `--tags`, not `--mirror`: a mirror clone also holds the source's pull
-request refs. To take a newer release later, run `git fetch --prune origin` in the same
-directory, then the two `git push` commands again.
+This historical step is no longer required. Use the published platform's full
+release commit SHA from Getting started for both the workflow and helper pins.
+If your organization requires a reviewed mirror, set `scanning-repository` to it
+explicitly and ensure it contains that same commit. `OWNER` in the retained
+release-tagged example below means the platform owner, `agenticcodingops`, unless
+you have deliberately chosen a mirror. Replace the example tags with the full SHA.
 
 ### 3. Add the caller workflow
 
@@ -135,7 +122,8 @@ jobs:
       scanning-repo-ref: "v3.0.6" # x-release-please-version
 ```
 
-- Replace `OWNER`, the branch name and `cloud-provider` with yours.
+- Set `OWNER` to the reviewed platform owner (`agenticcodingops` by default), and
+  choose your own branch name and `cloud-provider`.
 - Keep `uses:` and `scanning-repo-ref` on the same release. The default lives inside the
   workflow revision that `uses:` pins (`reusable-scan.yml:40-44`): from the release that
   carries this change on, release-please sets it to that release's tag, so an unset input
@@ -191,14 +179,14 @@ In the branch protection rule or ruleset for the default branch, add these jobs 
 required status checks: Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan, TFLint
 Scan and Aggregate Results (`reusable-scan.yml:114`, `161`, `257`, `328`, `510`). Use the
 names shown on the pull request's Checks tab. Require all five, because Aggregate Results
-runs even when a scan job fails (`reusable-scan.yml:514`). These checks do not fail when a
-scanner wrote no report; to catch that, add a report check as described in
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#a-green-job-does-not-prove-its-scanner-ran).
+runs even when a scan job fails. The current aggregate rejects missing or malformed
+required reports; report-only mode still enforces scan completion. See
+[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#scanner-health-and-secret-findings).
 
 ## Verify
 
 - The pull request has a "Security Scan Results" comment (`reusable-scan.yml:987`).
-- The repository's code scanning page lists the `trivy-iac`, `trivy-secrets` and
+- If SARIF uploads are enabled, the repository's code scanning page lists the `trivy-iac`, `trivy-secrets` and
   `checkov` categories (`reusable-scan.yml:881`, `890`, `899`).
 - The run's `checkov-results` artifact contains `checkov-results.json`, and the TFLint Scan
   job summary lists each ruleset (`reusable-scan.yml:314-322`, `371-383`).

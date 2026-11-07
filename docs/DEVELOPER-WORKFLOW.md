@@ -4,7 +4,10 @@ Day-to-day guide for working with security scanning hooks in your Terraform repo
 
 ## What Happens When You Commit
 
-When you run `git commit`, pre-commit hooks scan **only your staged changes**:
+Install through [Getting started](SETUP-GUIDE.md). The runner manifest chooses
+which hooks run. Security hooks read captured staged bytes; Terraform siblings
+provide context, but findings are selected for changed files. Formatters and
+SQLFluff read the working tree. Common security hooks include:
 
 | Hook | What it checks | Blocks on |
 | ---- | -------------- | --------- |
@@ -27,11 +30,15 @@ If all hooks pass, your commit goes through. If a finding is detected, the commi
 
 ## What Happens When You Push (Standard/Strict tiers)
 
-Pre-push hooks run additional checks on `git push`:
+Pre-push hooks consume Git's complete ref transaction and read the exact pushed
+objects, independently of the index and worktree. New branch selection is scoped
+to the destination remote. Lefthook uses Checkov, TFLint and .NET build; the
+standard/strict pre-commit manifests differ. These available hooks are not all
+installed by every tier:
 
 | Hook | What it checks | Blocks on |
 | ---- | -------------- | --------- |
-| **trivy-iac-full** | All severity misconfigurations | Any severity |
+| **trivy-iac-full** | Configured misconfiguration severities | Configured threshold |
 | **checkov** | Policy-as-code checks | Per config |
 | **checkov-strict** | Hard-fail CRITICAL+HIGH | CRITICAL, HIGH |
 | **tflint** | Terraform linting rules | Errors |
@@ -80,39 +87,26 @@ git commit -m "fix: restrict security group egress to VPC CIDR"
 
 ## Option 2: Suppress the Finding
 
-If the finding is a false positive or an accepted risk, add it to `.scan-suppressions.yaml`:
+For a reviewed false positive or accepted risk, create a schema-2.0 occurrence
+entry in `.scan-suppressions.yaml`, using the fingerprint emitted by the current
+scan. It binds the tool, rule, path, resource, lines and source-content hash.
+Broad file globs do not approve new occurrences. HIGH/CRITICAL entries need
+security approval, and expiry is capped at 180 days. Follow
+[suppression governance](SUPPRESSION-GOVERNANCE.md) for the complete format.
 
-```yaml
-# .scan-suppressions.yaml
-trivy_suppressions:
-  - rule_id: AVD-AWS-0057
-    tool: trivy
-    severity: CRITICAL
-    reason: "Egress to 0.0.0.0/0 is required for NAT gateway connectivity in this module"
-    file_pattern: "terraform/modules/aws/networking/nat/*.tf"
-    owner: your-team@company.com
-    approved_date: "2026-02-25"
-    expires_date: "2026-05-25"
-    approved_by: security-team@company.com
-    ticket: "BDCD-999"
-```
-
-**Rules for suppressions:**
-- LOW/MEDIUM: Module owner can approve, max 6 months
-- HIGH/CRITICAL: Requires `approved_by` from security team, max 1-3 months
-- All suppressions require a Jira ticket for HIGH/CRITICAL
-- See [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md) for full details
-
-Then commit the suppression file:
+Validate and commit the reviewed registry:
 
 ```bash
+python scripts/validate-suppressions.py .scan-suppressions.yaml
 git add .scan-suppressions.yaml
-git commit -m "chore: suppress AVD-AWS-0057 for NAT gateway module (BDCD-999)"
+git commit -m "chore: record reviewed occurrence exceptions"
 ```
 
 ## Option 3: Skip Specific Hooks (Temporary)
 
-Use the `SKIP` environment variable to bypass specific hooks for one commit:
+For the alternative pre-commit runner, `SKIP` bypasses named hooks for one command.
+Use only under your team's reviewed exception process; CI still enforces scanning.
+These commands use Bash syntax; Lefthook has separate runner settings.
 
 ```bash
 # Skip one hook
@@ -124,11 +118,6 @@ SKIP=trivy-iac-critical,terraform_validate,terraform_tflint git commit -m "wip: 
 # Skip only our security hooks (keep formatting hooks)
 SKIP=trivy-iac-critical,trivy-secrets,gitleaks git commit -m "wip: will fix findings later"
 ```
-
-**When to use this:**
-- Pre-existing findings in a module you're modifying (not caused by your changes)
-- Tool infrastructure issues (crashes, timeouts)
-- Work-in-progress commits on a feature branch
 
 **Important:** `SKIP` only applies to the current command. The next commit will run all hooks normally.
 
@@ -144,20 +133,18 @@ git commit --no-verify -m "hotfix: production issue BDCD-999"
 
 ## Handling Pre-Existing Findings
 
-When you modify a file in a module that has pre-existing security issues, the IaC hooks scan the entire module directory (not just your file). This is by design -- IaC scanners need full module context.
-
-**You are NOT expected to fix all pre-existing issues.** Options:
-
-1. **Fix if quick** -- If the finding is in code you're already changing, fix it
-2. **Suppress it** -- Add to `.scan-suppressions.yaml` with a ticket to fix later
-3. **Skip the hook** -- Use `SKIP=trivy-iac-critical` for this commit
-4. **Create a tech debt ticket** -- Log the finding in Jira for planned remediation
+Terraform security scans include indexed sibling context and select changed files.
+Hosted whole-tree scans can still reveal existing debt. Fix findings or record
+reviewed exact occurrences in a schema-2.0 baseline; new or changed occurrences
+remain visible. Pull-request policy comes from the exact base commit, so an
+exception added in a pull request becomes effective after it merges into that base.
+See [baselines](SETUP-GUIDE.md#9-suppressions-and-baselines).
 
 ## Quick Reference
 
 | I want to... | Command |
 | ------------ | ------- |
-| See what hooks will run | `pre-commit run --all-files --dry-run` |
+| See what hooks are installed | Inspect `lefthook.yml` or `.pre-commit-config.yaml` |
 | Run hooks manually | `pre-commit run --all-files` |
 | Run a specific hook | `pre-commit run trivy-iac-critical --all-files` |
 | Run with verbose output | `SCAN_VERBOSE=1 pre-commit run --all-files` |
@@ -166,7 +153,7 @@ When you modify a file in a module that has pre-existing security issues, the Ia
 | View last scan results | `cat .scanning/last-scan.json` |
 | Validate suppressions | `python scripts/validate-suppressions.py .scan-suppressions.yaml` |
 | Clear pre-commit cache | `pre-commit clean` |
-| Update hooks to latest | `pre-commit autoupdate` |
+| Upgrade installed hooks | Follow [the coordinated upgrade](SETUP-GUIDE.md#10-upgrade-between-releases) |
 
 ## Common Hook IDs for SKIP
 
@@ -191,7 +178,7 @@ When you modify a file in a module that has pre-existing security issues, the Ia
 | File type staged | What gets scanned |
 | ---------------- | ----------------- |
 | Only non-Terraform files (.yaml, .md, etc.) | Secret hooks scan staged files only. IaC hooks skip entirely. |
-| Terraform files (.tf) | IaC hooks scan the **module directory** containing the changed file. Secret hooks scan staged files only. |
+| Terraform files (.tf) | IaC hooks include indexed module context and report selected changed files. Secret hooks scan staged files only. |
 | Mix of both | Both IaC and secret hooks run on their respective scopes. |
 
 **Why does trivy-iac scan the whole module directory?**
@@ -200,7 +187,7 @@ IaC security rules need full context. A `main.tf` resource might reference a var
 
 ## Enabling Snyk IaC (Optional)
 
-Snyk IaC provides additional commercial security scanning on top of the open-source tools. It requires a Snyk license and is **fail-open** -- if Snyk is not installed or not authenticated, the hook exits cleanly and does not block your commit or push.
+Snyk IaC provides additional commercial security scanning on top of the open-source tools. Enable it only with a license and provisioned CLI. A selected missing CLI blocks by default; missing authentication warns and skips. CI enforces enabled scanner health independently.
 
 ### Prerequisites
 
@@ -280,16 +267,12 @@ jobs:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
 
-`OWNER` is the owner of your repository. `reusable-scan.yml` reads its configs from a
-repository named `auto-code-scanning` under the owner of the calling repository, whatever
-`uses:` names (`reusable-scan.yml:123-131`). That copy must be public (a private copy
-cannot be read) and must hold the ref you pass as `scanning-repo-ref`. Without it, Setup
-Scanning Tools fails, the scan jobs are skipped, Aggregate Results still passes, and the
-pull request comment says "All security checks passed!". Create the copy as in
-[step 2 of TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md#2-create-your-owners-copy-of-the-platform).
-Require Setup Scanning Tools as well as Aggregate Results
-([step 7](TERRAFORM-MODULE-ADOPTION.md#7-require-the-scan-before-merging)). See
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+`reusable-scan.yml` reads configuration from the reviewed platform repository,
+`agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.
+Set `scanning-repo-ref` to the same full commit SHA as the workflow pin. A reviewed
+mirror needs an explicit `scanning-repository` input and must contain that commit.
+Require setup and scanner jobs as well as aggregation; incomplete scans block.
+See [workflow configuration sources](REUSABLE-WORKFLOWS.md#configs-come-from-the-reviewed-platform-revision).
 
 The job installs an exact `snyk` CLI version from npm (`reusable-scan.yml:508`); bump it deliberately. Up to and including v2.3.2 it installed the latest on each run.
 See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input.
@@ -368,6 +351,6 @@ See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for detailed upgrade instruct
 - [HOOK-REFERENCE.md](HOOK-REFERENCE.md) -- Detailed hook documentation
 - [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md) -- Full suppression process
 - [SEVERITY-MAPPING.md](SEVERITY-MAPPING.md) -- How severities map across tools
-- [SETUP-GUIDE.md](SETUP-GUIDE.md) -- Full installation reference
+- [Getting started](SETUP-GUIDE.md) -- Canonical installation path
 - [MULTI-CLOUD.md](MULTI-CLOUD.md) -- Multi-cloud repository configuration
-- [QUICK-START-5MIN.md](QUICK-START-5MIN.md) -- Initial setup
+- [Getting started](SETUP-GUIDE.md) -- Initial setup

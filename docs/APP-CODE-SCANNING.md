@@ -40,6 +40,20 @@ languages:
 
 ---
 
+## Trusted application tooling
+
+By default, install ESLint 9+ and Prettier with their parsers/plugins outside the
+consumer. Set `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG`, `SCAN_PRETTIER_BIN` and
+`SCAN_PRETTIER_CONFIG` to absolute reviewed external paths. Config discovery from
+the consumer is disabled. Missing trusted inputs block. Lefthook also invokes
+Prettier for generated JSON and Markdown in a Terraform-only adoption.
+
+For a developer-owned repository whose executable configuration and dependencies
+are already trusted, `SCAN_TRUST_REPO_CODE=1` explicitly permits repository-local
+package resolution and configuration. Do not use it for an untrusted checkout.
+This opt-in does not relax other scanners' verified executable boundaries.
+See [trusted-input migration](CONSUMER-MIGRATION.md#trusted-execution-and-output-migration).
+
 ## 2. The build path is **config**, never hardcoded
 
 The single most important design point: `dotnet-format` and `dotnet-build` read the solution
@@ -70,14 +84,15 @@ on worktree files. Push scanners read the selected pushed objects.
 | `semgrep-typescript` | `semgrep --config p/typescript --error` | pre-commit | override via `SEMGREP_RULESET_TYPESCRIPT` |
 | `dotnet-format` | `dotnet format <sln> --verify-no-changes` | pre-commit | solution/working_dir from config |
 | `dotnet-build` | `dotnet build <sln> /p:AnalysisMode=AllEnabledByDefault` | pre-push | Roslyn analyzers; heavier |
-| `eslint` | `eslint --fix` (local/npx) | pre-commit | gates on remaining errors; `stage_fixed` under Lefthook |
+| `eslint` | `eslint --fix` (trusted external tooling by default) | pre-commit | gates on remaining errors; `stage_fixed` under Lefthook |
 | `prettier` | `prettier --write` | pre-commit | auto-format; `stage_fixed` under Lefthook |
 | `sqlfluff` | `sqlfluff lint` | pre-commit | working tree; project dialect when root `.sqlfluff` exists, otherwise ANSI fallback (v3.0.2 behavior) |
 | `validate-scan-config` | validate `scan-config.yaml` vs schema | pre-commit | runs only when the config is staged |
 
-Both **Lefthook** (default) and **pre-commit** invoke these same scripts, so behaviour is
-identical across runners. Hooks stay **< 15s** by scanning staged files only (Semgrep startup
-dominates; the registry pack is cached after first run).
+Both runners can invoke these same scripts, but their shipped manifests differ.
+The pre-commit tier templates focus on Terraform and need explicit application hook
+entries. Performance depends on tool startup, rules, selected files and builds; the
+template budgets are targets rather than guaranteed timings.
 
 ### Windows + agentic friction
 

@@ -1,6 +1,9 @@
 # Tier Upgrade Guide
 
-This guide lists the exact changes needed when upgrading between adoption tiers. Templates are copy-once references -- teams manually merge new hooks into their existing `.pre-commit-config.yaml` to preserve any customizations.
+Install through [Getting started](SETUP-GUIDE.md) first. The differences below are
+for the Terraform pre-commit templates at the selected revision. Lefthook uses
+the same manifest for every tier; changing tier configuration does not rewrite it.
+Compare complete templates before changing an existing installation.
 
 Phase timelines (30/60/90 days) are flexible guidelines. Teams that need more time extend the current phase until criteria are met. There is no mandatory rollback or escalation.
 
@@ -18,25 +21,21 @@ Add the following to your `.pre-commit-config.yaml`:
       - id: check-json
 ```
 
-Update `check-yaml` to add unsafe flag:
-
-```yaml
-      - id: check-yaml
-        args: ["--unsafe"]
-```
+`check-yaml` keeps its existing arguments.
 
 **pre-commit-terraform repo** -- add these hooks:
 
 ```yaml
       - id: terraform_validate
-      - id: terraform_tflint
-        args:
-          - "--args=--config=__GIT_WORKING_DIR__/.scanning/configs/.tflint.hcl"
 ```
 
-**auto-code-scanning repo** -- add this hook:
+**auto-code-scanning repo** -- add these hooks:
 
 ```yaml
+      - id: tflint
+        stages: [pre-push]
+      - id: gitleaks
+        stages: [pre-commit]
       - id: trivy-iac-critical
         stages: [pre-commit]
 ```
@@ -46,7 +45,7 @@ Update `check-yaml` to add unsafe flag:
 Keep all existing starter hooks as-is:
 - trailing-whitespace
 - end-of-file-fixer
-- check-yaml (update args as shown above)
+- check-yaml
 - detect-private-key
 - terraform_fmt
 - trivy-secrets
@@ -84,8 +83,6 @@ Keep all existing starter hooks as-is:
 ```yaml
       - id: trivy-iac-full
         stages: [pre-push]
-      - id: checkov
-        stages: [pre-push]
       - id: checkov-strict
         stages: [pre-push]
       - id: validate-suppressions
@@ -109,8 +106,10 @@ Commitizen (conventional commit enforcement) is available but opt-in:
 
 Keep all existing standard hooks as-is:
 - All pre-commit-hooks (trailing-whitespace, end-of-file-fixer, check-yaml, check-json, detect-private-key)
-- All pre-commit-terraform hooks (terraform_fmt, terraform_validate, terraform_tflint)
+- All pre-commit-terraform hooks (terraform_fmt, terraform_validate)
 - trivy-secrets
+- gitleaks
+- tflint (pre-push)
 - trivy-iac-critical
 
 ### What Changes at Strict
@@ -118,7 +117,6 @@ Keep all existing standard hooks as-is:
 | Hook | Stage | Purpose |
 |------|-------|---------|
 | trivy-iac-full | pre-push | Full severity IaC scan (CRITICAL + HIGH + MEDIUM) |
-| checkov | pre-push | CIS Benchmark policy validation |
 | checkov-strict | pre-push | Hard-fail on CRITICAL + HIGH findings |
 | validate-suppressions | pre-commit | Validates suppression file governance |
 | terraform_docs | pre-commit | Auto-generate Terraform docs |
@@ -133,7 +131,10 @@ When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 2. Add only the new hooks listed above
 3. Keep any custom `args`, `exclude`, or `files` overrides you have added
 4. Keep any additional third-party hooks your team has added
-5. Run `pre-commit run --all-files` to verify everything works
+5. Review custom settings against the current security contract; the setup verifier
+   checks exact shipped hook settings, so customized manifests need separate review
+6. Reinstall the push transaction adapter through setup, then stage a real change
+   and make a scanned commit as in [consumer acceptance](TESTING-GUIDE-CONSUMING-REPO.md)
 
 ## Version Pinning
 
@@ -142,3 +143,9 @@ All templates pin `rev:` to the release they ship in (`v1.0.0` in releases up to
 ```bash
 pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning
 ```
+
+`autoupdate` alone changes only runner revisions. Resolve the target release's full
+SHA, re-vendor complete hooks, shared scripts and schemas, and align every workflow
+and helper pin using [Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releases).
+If strict is for scanning only, set `fix_loop.enabled: false`: its configuration
+template enables that setting by default, independently of installing a fix caller.

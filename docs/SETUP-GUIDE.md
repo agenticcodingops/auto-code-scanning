@@ -1,442 +1,482 @@
-# Setup Guide
+# Getting started
 
-Detailed setup instructions for auto-code-scanning.
-
-As of **v2.0.0**, auto-code-scanning is a reusable **scan->fix platform**: it
-scans application code (C#/.NET, TypeScript/JS, SQL) **and** Terraform, runs
-locally via **Lefthook** (default) or **pre-commit**, and can open an optional
-autonomous **fix-loop** on opted-in PRs. The recommended entry point is the
-one-command orchestrator `setup-scan-fix`.
+Use this guide to add auto-code-scanning to a repository. A **consumer** is a repository
+that uses the platform. A **hook** is a program Git runs before a commit or push.
+**CI** (continuous integration) repeats security checks on the hosted pull request.
+Start with scanning; enable the optional automatic fix workflow only after scans work.
 
 > **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v3.0.6`. <!-- x-release-please-version -->
 
-## Prerequisites
+## 1. Prerequisites
 
-| Requirement | Minimum Version | Used by |
-|------------|----------------|---------|
-| Python | 3.11+ | `scan-config.yaml` rendering, several hooks |
-| Git | 2.0+ | hooks |
-| Bash | 4.4 or later | shell hooks and scripts |
-| Lefthook | 1.6+ | default local runner |
-| pre-commit | 3.0+ | alternative local runner (`--hooks pre-commit`) |
-| GitHub CLI (`gh`) | latest | fix-loop label + secret verification |
-| Trivy | 0.48.0+ | Terraform/secrets scanning |
-| Checkov | 3.0.0+ | Terraform policy scanning |
-| tflint | 0.50.0+ | Terraform linting |
-| Gitleaks | 8.0+ | secret detection |
-| semgrep | 1.60.0+ | app-code SAST (C#, TypeScript) |
-| .NET SDK | 8.0+ | C# format/build (dotnet-format, dotnet-build) |
-| Node.js / npm | LTS | TypeScript (eslint, prettier) |
-| sqlfluff | 3.0+ | SQL linting |
-| Snyk CLI (optional) | 1.0+ | optional Terraform scanning |
+Install tools outside the consumer checkout, including Python virtual environments
+(isolated Python package directories). Verified tools inside the checkout, or links
+into it, are refused even with `SCAN_ALLOW_TOOL_ERRORS=1`. Keep the platform clone
+outside the consumer too. These are supported floors, not a claim that every release
+combination has been tested; the release's exact scanner versions are in
+[version pinning](VERSION-PINNING.md#scanner-versions-in-the-terraform-scan).
 
-## Platform Orchestrator: `setup-scan-fix` (Recommended)
+| Tool | Version | Needed for |
+|---|---|---|
+| Bash | 4.4+ | Dispatcher and shell hooks, including Git Bash on Windows |
+| Python | 3.11+ with PyYAML and jsonschema | Setup, snapshots and validation |
+| PowerShell (`pwsh`) | 7+ | Setup verification on every OS; native Windows hooks |
+| Git | 2.0+ | Repository, index and hooks |
+| Trivy | 0.48.0+; release lock selects 0.75.0 | Secrets and Terraform security |
+| Checkov | 3.0.0+ | Terraform policy and setup verification |
+| TFLint | 0.50.0+; release lock selects 0.64.0 | Terraform lint and setup verification |
+| Gitleaks | 8+; release lock selects 8.30.1 | Additional local secret checks |
+| Lefthook **or** pre-commit | 1.6+ **or** 3.0+ | Git hook runner; Lefthook is the default |
+| Terraform | Match your project's `required_version` | Terraform formatting, validation and setup verification |
+| Node.js / npm | Supported LTS | TypeScript tooling; external Prettier for the Lefthook manifest |
+| Semgrep | 1.60+ | C# and TypeScript security checks |
+| .NET SDK | 8+ or your project's required SDK | C# formatting and builds |
+| SQLFluff | 3+ | SQL linting, if selected |
+| GitHub CLI (`gh`) | Current supported release | Optional fix-loop labels and secret verification |
 
-`setup-scan-fix` is the one-command onboarding for the scan->fix platform. It is
-**idempotent and re-runnable**. There is a PowerShell script and a cross-platform
-Python twin with identical behavior.
+The setup verifier currently checks Terraform tools even in an application-only
+consumer. Provision them when using that verifier. Local tool versions come from
+PATH; they are not set by `scan-config.yaml`.
 
-```powershell
-# Windows (PowerShell)
-.\scripts\setup-scan-fix.ps1 -Languages csharp,typescript -Tier standard -EnableFixLoop
-```
-
-```bash
-# macOS / Linux (Python twin)
-python scripts/setup-scan-fix.py --languages csharp,typescript --tier standard --enable-fix-loop
-```
-
-```powershell
-# Terraform only, AWS
-.\scripts\setup-scan-fix.ps1 -Languages terraform -CloudProvider aws
-
-# Use pre-commit instead of the default Lefthook runner
-.\scripts\setup-scan-fix.ps1 -Languages csharp -HooksRunner pre-commit
-```
-
-**Parameters** (PowerShell `-Name` / Python `--name`):
-
-| Parameter | Values | Notes |
-|-----------|--------|-------|
-| `-Languages` / `--languages` | csv of `csharp,typescript,terraform,sql` | Languages to enable in `scan-config.yaml` |
-| `-Tier` / `--tier` | `starter` \| `standard` \| `strict` | Defaults to `standard` |
-| `-HooksRunner` / `--hooks-runner` | `lefthook` \| `pre-commit` | Defaults to `lefthook` |
-| `-EnableFixLoop` / `--enable-fix-loop` | flag | Turns on `fix_loop`; copies `autonomous-fix.yml`; creates labels; verifies secrets |
-| `-CloudProvider` / `--cloud-provider` | `aws` \| `azure` \| `gcp` | Terraform only; implies `terraform` is enabled |
-| `-RepoPath` / `--repo-path` | path | Target consumer repo (defaults to current dir) |
-| `-Force` / `--force` | flag | Overwrite an existing `scan-config.yaml` |
-
-**What it does (in order):**
-
-1. **Renders `scan-config.yaml`** from `templates/scan-config/<tier>.yaml` via `scripts/render-scan-config.py`, flipping `enabled: true` for your chosen languages (and `fix_loop`, if requested). Re-running with the same args is deterministic.
-2. **Vendors `hooks/`, `schemas/` + shared scripts** (`scan-and-fix`, `check-fix-allowlist.py`, `validate-scan-config.py`, `render-scan-config.py`) into the consumer repo so the runner and Claude bundle have what they need. Vendoring `schemas/` ensures the copied config validator can find `schemas/scan-config.schema.json`.
-3. **Installs the local runner.** Lefthook (default): copies `templates/lefthook/lefthook.yml` to `lefthook.yml` and runs `lefthook install`. pre-commit: writes `.pre-commit-config.yaml` from the tier template and runs `pre-commit install` (+ `--hook-type pre-push`). Both call the **same** `hooks/dispatcher.sh` scripts.
-4. **Copies the Claude Code in-session bundle** (`templates/claude` -> `.claude/`) and the thin caller workflows: `code-security-scan.yml`, `terraform-scan.yml` (when Terraform is enabled), and `autonomous-fix.yml` (when the fix-loop is on).
-5. **Fix-loop only:** creates the `ai-autofix` + `needs-human-review` labels via `gh label create`, then **verifies** (never creates) `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` via `gh secret list`, printing exact creation steps if either is missing.
-6. **Runs `verify-scanning`** to prove the install.
-
-The caller workflows it copies pin the release you ran setup from (`@v2.0.0` in releases up
-to and including v2.3.1: from one of those, move them to the current release before you commit
-them). Keep them pinned.
-
-With the pre-commit runner (`-HooksRunner pre-commit` or `--hooks-runner pre-commit`), the
-copied `.pre-commit-config.yaml` pins this repository at the release you ran setup from.
-Releases up to and including v2.3.1 pinned `rev: v1.0.0`, which is not a tag, so from one of
-them your first `git commit` fails. Before that commit, set the `rev:` to the current
-release, or run
-`pre-commit autoupdate --repo https://github.com/agenticcodingops/auto-code-scanning`;
-see [VERSION-PINNING.md](VERSION-PINNING.md#automatic-update).
-
-### Local Runner: Lefthook (default) vs pre-commit
-
-**Lefthook** is the default: a single Go binary with native Windows support
-(no Python/cp1252 fragility), parallel hook execution, and friction-free
-behavior for autonomous Claude Code loops. **pre-commit** is the fully supported
-alternative (`-HooksRunner pre-commit`). They share the same dispatcher hooks, so
-there is no logic duplication — the dispatcher OS-detects and routes to `.ps1`
-on Windows or `.sh` elsewhere. Bypass: `LEFTHOOK=0 git commit ...` (Lefthook) or
-`git commit --no-verify` (pre-commit); both are audited.
-
-### App-Code Scanning
-
-App-code support is configured under `languages.*` in `scan-config.yaml`:
-
-| Language | Tools |
-|----------|-------|
-| **C# / .NET** | semgrep (`p/csharp`), dotnet-format, dotnet-build (Roslyn analyzers) |
-| **TypeScript / JS** | eslint, prettier, semgrep (`p/typescript`) |
-| **SQL** | sqlfluff |
-| **Terraform** | trivy, tflint, terraform fmt/validate, checkov |
-
-For C#, `csharp.build.solution` and `csharp.build.working_dir` in
-`scan-config.yaml` make the `dotnet` path generic — point them at your solution
-and directory and the same hooks work in any repo layout.
-
-### Fix-Loop Secrets
-
-The optional fix-loop requires two CI secrets. **The platform verifies them; it
-never stores them.**
-
-| Secret | What it is |
-|--------|-----------|
-| **`AUTOFIX_TOKEN`** | A fine-grained PAT scoped to **this repo only**, with **Contents: Read/Write** and **Pull requests: Read/Write**. Used by the reusable workflow to push fixes and update PRs. |
-| **`ANTHROPIC_API_KEY`** | Claude API key (or `CLAUDE_CODE_OAUTH_TOKEN`). |
-
-If either is missing, setup prints the exact `gh secret set ...` command. Add the
-`ai-autofix` label to a PR to opt it into the loop; the loop adds
-`needs-human-review` when it can't safely proceed.
-
-## Terraform Tool Installer: `setup-scanning` (Legacy)
-
-The original `setup-scanning.ps1` / `.py` remains the **Terraform tool
-installer** — it performs Chocolatey/pip installs of Trivy, Checkov, tflint,
-Gitleaks, and pre-commit, and wires up the Terraform pre-commit config. Use it
-when you only need Terraform scanning, or to install the underlying tools. Its
-header points users to `setup-scan-fix` for the full platform.
-
-### Method 1: Cross-Platform Python Setup (Recommended for Terraform-only)
-
-The Python setup script works on macOS, Linux, and Windows.
+On Windows, install Git for Windows (including Git Bash), Python and PowerShell 7
+from your managed package source. Open a new PowerShell 7 terminal after installation.
+Ensure `bash` selects Git Bash rather than the WSL launcher. On macOS:
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider aws --tier starter
+brew install bash powershell python git lefthook terraform node
+export PATH="$(brew --prefix bash)/bin:$PATH"
+bash --version
 ```
 
-**What it does by OS**:
+Persist that PATH in your shell startup file: macOS `/bin/bash` is too old. On Linux,
+install Bash, Git, Python with venv support, PowerShell 7, Terraform, Node.js and your
+runner from their supported packages. Use `python3` instead of `python` below if
+that is your Python 3.11+ command. On all platforms check `bash --version`,
+`python --version`, `pwsh --version`, `git --version` and `terraform --version`.
 
-| OS | Package Manager | Tool Installation |
-|----|----------------|-------------------|
-| macOS | Homebrew | `brew install trivy tflint gitleaks` |
-| Linux (Debian/Ubuntu) | apt | `apt-get install trivy` + pip for others |
-| Linux (RHEL/Fedora) | yum/dnf | Similar to apt path |
-| Windows | Delegates to PS1 | Calls `setup-scanning.ps1` automatically |
-
-**Optional**: If you have a Snyk license, the setup script also installs Snyk CLI via npm (requires Node.js/npm).
-
-**Options**:
-
-```bash
-# Dry run (show what would be done)
-python scripts/setup-scanning.py --cloud-provider azure --dry-run
-
-# Skip tool installation (config only)
-python scripts/setup-scanning.py --cloud-provider gcp --skip-tools
-
-# Force overwrite existing .pre-commit-config.yaml with tier template
-python scripts/setup-scanning.py --cloud-provider aws --tier standard --force
-
-# Verbose output
-python scripts/setup-scanning.py --cloud-provider aws --tier standard --verbose
-```
-
-### Method 2: Windows PowerShell (Admin)
+Install PyYAML, jsonschema and Checkov into an external environment. Example for
+PowerShell (keep this environment active for subsequent steps):
 
 ```powershell
-.\scripts\setup-scanning.ps1 -CloudProvider aws -Tier starter
+python -m venv "$HOME/.venvs/auto-code-scanning"
+& "$HOME/.venvs/auto-code-scanning/Scripts/Activate.ps1"
+python -m pip install PyYAML==6.0.3 jsonschema==4.25.1 checkov==3.3.19
 ```
 
-Uses Chocolatey for tool installation. Requires administrator privileges.
-
-### Method 3: Windows PowerShell (Non-Admin)
-
-```powershell
-.\scripts\setup-scanning-no-admin.ps1 -CloudProvider aws -Tier starter
-```
-
-Uses Scoop and pip for tool installation. No administrator privileges required.
-
-### Method 4: Manual Installation
-
-1. Install required tools:
-
-   **macOS**:
-
-   Shell hooks require **Bash 4.4 or later**. Run `brew install bash` and make
-   sure the installed Bash is first on PATH; the system `/bin/bash` is too old.
-
-   ```bash
-   brew install bash
-   export PATH="$(brew --prefix bash)/bin:$PATH"
-   bash --version  # Confirm 4.4 or later; persist this PATH in your shell startup file.
-   brew install trivy tflint gitleaks
-   pip install pre-commit checkov
-
-   # Optional: Snyk CLI (requires npm and Snyk license)
-   npm install -g snyk && snyk auth
-   ```
-
-   **Linux (Debian/Ubuntu)**:
-   ```bash
-   # Trivy
-   sudo apt-get install wget apt-transport-https gnupg lsb-release
-   wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-   echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-   sudo apt-get update && sudo apt-get install trivy
-
-   # tflint
-   curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-
-   # Gitleaks
-   brew install gitleaks  # or download from GitHub releases
-
-   # Checkov and pre-commit
-   pip install pre-commit checkov
-
-   # Optional: Snyk CLI (requires npm and Snyk license)
-   npm install -g snyk && snyk auth
-   ```
-
-   **Windows (Chocolatey)**:
-   ```powershell
-   choco install trivy tflint gitleaks -y
-   pip install pre-commit checkov
-
-   # Optional: Snyk CLI (requires npm and Snyk license)
-   npm install -g snyk
-   snyk auth
-   ```
-
-2. Copy cloud-specific configs:
-   ```bash
-   mkdir -p .scanning/configs
-   cp configs/aws/.checkov.yaml .scanning/configs/
-   cp configs/aws/.tflint.hcl .scanning/configs/
-   cp configs/aws/policy-overlay.yaml .scanning/configs/
-   ```
-
-3. Copy a tier template, then set the `rev:` of this repository in it to the current
-   release (the template pins the release it ships in; releases up to and including v2.3.1 pin
-   `v1.0.0`, which is not a tag here):
-   ```bash
-   cp templates/starter/pre-commit-config.yaml .pre-commit-config.yaml
-   ```
-
-4. Install hooks:
-   ```bash
-   pre-commit install
-   pre-commit install --hook-type pre-push
-   ```
-
-## Cloud Provider Configuration
-
-During setup, specify your cloud provider to get the correct tool configurations:
+macOS/Linux equivalent:
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider azure
+python3 -m venv "$HOME/.venvs/auto-code-scanning"
+. "$HOME/.venvs/auto-code-scanning/bin/activate"
+python -m pip install PyYAML==6.0.3 jsonschema==4.25.1 checkov==3.3.19
 ```
 
-This copies provider-specific files to `.scanning/configs/`:
-- `.checkov.yaml` - Checkov check exclusions for your cloud
-- `.tflint.hcl` - tflint ruleset and rules for your cloud
-- `policy-overlay.yaml` - Organization-specific policy rules
+Install Lefthook from your managed package source, or install the alternative runner
+with `python -m pip install pre-commit==4.3.0`. Scanner installation commands follow
+in step 4, after obtaining the verified release clone.
 
-See [Multi-Cloud Configuration](MULTI-CLOUD.md) for multi-cloud repositories.
+## 2. Choose a tier and runner
 
-## Tier Selection
+A **tier** is a starting configuration, not a timer. Choose `standard` unless your
+team needs a smaller initial set or stricter policy. The runner manifests and
+`scan-config.yaml` are separate: changing a language's `enabled` flag does not
+remove commands from the installed manifest.
 
-Tiers map to `templates/scan-config/<tier>.yaml`. `setup-scan-fix` renders the
-chosen tier and enables your languages; the legacy `setup-scanning` installer
-uses the matching Terraform pre-commit tier template.
+| Tier | Configuration defaults | Terraform pre-commit template |
+|---|---|---|
+| starter | CRITICAL threshold; formatters; Semgrep disabled | Secrets with Trivy, private-key detection, basic hygiene, Terraform formatting |
+| standard | CRITICAL/HIGH; Semgrep enabled; Checkov/TFLint configured | Adds Gitleaks, Trivy IaC, Terraform validation and push TFLint |
+| strict | CRITICAL/HIGH/MEDIUM; build enabled; fix-loop setting enabled | Adds full push IaC, strict Checkov, suppression validation and terraform-docs |
 
-| Tier | What runs | Blocking severities | Best For |
-|------|-----------|---------------------|----------|
-| **starter** | Secret gate (trivy-secrets, gitleaks) + CRITICAL IaC + app-code SAST/format | CRITICAL | New adopters, minimal friction |
-| **standard** | All starter + full IaC (checkov, tflint) + dotnet-build at pre-push | CRITICAL,HIGH | Most teams |
-| **strict** | All standard + checkov-strict | CRITICAL,HIGH | Security-sensitive projects |
+Lefthook installs the **same manifest for every tier**: secret gates, file-triggered
+language/formatter hooks, and push Checkov, TFLint and .NET build. The tier does not
+rewrite that manifest or make every wrapper read its severity setting. In particular,
+Trivy's `trivy-iac-critical` hook is CRITICAL-only. The pre-commit tier templates are
+Terraform-focused; add application hooks deliberately using [the hook reference](HOOK-REFERENCE.md).
+See [tier upgrades](TIER-UPGRADE-GUIDE.md) for exact template differences.
 
-App-code hooks (semgrep, dotnet-format, eslint, prettier, sqlfluff) run for any
-language you enable in `scan-config.yaml`, regardless of tier; the tier mainly
-governs the heavier pre-push/IaC checks and blocking severities. Snyk IaC remains
-optional. See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for upgrade instructions.
+## 3. Choose languages and repository visibility
 
-## Partial Failure Recovery
+For Terraform choose `--languages terraform --cloud-provider aws` (or `azure` / `gcp`).
+For application code choose `--languages csharp,typescript`; combine all three for
+a mixed repository. SQL linting is available locally with `sql`. Hosted application
+security scanning uses Semgrep for C#/TypeScript and a separate secret scan; it
+does not run all local formatters or SQLFluff.
 
-If the setup script encounters errors installing some tools:
+A public repository can upload SARIF (Static Analysis Results Interchange Format)
+reports to the Security > Code scanning view. For a private repository, confirm
+code scanning is available and enabled for that repository under its plan. If it
+is unavailable, set `upload-sarif: false` on **both** scan callers; scans and their
+gates still run. Upload failures block by default. `fail-on-findings: false` only
+relaxes finding thresholds; incomplete scans still fail.
 
-- **Exit code 0**: All tools installed successfully
-- **Exit code 1**: Setup failed completely (missing dependency, permission error)
-- **Exit code 2**: Partial setup (some tools installed, some failed)
+Every explicit caller permission ceiling, including intermediate reusable callers,
+needs `contents: read`, `actions: read`, `security-events: write` and
+`pull-requests: write`. Keep these even when uploads are disabled: the called jobs
+request them unconditionally. Private SARIF uploads also read workflow-run metadata
+and therefore need `actions: read`. Scanning alone needs no repository secrets.
 
-On partial failure:
-1. The script continues installing remaining tools
-2. Warnings are printed for each failed tool with manual install instructions
-3. Re-running the script is safe (idempotent) -- it skips already-installed tools
-4. Fix the failed tools manually, then re-run to verify
+## 4. Obtain and pin the release
 
-Example partial failure output:
+Run from a directory **outside** your consumer. A release tag names a release;
+a full commit SHA identifies its exact contents. Resolve the tag, then keep this
+clone at that SHA. The commands below use PowerShell:
+
+```powershell
+$Platform = Join-Path $env:TEMP 'acs-platform'
+git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git $Platform
+$Release = (Get-Content "$Platform/version.txt").Trim()
+git -C $Platform fetch origin --tags
+$ScanSha = (git -C $Platform rev-parse "refs/tags/v${Release}^{commit}").Trim()
+git -C $Platform checkout --detach $ScanSha
+$ScanSha
+python "$Platform/scripts/install-scanner.py" trivy
+python "$Platform/scripts/install-scanner.py" tflint
+python "$Platform/scripts/install-scanner.py" gitleaks
+$env:PATH = "$HOME/.local-scanning-tools/bin;$env:PATH"
 ```
-Setting up security scanning for AWS (starter tier)...
-  [OK] Trivy v0.57.0 (>= 0.48.0)
-  [OK] Checkov v3.2.1 (>= 3.0.0)
-  [WARN] tflint installation failed - run manually: brew install tflint
-  [OK] Gitleaks v8.18.0
-  [OK] pre-commit v3.6.0 (>= 3.0.0)
-  [OK] Configs copied to .scanning/configs/
-  [OK] pre-commit hooks installed
 
-Setup complete (4/5 tools). Run 'git commit' to test hooks.
+Inspect the release notes before choosing a release; `version.txt` on the fetched
+default branch identifies the last release. If adopting a different release, set
+`$Release` to its version without the `v` prefix before resolving the tag. If the
+clone directory already exists, use a clean external clone or a different path.
+The installer verifies each archive against the committed SHA-256 before extracting
+the binary. Do not substitute an unverified download script.
+
+macOS/Linux:
+
+```bash
+PLATFORM="$(mktemp -d)/auto-code-scanning"
+git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git "$PLATFORM"
+RELEASE="$(cat "$PLATFORM/version.txt" | tr -d '\r\n')"
+git -C "$PLATFORM" fetch origin --tags
+SCAN_SHA="$(git -C "$PLATFORM" rev-parse "refs/tags/v${RELEASE}^{commit}")"
+git -C "$PLATFORM" checkout --detach "$SCAN_SHA"
+printf '%s\n' "$SCAN_SHA"
+python "$PLATFORM/scripts/install-scanner.py" trivy
+python "$PLATFORM/scripts/install-scanner.py" tflint
+python "$PLATFORM/scripts/install-scanner.py" gitleaks
+export PATH="$HOME/.local-scanning-tools/bin:$PATH"
 ```
 
-## CI/CD Integration
+Keep the resulting SHA for the caller workflows in step 6. Persist the scanner PATH
+and trusted environment variables below in your developer environment.
 
-`setup-scan-fix` copies **thin caller workflows** into `.github/workflows/` that
-`uses:` the reusable workflows in this repo at a pinned tag. **Always pin to a release
-tag or commit SHA, never `@main`.**
+### Windows setup fix after the current release
 
-- **`code-security-scan.yml`** — app-code scanner (C#/TS/SQL). Omit `languages`
-  to auto-detect from `scan-config.yaml`, or pin them explicitly.
-- **`terraform-scan.yml`** — Terraform/IaC scanner (copied when Terraform is enabled).
-- **`autonomous-fix.yml`** — the opt-in fix-loop caller (copied with `-EnableFixLoop`).
-  It owns the privilege boundary and `uses:` the reusable fix-loop at a pinned release.
+The current release's Python setup can fail while reading or forwarding tool output
+on Windows with a non-UTF-8 console code page. The fix in
+[PR 104](https://github.com/agenticcodingops/auto-code-scanning/pull/104) is newer
+than the release tag. Until a release includes it, use this exact reviewed commit
+for Windows setup and all consumer pins. After the clone commands above, run:
 
-App-code caller (`code-security-scan.yml`):
+```powershell
+$ScanSha = '8321adf7020025a5a7a6c7cd8d1780015b18a07a'
+git -C $Platform checkout --detach $ScanSha
+```
+
+Continue with step 5 from that clone. Keep `$ScanSha` for every pin in step 6;
+do not copy the affected setup script from the older release into the consumer.
+The scanner lock is unchanged by this fix. Other platforms can use the release
+pin above. When upgrading, choose a later release that includes this commit.
+
+## 5. Install local hooks
+
+First provision **trusted** TFLint inputs outside the consumer. Review the selected
+cloud configuration and its plugin sources and versions; it must contain no
+`plugin_dir` setting. PowerShell:
+
+```powershell
+$Trusted = Join-Path $HOME '.config/auto-code-scanning/aws'
+New-Item -ItemType Directory -Force $Trusted | Out-Null
+Copy-Item "$Platform/configs/aws/.tflint.hcl" "$Trusted/tflint.hcl"
+$env:SCAN_TFLINT_CONFIG = "$Trusted/tflint.hcl"
+$env:SCAN_TFLINT_PLUGIN_DIR = "$Trusted/plugins"
+```
+
+macOS/Linux:
+
+```bash
+TRUSTED="$HOME/.config/auto-code-scanning/aws"
+mkdir -p "$TRUSTED"
+cp "$PLATFORM/configs/aws/.tflint.hcl" "$TRUSTED/tflint.hcl"
+export SCAN_TFLINT_CONFIG="$TRUSTED/tflint.hcl"
+export SCAN_TFLINT_PLUGIN_DIR="$TRUSTED/plugins"
+```
+
+Use your selected provider consistently in these paths. Keep this configuration
+and plugin cache outside contributor control. The copied in-repository TFLint
+configuration is not used as trusted executable policy.
+
+The Lefthook manifest also formats Markdown and JSON, including generated setup
+files, even in Terraform-only repositories. Before the first commit, install
+Prettier outside the consumer and supply an explicit external config. PowerShell:
+
+```powershell
+$FormatTools = Join-Path $HOME '.config/auto-code-scanning/formatters'
+New-Item -ItemType Directory -Force $FormatTools | Out-Null
+npm install --prefix $FormatTools prettier@3.6.2
+'{}' | Set-Content -Encoding utf8 "$FormatTools/prettier.json"
+'**/schemas/**' | Set-Content -Encoding utf8 "$FormatTools/.prettierignore"
+$env:SCAN_PRETTIER_BIN = "$FormatTools/node_modules/.bin/prettier.cmd"
+$env:SCAN_PRETTIER_CONFIG = "$FormatTools/prettier.json"
+```
+
+macOS/Linux:
+
+```bash
+FORMAT_TOOLS="$HOME/.config/auto-code-scanning/formatters"
+mkdir -p "$FORMAT_TOOLS"
+npm install --prefix "$FORMAT_TOOLS" prettier@3.6.2
+printf '{}\n' > "$FORMAT_TOOLS/prettier.json"
+printf '**/schemas/**\n' > "$FORMAT_TOOLS/.prettierignore"
+export SCAN_PRETTIER_BIN="$FORMAT_TOOLS/node_modules/.bin/prettier"
+export SCAN_PRETTIER_CONFIG="$FORMAT_TOOLS/prettier.json"
+```
+
+Skip that formatter provisioning only if choosing the Terraform pre-commit runner.
+The external ignore file keeps vendored schemas byte-identical; merge its rule if
+you already have an ignore file there. The trusted formatter runs from this external
+directory, so a consumer's own `.prettierignore` does not supply this protection.
+For TypeScript, also provision external ESLint 9+ with reviewed parsers/plugins and
+set `SCAN_ESLINT_BIN` and `SCAN_ESLINT_CONFIG` to its absolute binary/config paths.
+[Application-code scanning](APP-CODE-SCANNING.md) explains the external-tool boundary
+and the explicit trusted-repository alternative. For C#, install Semgrep externally
+and set `languages.csharp.build.working_dir` to the solution directory and `solution`
+relative to that directory (for example `api` and `App.slnx`). Local .NET build and
+format hooks execute project logic; enable them only for repositories you trust.
+
+Now enter the consumer repository root (it must already be a Git repository).
+Run **one** setup command. If selecting strict for scanning only, explicitly set
+`fix_loop.enabled: false` afterwards: the strict template defaults it to true. These examples use Terraform on AWS and standard tier:
+
+```powershell
+python "$Platform/scripts/setup-scan-fix.py" --languages terraform --cloud-provider aws --tier standard --hooks-runner lefthook
+```
+
+macOS/Linux:
+
+```bash
+python "$PLATFORM/scripts/setup-scan-fix.py" --languages terraform --cloud-provider aws --tier standard --hooks-runner lefthook
+```
+
+For application code, replace the language/provider arguments with
+`--languages csharp,typescript`. For the alternative runner use
+`--hooks-runner pre-commit`; setup installs its push transaction adapter too.
+Do not replace that adapter with a plain `pre-commit install --hook-type pre-push`.
+The setup script copies hooks, schemas, shared scripts, provider policy, an optional
+editor integration bundle under `.claude/`, and caller workflows. It overwrites
+vendored files and caller templates; review existing integrations before rerunning.
+An existing `scan-config.yaml` is kept unless `--force` is supplied. Tool installation
+is separate from setup. A nonzero setup result needs investigation before continuing.
+
+Track policy before the first push. Ignore runtime reports while retaining policy:
+
+```gitignore
+.scan-results/
+.scan-baseline/tmp/
+__pycache__/
+.scanning/*
+!.scanning/configs/
+```
+
+Merge these rules into your `.gitignore`. If an older rule ignores `.scanning/`
+entirely, remove that rule or explicitly force-add `.scanning/configs/.checkov.yaml`.
+The push scanner requires that policy in the pushed tree. Also track `scan-config.yaml`,
+`hooks/`, `schemas/`, `scripts/`, your runner file, caller workflows and any editor
+integration you keep. Never put tokens in these files.
+
+Keep vendored shell files at LF line endings. Merge the following into the consumer's
+`.gitattributes` before staging files, especially on Windows:
+
+```gitattributes
+*.sh text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+```
+
+## 6. Configure CI callers
+
+A **caller** is a small workflow that invokes a reusable workflow. Setup copies
+release-tagged callers. Before committing, replace each platform `uses:` tag with
+the full SHA from step 4, and set `scanning-repo-ref` to the **same SHA**.
+Change the provider and scan directory in the Terraform caller as needed.
+These are the release-managed tag examples; use their resolved full SHA in consumers:
 
 ```yaml
-name: Code Security Scan
-on:
-  pull_request:
-    branches: [main, develop]
-  push:
-    branches: [main]
-  workflow_dispatch:
-
 permissions:
   contents: read
   actions: read
-  security-events: write   # upload SARIF
-  pull-requests: write     # PR annotations
-
+  security-events: write
+  pull-requests: write
 jobs:
   code-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.6 # x-release-please-version
     with:
-      # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
-      # languages: "csharp,typescript"
-      category-prefix: "scan-"
       fail-on-findings: true
-```
-
-Every app-code caller with an explicit permission ceiling must grant
-`actions: read`, including public repositories and intermediate reusable
-workflows, even with `upload-sarif: false`. The upload jobs request it
-unconditionally; private repositories also need it for the SARIF upload API to
-read workflow-run metadata.
-
-Terraform caller (`terraform-scan.yml`):
-
-```yaml
-jobs:
+      # upload-sarif: false  # private repository without code scanning
   terraform-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.6 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"          # aws | azure | gcp
-      severity: "CRITICAL,HIGH"
       scanning-repo-ref: "v3.0.6" # x-release-please-version
-    # Optional Snyk IaC (needs SNYK_TOKEN secret):
-    # secrets:
-    #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      # upload-sarif: false  # private repository without code scanning
 ```
 
-`reusable-scan.yml` reads its configs from `auto-code-scanning` under your repository's
-owner, at `scanning-repo-ref`; see
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#configs-come-from-your-owners-copy).
+Keep the copied `pull_request`, `push` and `workflow_dispatch` triggers and adapt
+branch names. IaC helpers default to the published platform repository; a reviewed
+mirror requires explicit `scanning-repository`. There is no requirement to create
+a same-owner platform copy. A Terraform-only consumer may keep the app-code caller
+for its independent secret scan. Do not disable `run-secret-scan` to work around
+an upload problem. For the pre-commit runner, replace the platform repository's
+`rev:` tag with the same full SHA as well.
 
-The fix-loop caller (`autonomous-fix.yml`) runs when a PR carries the `ai-autofix` label
-and a trusted review or review comment triggers it, or when a maintainer dispatches it with a
-PR number (`templates/fix-loop/autonomous-fix.yml:18-26`). The template it copies pins a
-tag; pin the commit instead. Pass only the three secrets
-`autonomous-fix.yml` declares (`AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` and
-`CLAUDE_CODE_OAUTH_TOKEN`) by name, as in
-[step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
-See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the privilege boundary,
-[CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md) for end-to-end fix-loop setup, and
-[REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input, output and permission.
+The optional fix-loop is a separate adoption step:
+[FIX-LOOP.md](FIX-LOOP.md) covers its base policy, label, named secrets and caller
+boundary. When enabling it, pin its `uses:` and `scanning_repo_ref` together too.
 
-## Verification
+## 7. Verify setup
 
-After setup, verify everything is working. `setup-scan-fix` runs
-`verify-scanning` automatically, but you can re-run it any time:
+From the consumer root, run the verifier **from the external platform clone**;
+setup does not vendor all of its dependencies. Choose your actual runner and tier:
+
+```powershell
+pwsh -NoProfile -File "$Platform/scripts/verify-scanning.ps1" -HooksRunner lefthook -Tier standard
+python scripts/validate-scan-config.py
+```
+
+macOS/Linux:
 
 ```bash
-# Re-run the install verifier (PowerShell)
-pwsh -NoProfile -File scripts/verify-scanning.ps1
+pwsh -NoProfile -File "$PLATFORM/scripts/verify-scanning.ps1" -HooksRunner lefthook -Tier standard
+python scripts/validate-scan-config.py
 ```
+
+Expect exit 0 and zero failed verifier checks. An optional missing `.trivyignore`
+can produce a warning. This proves installation, not that every security rule was
+exercised. The verifier checks the shipped runner template exactly, including pre-commit
+revisions. With that alternative runner, verify the generated tag-based template
+before replacing its platform `rev:` with the full SHA, then review that pin change
+and exercise a real commit separately. Customized runner settings need separate review. See [consumer acceptance tests](TESTING-GUIDE-CONSUMING-REPO.md)
+for Git transaction, application and hosted checks.
+
+## 8. Make the first scan and commit
+
+Use a real staged Terraform change so the commit scans more than setup files. For
+a fresh local test repository, this minimal file needs no cloud credentials:
+
+```hcl
+terraform {
+  required_version = ">= 1.0"
+}
+
+variable "example" {
+  type        = string
+  description = "A non-secret onboarding value."
+  default     = "hello"
+}
+```
+
+Save it as `main.tf`, then run these commands from the consumer root on any OS:
 
 ```bash
-# Lefthook (default runner): run a stage against all files
-lefthook run pre-commit --all-files
-
-# pre-commit alternative
-pre-commit run --all-files
-pre-commit run trivy-iac-critical --all-files
-
-# Test the optional Snyk hook (requires Snyk CLI + authentication)
-pre-commit run snyk-iac --all-files --hook-stage pre-push
+git add .
+git diff --cached --name-only
+git commit -m "chore: adopt security scanning"
 ```
 
-## Updating
+Inspect the hook output: secret checks and the Terraform scan should run, with exit
+0 on this clean example. If a formatter edits files, inspect and stage those edits
+and retry the commit. Do not confuse a skipped hook with a completed scan.
+Applicable hooks write `.scanning/last-scan.json`; parallel reporters replace this
+shared file, so the last report wins. A no-input hook may produce no report. The
+writer retries transient sharing/access conflicts within a bounded loop and uses
+atomic replacement; persistent errors block, and unsafe paths stop immediately.
 
-**Platform version (caller workflows):** the copied callers pin `@v2.0.0`.
-To move to a new release, follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md): it moves the
-`uses:` reference and the `scanning-repo-ref` / `scanning_repo_ref` inputs together.
-Never use `@main`. Re-running
-`setup-scan-fix` refreshes the vendored `hooks/`, `schemas/`, scripts, and `.claude/` bundle
-idempotently. It also overwrites the caller workflows with the templates, which pin the
-release you re-run it from, so re-run it before you move the pins, never after.
-
-**pre-commit hooks** (legacy Terraform path):
+For an on-demand Terraform scan (working tree rather than staged bytes):
 
 ```bash
-# Update hooks to latest version
-pre-commit autoupdate
-
-# Update to a specific version
-# Edit .pre-commit-config.yaml and change rev: to desired tag
+python scripts/scan.py . --tools trivy --format json
 ```
 
-See [VERSION-PINNING.md](VERSION-PINNING.md) for version management guidance.
+Exit 0 means clean at the selected threshold, 1 means findings and 2 means a tool
+error. Commit-stage security scanners read a captured index snapshot; unchanged
+Terraform siblings and variable overrides provide context, but reports select
+changed files. SQLFluff and formatters read the working tree. At push, scanners
+read exact pushed objects and select changes for each ref and destination, not the
+current index. See [hook semantics](HOOK-REFERENCE.md) for exclusions and failure rules.
 
-## Troubleshooting
+For a real hosted repository, push normally and open a pull request. Confirm each
+scan job and aggregate gate passes, and check SARIF delivery when enabled. Use the
+full emitted check names in [branch protection](consumer-repo-setup-guide.md#branch-protection).
+A local-only walkthrough stops before pushing and does not prove hosted upload.
 
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.
+## 9. Suppressions and baselines
+
+Fix new findings first. A **suppression** is an approved, expiring exception for an
+exact finding. A **baseline** records reviewed existing debt so new occurrences
+remain visible. Neither is a way to approve an incomplete scan.
+
+Generate current fingerprints without hiding existing exceptions:
+
+```bash
+python scripts/scan.py . --skip-baseline --skip-suppressions --format json
+```
+
+Use schema `2.0` in `.scan-suppressions.yaml` and `.scan-baseline/baseline.json`.
+A `v1:` fingerprint identifies tool, rule, repository path, resource, line range and
+source-content hash; each entry approves one occurrence. Source edits invalidate it.
+HIGH/CRITICAL suppression approval is mandatory and expiry is capped at 180 days.
+Follow [suppression governance](SUPPRESSION-GOVERNANCE.md) for the complete entry format.
+
+Create a baseline from the consumer root after reviewing all selected tools:
+
+```bash
+pwsh -NoProfile -File scripts/create-baseline.ps1 -Tool all -TerraformDir . -CloudProvider aws -Force
+```
+
+The creator uses explicit passive Checkov policy and verified external tools and
+Python. Missing/invalid reports fail and preserve an existing baseline. Review which
+tools actually ran, the occurrence entries and the resulting diff before committing.
+`-MonorepoScope` can restrict modules; default output remains at the repository root
+when invoked from a subdirectory. A separate `-PolicyRoot` checkout must be external.
+
+Pull-request policy comes from the exact base commit; an exception added in the PR
+becomes effective after merging into that base. Unchanged Checkov inline skips can
+be honoured on the same base-approved resource or module with the same justification
+and literal module source. New, changed, ambiguous or unsupported skips remain
+findings. See [inline skip migration](CONSUMER-MIGRATION.md#trusted-base-inline-skip-migration).
+
+## 10. Upgrade between releases
+
+Read the release notes and [v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md), especially
+breaking changes. Resolve the new tag's full SHA into a clean external clone.
+Re-vendor hooks, their complete library, scripts and schemas **byte for byte** from
+that revision. Run setup before moving caller pins: it overwrites caller templates.
+Review and restore consumer-specific settings afterwards; do not silently preserve
+modified shared code. Move every platform `uses:`, hook `rev:`, `scanning-repo-ref`
+and optional `scanning_repo_ref` together to the new SHA. Review config/schema changes
+and repeat verification, a scanned commit and hosted checks before merging.
+[Migration](CONSUMER-MIGRATION.md), [version pinning](VERSION-PINNING.md) and
+[BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) cover older installations and rollback.
+
+## 11. Troubleshooting
+
+| Symptom | Next action |
+|---|---|
+| Bash version diagnostic | Install Bash 4.4+ and put it before the system Bash/WSL launcher on PATH |
+| Python snapshot error | Use external Python 3.11+; check `python -E -P -c "import yaml, jsonschema"` |
+| Tool rejected inside checkout | Move the executable/environment outside both consumer and snapshot; do not use the tool-error override |
+| TFLint setup failure | Restore external `SCAN_TFLINT_CONFIG` and `SCAN_TFLINT_PLUGIN_DIR`; review plugin download diagnostics |
+| Checkov policy rejected | Use the passive key allowlist in [the hook reference](HOOK-REFERENCE.md); executable extensions and module downloads are rejected |
+| Push says policy missing | Track `.scanning/configs/.checkov.yaml` in the pushed commit; a worktree-only file is insufficient |
+| Formatter fails in Terraform-only Lefthook setup | Provision external Prettier: the manifest also formats JSON and Markdown |
+| SARIF permission error | Grant `actions: read` through every caller ceiling; if private code scanning is unavailable set `upload-sarif: false` |
+| Commit fails without a finding | Read snapshot/report/tool diagnostics; incomplete security scans block by default |
+| Setup rerun changed callers | Review generated files and restore your full SHA pins after setup |
+
+More cases: [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Local errors never justify
+assuming the scan was clean; CI scanner/report health remains mandatory.
