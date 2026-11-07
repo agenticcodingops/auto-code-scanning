@@ -38,7 +38,7 @@ installed by every tier:
 
 | Hook | What it checks | Blocks on |
 | ---- | -------------- | --------- |
-| **trivy-iac-full** | Configured misconfiguration severities | Configured threshold |
+| **trivy-iac-full** | All misconfiguration severities (hardcoded, not config-driven) | CRITICAL, HIGH, MEDIUM, LOW |
 | **checkov** | Policy-as-code checks | Per config |
 | **checkov-strict** | Hard-fail CRITICAL+HIGH | CRITICAL, HIGH |
 | **tflint** | Terraform linting rules | Errors |
