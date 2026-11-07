@@ -62,13 +62,6 @@ Use the separate hosted callers below for per-directory provider policy. Any
 custom local multi-cloud runner needs independent transaction and policy tests;
 the shipped setup verifier validates the exact single-provider runner template.
 
-This retained release reference is maintained by release automation; use the
-resolved full commit SHA for actual installations:
-
-```text
-    rev: v3.0.6  # x-release-please-version
-```
-
 ### Step 4: CI/CD for Multi-Cloud
 
 Add one caller workflow file per cloud. Do not use a `strategy.matrix` over one call:

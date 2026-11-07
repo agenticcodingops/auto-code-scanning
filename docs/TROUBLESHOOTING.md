@@ -33,8 +33,8 @@ adds operational cases for Terraform scans.
 # Clear Trivy cache
 trivy clean --all
 
-# Re-download database
-trivy image --download-db-only
+# Re-initialize the misconfiguration checks bundle these hooks use
+trivy config .
 ```
 
 ## Issue 3: Tool Not Found

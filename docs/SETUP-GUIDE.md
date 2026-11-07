@@ -142,9 +142,11 @@ Inspect their upload logs separately. `fail-on-findings: false` only
 relaxes finding thresholds; incomplete scans still fail.
 
 Every explicit caller permission ceiling, including intermediate reusable callers,
-needs `contents: read`, `actions: read`, `security-events: write` and
-`pull-requests: write`. Keep these even when uploads are disabled: the called jobs
-request them unconditionally. Private SARIF uploads also read workflow-run metadata
+needs `contents: read`, `actions: read` and `security-events: write`. Keep these even
+when uploads are disabled: the called jobs request them unconditionally. The Terraform
+caller also needs `pull-requests: write`, for its PR findings-comment job; no job in
+the application-code caller currently uses it, though the shipped template still
+requests it. Private SARIF uploads also read workflow-run metadata
 and therefore need `actions: read`. Scanning alone needs no repository secrets.
 
 ## 4. Obtain and pin the release

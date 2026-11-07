@@ -292,7 +292,7 @@ The scanning hooks work with **AWS**, **Azure**, and **GCP** Terraform code. The
 ### Setting up for Azure
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider azure --tier standard
+python scripts/setup-scan-fix.py --languages terraform --cloud-provider azure --tier standard
 ```
 
 This copies Azure-specific configs to `.scanning/configs/`:
@@ -304,13 +304,13 @@ This copies Azure-specific configs to `.scanning/configs/`:
 ### Setting up for GCP
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider gcp --tier standard
+python scripts/setup-scan-fix.py --languages terraform --cloud-provider gcp --tier standard
 ```
 
 ### Setting up for AWS
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider aws --tier standard
+python scripts/setup-scan-fix.py --languages terraform --cloud-provider aws --tier standard
 ```
 
 ### Switching an existing repo
@@ -319,7 +319,7 @@ If your repo already has scanning installed and you need to switch cloud provide
 
 ```bash
 # Re-run setup with the new provider and --force to overwrite configs
-python scripts/setup-scanning.py --cloud-provider azure --tier standard --force
+python scripts/setup-scan-fix.py --languages terraform --cloud-provider azure --tier standard --force
 
 # Verify the new configs
 ls .scanning/configs/
@@ -348,7 +348,7 @@ The cloud-specific templates (`templates/aws/`, `templates/azure/`, `templates/g
 Upgrade tiers by re-running setup with `--force`:
 
 ```bash
-python scripts/setup-scanning.py --cloud-provider aws --tier strict --force
+python scripts/setup-scan-fix.py --languages terraform --cloud-provider aws --tier strict --force
 ```
 
 See [TIER-UPGRADE-GUIDE.md](TIER-UPGRADE-GUIDE.md) for detailed upgrade instructions.

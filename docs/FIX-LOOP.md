@@ -97,8 +97,10 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 > patch, gates fix paths and secret-scans changed files from that tree, commits it with `git commit-tree`, and pushes that
 > commit with hooks off; `AUTOFIX_TOKEN` is injected only into the final push URL. Point
 > `build_verify_cmd` at a checked-in script under a gated path (e.g.
-> `bash scripts/ci-build-verify.sh`) so it can't be altered in-PR either. See
-> [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
+> `bash scripts/ci-build-verify.sh`) so the fix-loop's own generated patch cannot alter it.
+> `verify` still runs PR-head code, so a PR's own commits can still change that script
+> before the fix-loop runs; the gate protects against the agent, not against the PR itself.
+> See [SECURITY-MODEL.md](SECURITY-MODEL.md) §3, §7.1.
 
 Key enforcement (all mechanical, independent of the prompt):
 - `analyze` runs `claude-code-action` **FIX-ONLY** with a **scoped tool allowlist** (no umbrella
