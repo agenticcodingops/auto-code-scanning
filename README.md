@@ -145,7 +145,9 @@ pytest tests/python/ -v --tb=short
 # ci.yml "Run Pester tests": Pester 5, shell pwsh
 pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
 
-# ci.yml "test-hooks": verified Trivy 0.75.0, Checkov 3.3.19, TFLint 0.64.0 (setup-tflint v4.1.1). Matrix aws, azure, gcp.
+# ci.yml "test-hooks": same verified Trivy 0.75.0, Checkov 3.3.19, TFLint 0.64.0 (setup-tflint v4.1.1) versions and
+# aws/azure/gcp matrix, but hardened beyond it: a dedicated CHECKOV_PYTHON interpreter (see Contributing) and a
+# nonzero-exit check CI's own job does not have (it runs plain `checkov` and ignores its exit code with `|| true`).
 : "${CHECKOV_PYTHON:?Set CHECKOV_PYTHON to the external scanner Python - see Contributing}"
 "$CHECKOV_PYTHON" -m checkov.main --version   # missing interpreter/module must stop the loop
 for cloud in aws azure gcp; do
