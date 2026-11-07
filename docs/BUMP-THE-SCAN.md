@@ -5,7 +5,7 @@ what changes in its results. For installed local hooks, also follow
 [Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releases): re-vendor
 shared files and move every local and hosted pin together.
 
-The current release is `v3.0.6`. <!-- x-release-please-version -->
+The current release is `v3.0.7`. <!-- x-release-please-version -->
 
 Every `file:line` reference on this page, such as `reusable-scan.yml:44`, means that line
 at commit
