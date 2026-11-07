@@ -124,6 +124,9 @@ flowchart TD
 
 ## Local CI parity
 
+Use the [contributor setup](docs/CONTRIBUTING.md#set-up-a-contributor-checkout)
+to keep the Python test/runner packages separate from Checkov's environment.
+
 Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11+ with the pinned test packages below, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI downloads Trivy 0.75.0 with a pinned SHA-256 and pins Checkov 3.3.19, TFLint 0.64.0 and PyYAML 6.0.3. Use the release lock and workflow files for exact pins; locally installed versions can differ.
 
 ```bash
@@ -143,11 +146,12 @@ pytest tests/python/ -v --tb=short
 pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
 
 # ci.yml "test-hooks": verified Trivy 0.75.0, Checkov 3.3.19, TFLint 0.64.0 (setup-tflint v4.1.1). Matrix aws, azure, gcp.
+: "${CHECKOV_PYTHON:?Set CHECKOV_PYTHON to the external scanner Python - see Contributing}"
 for cloud in aws azure gcp; do
   FIXTURE="tests/fixtures/terraform-valid/"; [ -d "${FIXTURE}${cloud}" ] && FIXTURE="${FIXTURE}${cloud}"   # the cloud's own fixture, as CI selects it
   trivy config "$FIXTURE" --severity CRITICAL --exit-code 1 --quiet --skip-check-update
   trivy fs "$FIXTURE" --scanners secret --severity HIGH,CRITICAL --exit-code 1 --quiet
-  checkov -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
+  "$CHECKOV_PYTHON" -m checkov.main -d "$FIXTURE" --config-file "configs/${cloud}/.checkov.yaml" --quiet || true
   tflint --init --config="configs/${cloud}/.tflint.hcl"
 done
 
@@ -284,7 +288,7 @@ sequenceDiagram
     Cfg->>An: enabled == true (on main)
     Note over An: read-only token · confined tools · no push credentials<br/>publishes a scanned text-only patch
     An->>Ap: patch artifact
-    Note over Ap: separate verification job builds without secrets<br/>publication gates + scans the exact tree; runs no project code
+    Note over Ap: separate verification job builds without secrets<br/>publication gates fix paths + scans changed files; runs no project code
     alt patch passes every gate
         Ap->>CI: push via AUTOFIX_TOKEN (re-triggers CI)
         CI-->>PR: ✅ green
@@ -296,7 +300,7 @@ sequenceDiagram
 - **Separate trust boundaries**: analysis tools stay inside the source checkout;
   trusted helpers/settings stay outside it. A healthy isolated secret scan is required
   before publishing a regular-text patch. A separate job builds without secrets;
-  publication runs no project code and gates/scans the exact tree it commits.
+  publication runs no project code and gates fix paths and secret-scans changed files from the exact tree it commits.
 - **Allowlist (not denylist) path gate** from `fix_loop.allowlist_paths` / `gated_paths`.
 - **Activation reads the BASE ref** — a PR can't enable or widen the loop through its own diff.
 - **Label opt-in + non-fork + trusted reviewer** privilege boundary.

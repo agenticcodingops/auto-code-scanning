@@ -133,8 +133,12 @@ When upgrading, do NOT replace your entire `.pre-commit-config.yaml`. Instead:
 4. Keep any additional third-party hooks your team has added
 5. Review custom settings against the current security contract; the setup verifier
    checks exact shipped hook settings, so customized manifests need separate review
-6. Reinstall the push transaction adapter through setup, then stage a real change
-   and make a scanned commit as in [consumer acceptance](TESTING-GUIDE-CONSUMING-REPO.md)
+6. Save reviewed `.scanning/configs/` and caller workflows externally, including
+   full-SHA pins, before rerunning setup
+7. Begin setup/verification with the required entries from the new tier template;
+   reinstall the push transaction adapter through setup
+8. Compare overwritten policy/workflows, restore approved customizations and full
+   SHA pins after template verification, then stage a real change and make a scanned commit as in [consumer acceptance](TESTING-GUIDE-CONSUMING-REPO.md)
 
 ## Version Pinning
 

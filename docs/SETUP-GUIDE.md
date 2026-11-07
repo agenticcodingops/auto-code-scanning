@@ -28,7 +28,7 @@ combination has been tested; the release's exact scanner versions are in
 | Gitleaks | 8+; release lock selects 8.30.1 | Additional local secret checks |
 | Lefthook **or** pre-commit | 1.6+ **or** 3.0+ | Git hook runner; Lefthook is the default |
 | Terraform | Match your project's `required_version` | Terraform formatting, validation and setup verification |
-| Node.js / npm | Supported LTS | TypeScript tooling; external Prettier for the Lefthook manifest |
+| Node.js / npm | Supported long-term support (LTS) release | JavaScript runtime/package manager; external Prettier for Lefthook |
 | Semgrep | 1.60+ | C# and TypeScript security checks |
 | .NET SDK | 8+ or your project's required SDK | C# formatting and builds |
 | SQLFluff | 3+ | SQL linting, if selected |
@@ -71,9 +71,29 @@ python3 -m venv "$HOME/.venvs/auto-code-scanning"
 python -m pip install PyYAML==6.0.3 jsonschema==4.25.1 checkov==3.3.19
 ```
 
-Install Lefthook from your managed package source, or install the alternative runner
-with `python -m pip install pre-commit==4.3.0`. Scanner installation commands follow
-in step 4, after obtaining the verified release clone.
+Install Lefthook from your managed package source. If choosing pre-commit instead,
+keep it in a separate external environment: its virtualenv dependency can require
+a newer `packaging` package than Checkov accepts. In PowerShell:
+
+```powershell
+python -m venv "$HOME/.venvs/acs-pre-commit"
+& "$HOME/.venvs/acs-pre-commit/Scripts/python.exe" -m pip install pre-commit==4.3.0
+$env:PATH = "$HOME/.venvs/auto-code-scanning/Scripts;$HOME/.venvs/acs-pre-commit/Scripts;$env:PATH"
+pre-commit --version
+```
+
+macOS/Linux:
+
+```bash
+python -m venv "$HOME/.venvs/acs-pre-commit"
+"$HOME/.venvs/acs-pre-commit/bin/python" -m pip install pre-commit==4.3.0
+export PATH="$HOME/.venvs/auto-code-scanning/bin:$HOME/.venvs/acs-pre-commit/bin:$PATH"
+pre-commit --version
+```
+
+These paths assume the scanner environment above. Keep its Python first on PATH
+if using different paths, while making the separate runner available. Scanner
+installation commands follow in step 4, after obtaining the verified release clone.
 
 ## 2. Choose a tier and runner
 
@@ -107,7 +127,10 @@ A public repository can upload SARIF (Static Analysis Results Interchange Format
 reports to the Security > Code scanning view. For a private repository, confirm
 code scanning is available and enabled for that repository under its plan. If it
 is unavailable, set `upload-sarif: false` on **both** scan callers; scans and their
-gates still run. Upload failures block by default. `fail-on-findings: false` only
+gates still run. Terraform upload failures fail its separate Upload SARIF job by
+default; require that check if delivery must block merging. Application SARIF upload
+steps tolerate delivery failures, so successful app scan jobs do not prove upload.
+Inspect their upload logs separately. `fail-on-findings: false` only
 relaxes finding thresholds; incomplete scans still fail.
 
 Every explicit caller permission ceiling, including intermediate reusable callers,
@@ -140,6 +163,11 @@ Inspect the release notes before choosing a release; `version.txt` on the fetche
 default branch identifies the last release. If adopting a different release, set
 `$Release` to its version without the `v` prefix before resolving the tag. If the
 clone directory already exists, use a clean external clone or a different path.
+The locked installers support Windows AMD64 (x64), not native Windows ARM64:
+`scanner-downloads.json` has no `windows-arm64` entries. Do not assume these
+commands support an ARM64 Python installation. Use a supported platform for this
+path; no native Windows ARM64 installation has been verified here.
+
 The installer verifies each archive against the committed SHA-256 before extracting
 the binary. Do not substitute an unverified download script.
 
@@ -162,13 +190,14 @@ export PATH="$HOME/.local-scanning-tools/bin:$PATH"
 Keep the resulting SHA for the caller workflows in step 6. Persist the scanner PATH
 and trusted environment variables below in your developer environment.
 
-### Windows setup fix after the current release
+### Windows setup output fix
 
-The current release's Python setup can fail while reading or forwarding tool output
+Release `v3.0.6`'s Python setup can fail while reading or forwarding tool output
 on Windows with a non-UTF-8 console code page. The fix in
 [PR 104](https://github.com/agenticcodingops/auto-code-scanning/pull/104) is newer
-than the release tag. Until a release includes it, use this exact reviewed commit
-for Windows setup and all consumer pins. After the clone commands above, run:
+than that release tag. If your selected release does not include the fix, choose
+a newer release that includes it or use this exact reviewed commit for Windows
+setup and all consumer pins. For the latter, after the clone commands above run:
 
 ```powershell
 $ScanSha = '8321adf7020025a5a7a6c7cd8d1780015b18a07a'
@@ -177,8 +206,8 @@ git -C $Platform checkout --detach $ScanSha
 
 Continue with step 5 from that clone. Keep `$ScanSha` for every pin in step 6;
 do not copy the affected setup script from the older release into the consumer.
-The scanner lock is unchanged by this fix. Other platforms can use the release
-pin above. When upgrading, choose a later release that includes this commit.
+The scanner lock is unchanged by this fix. Other platforms and releases that
+include this commit can use the release pin above without this override.
 
 ## 5. Install local hooks
 
@@ -261,7 +290,10 @@ python "$PLATFORM/scripts/setup-scan-fix.py" --languages terraform --cloud-provi
 ```
 
 For application code, replace the language/provider arguments with
-`--languages csharp,typescript`. For the alternative runner use
+`--languages csharp,typescript`. These arguments render a new config only. If
+`scan-config.yaml` exists, edit the relevant `languages.<name>.enabled` and build/tool
+settings explicitly, preserving reviewed settings; do not assume setup enabled them.
+Use `--force` only after reviewing what replacing the entire config would change. For the alternative runner use
 `--hooks-runner pre-commit`; setup installs its push transaction adapter too.
 Do not replace that adapter with a plain `pre-commit install --hook-type pre-push`.
 The setup script copies hooks, schemas, shared scripts, provider policy, an optional
@@ -303,6 +335,15 @@ A **caller** is a small workflow that invokes a reusable workflow. Setup copies
 release-tagged callers. Before committing, replace each platform `uses:` tag with
 the full SHA from step 4, and set `scanning-repo-ref` to the **same SHA**.
 Change the provider and scan directory in the Terraform caller as needed.
+Before opening the first hosted adoption PR, ensure the target base already
+contains reviewed `scan-config.yaml` and scanner policy. App language detection
+reads the exact base commit; without that config it fails and the dependent secret
+scan cannot run. Bootstrap with a separate reviewed configuration-only PR, validated
+and scanned locally, without adding the new active caller workflows to it. Merge
+that policy first, then rebase the adoption branch and add the callers and remaining
+integration files. Enable the new required checks after their first successful run.
+This keeps policy approval separate from the changes it authorizes.
+
 These are the release-managed tag examples; use their resolved full SHA in consumers:
 
 ```yaml
@@ -388,8 +429,10 @@ git diff --cached --name-only
 git commit -m "chore: adopt security scanning"
 ```
 
-Inspect the hook output: secret checks and the Terraform scan should run, with exit
-0 on this clean example. If a formatter edits files, inspect and stage those edits
+Inspect the hook output: secret checks should run, with exit 0 on this clean
+example. Lefthook and standard/strict pre-commit also run Terraform security checks.
+Starter pre-commit runs Terraform formatting without a Terraform security hook;
+use the on-demand scan below for its Terraform security check. If a formatter edits files, inspect and stage those edits
 and retry the commit. Do not confuse a skipped hook with a completed scan.
 Applicable hooks write `.scanning/last-scan.json`; parallel reporters replace this
 shared file, so the last report wins. A no-input hook may produce no report. The
@@ -409,7 +452,8 @@ changed files. SQLFluff and formatters read the working tree. At push, scanners
 read exact pushed objects and select changes for each ref and destination, not the
 current index. See [hook semantics](HOOK-REFERENCE.md) for exclusions and failure rules.
 
-For a real hosted repository, push normally and open a pull request. Confirm each
+For a real hosted repository, complete the base-policy bootstrap in step 6 before
+opening the PR that enables the callers. Then confirm each
 scan job and aggregate gate passes, and check SARIF delivery when enabled. Use the
 full emitted check names in [branch protection](consumer-repo-setup-guide.md#branch-protection).
 A local-only walkthrough stops before pushing and does not prove hosted upload.
@@ -455,11 +499,18 @@ findings. See [inline skip migration](CONSUMER-MIGRATION.md#trusted-base-inline-
 Read the release notes and [v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md), especially
 breaking changes. Resolve the new tag's full SHA into a clean external clone.
 Re-vendor hooks, their complete library, scripts and schemas **byte for byte** from
-that revision. Run setup before moving caller pins: it overwrites caller templates.
+that revision. For pre-commit, save the current runner config externally, then
+prepare the new tier template with its tag-based `rev:` before setup: an existing
+runner file is preserved, and the verifier requires exact template settings.
+Run setup and template verification before restoring custom runner settings or
+full-SHA hook pins. Setup also overwrites provider policy and caller templates;
+save those files first and compare them afterwards.
 Review and restore consumer-specific settings afterwards; do not silently preserve
 modified shared code. Move every platform `uses:`, hook `rev:`, `scanning-repo-ref`
 and optional `scanning_repo_ref` together to the new SHA. Review config/schema changes
-and repeat verification, a scanned commit and hosted checks before merging.
+and verify the generated template before applying full-SHA hook pins and reviewed
+customizations. Validate and exercise the final configuration with a scanned
+commit and hosted checks before merging; customized manifests need separate review.
 [Migration](CONSUMER-MIGRATION.md), [version pinning](VERSION-PINNING.md) and
 [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) cover older installations and rollback.
 

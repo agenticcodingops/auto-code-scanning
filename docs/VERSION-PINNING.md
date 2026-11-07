@@ -220,8 +220,12 @@ pre-commit run --all-files
 
 # Clear cache if hooks behave unexpectedly
 pre-commit clean
-pre-commit install
+pre-commit install --hook-type pre-commit
 ```
+
+Install any other configured non-push hook types explicitly. Leave the push
+transaction adapter installed by setup in place; default hook-type settings can
+otherwise move it into legacy hook wiring.
 
 Commit-stage security hooks still select the Git index; stage a real test change
 and make a scanned commit. Preserve the setup-installed push transaction adapter:
@@ -234,7 +238,9 @@ The reusable GitHub Actions workflows are pinned the same way, with `@<tag>` (or
 full SHA) — **never `@main`**. Put each call in its own caller workflow file; two calls
 from one caller workflow share a concurrency group (see
 [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#concurrency)). `OWNER` is the owner of
-your repository, and needs its own public copy of `auto-code-scanning`; see
+the published platform (`agenticcodingops`) by default. A reviewed mirror may use
+its own owner; set `scanning-repository` for IaC or `scanning_repo` for the fix
+workflow to that reviewed repository. No same-owner copy is required. See
 [Pin the Commit a Release Tag Points To](#pin-the-commit-a-release-tag-points-to).
 
 ```yaml

@@ -44,8 +44,44 @@ pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersi
 ```
 
 For scanner checks, install the release-locked binaries with
-`scripts/install-scanner.py` and install the policy scanner as described in Getting
-started. Install Semgrep/.NET/Node tooling when exercising their integration suites.
+`scripts/install-scanner.py`. From the contributor root, install all three:
+
+```bash
+python scripts/install-scanner.py trivy
+python scripts/install-scanner.py tflint
+python scripts/install-scanner.py gitleaks
+```
+
+In PowerShell, add their directory with
+`$env:PATH = "$HOME/.local-scanning-tools/bin;$env:PATH"`. In the Git Bash,
+macOS or Linux session used for parity checks, run
+`export PATH="$HOME/.local-scanning-tools/bin:$PATH"` too.
+
+Keep Checkov in a separate external environment from
+the test packages: current runner dependencies and Checkov have incompatible
+`packaging` requirements. Keep the contributor environment active. In PowerShell:
+
+```powershell
+python -m venv "$HOME/.venvs/acs-checkov"
+& "$HOME/.venvs/acs-checkov/Scripts/python.exe" -m pip install checkov==3.3.19
+$env:CHECKOV_PYTHON = "$HOME/.venvs/acs-checkov/Scripts/python.exe".Replace('\', '/')
+& $env:CHECKOV_PYTHON -m checkov.main --version
+```
+
+macOS/Linux:
+
+```bash
+python -m venv "$HOME/.venvs/acs-checkov"
+"$HOME/.venvs/acs-checkov/bin/python" -m pip install checkov==3.3.19
+export CHECKOV_PYTHON="$HOME/.venvs/acs-checkov/bin/python"
+"$CHECKOV_PYTHON" -m checkov.main --version
+```
+
+The README fixture loop uses this explicit interpreter. On Windows, Checkov's
+`.cmd` launcher selects Python from PATH, so adding its directory after the test
+environment is insufficient. Use the module command above for contributor checks;
+consumer hooks use the active scanner environment from Getting started. Keep
+the contributor environment active when running its tests. Install Semgrep/.NET/Node tooling when exercising their integration suites.
 The exact hosted dependency versions live in `.github/workflows/ci.yml`.
 
 ## Run checks before opening a pull request
@@ -116,7 +152,12 @@ library), shared `scripts/` and `schemas/` byte for byte from that revision, the
 updates workflow `uses:`, pre-commit `rev:`, IaC `scanning-repo-ref` and optional
 fix-workflow `scanning_repo_ref` to that same SHA. Setup refreshes caller templates,
 so it runs **before** the consumer restores SHA pins and project-specific settings.
-Review policy/schema migration, repeat installation verification and a scanned
+For pre-commit, save the existing runner configuration externally and begin
+setup/verification with the new tier template and its tag-based revision. Setup
+preserves an existing runner file, and verification requires exact template settings.
+After template verification, restore reviewed customizations and set the full SHA;
+validate and test the final configuration separately. Review policy/schema migration
+and make a scanned
 commit, then verify hosted checks on an adoption pull request. See
 [Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releases) and
 [consumer migration](CONSUMER-MIGRATION.md).
@@ -319,5 +360,5 @@ Never move, delete or re-create a published tag: consumers pin the commit it poi
 
 - PowerShell scripts follow PSScriptAnalyzer rules
 - YAML files must be valid
-- Aim for the documented per-tier performance budgets; first-run downloads are measured separately
+- Aim for the documented per-tier performance budgets; first-run downloads are measured separately. CI also fails when a timed fixture scan exceeds 5000 ms.
 - Documentation required for all features

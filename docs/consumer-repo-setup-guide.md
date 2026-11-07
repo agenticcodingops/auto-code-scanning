@@ -24,6 +24,11 @@ without path filters that could prevent a required check from running.
 
 If Terraform scanning is enabled, also require `Setup Scanning Tools`, `Trivy IaC Scan`,
 `Checkov Policy Scan`, `TFLint Scan` and `Aggregate Results`, plus `Snyk IaC Scan (Optional)` if enabled.
+When Terraform SARIF delivery must block merging, also require `Upload SARIF`
+when uploads are enabled. App-code upload steps tolerate delivery failures, so
+their passing jobs do not guarantee delivered alerts; inspect upload logs separately.
+For first adoption, bootstrap base-approved configuration as described in
+[Getting started CI callers](SETUP-GUIDE.md#6-configure-ci-callers).
 Do not require optional fix-loop jobs: they do not run on every pull request.
 
 ## Optional fix workflow credentials
@@ -48,6 +53,10 @@ Who can apply the opt-in label is part of your trust boundary. Read
 Use [consumer acceptance tests](TESTING-GUIDE-CONSUMING-REPO.md) after installation
 and every upgrade. A clean install verifier does not replace a scanned commit,
 per-language hosted checks and merge protection.
+
+When maintaining C# settings, keep `solution` relative to working_dir: for example,
+`working_dir: "api"` with `solution: "App.slnx"`. Do not repeat `api/` in the
+solution value. Review these paths after moving projects or upgrading the platform.
 
 - Rotate the push credential before expiry.
 - Keep the base-approved build command in a checked-in script under a gated path.

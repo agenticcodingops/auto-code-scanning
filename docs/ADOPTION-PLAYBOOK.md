@@ -130,7 +130,7 @@ Off by default. Enable it deliberately, per repo, once Layer A is mature:
 
 The CI loop confines file tools to the source checkout, keeps trusted helpers and
 settings outside it, scans a text-only patch before publication, runs builds in a
-separate job without secrets, and gates/scans the exact tree before pushing.
+separate job without secrets, and gates fix paths and secret-scans changed files from the exact tree before pushing.
 Read [FIX-LOOP.md](FIX-LOOP.md) and [SECURITY-MODEL.md](SECURITY-MODEL.md) before enabling it.
 
 ### Layer B Readiness Criteria

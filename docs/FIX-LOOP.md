@@ -94,7 +94,7 @@ privilege boundary and `uses:` the reusable workflow at a pinned tag.
 > or the executed build command via its own head diff. `build_verify_cmd` runs in the `verify`
 > job, which holds **no secret** and hands the push job nothing but its result. `apply-and-push`
 > runs no project code: it checks the artifacts' digests, builds one tree from the head and the
-> patch, gates and secret-scans that tree, commits it with `git commit-tree`, and pushes that
+> patch, gates fix paths and secret-scans changed files from that tree, commits it with `git commit-tree`, and pushes that
 > commit with hooks off; `AUTOFIX_TOKEN` is injected only into the final push URL. Point
 > `build_verify_cmd` at a checked-in script under a gated path (e.g.
 > `bash scripts/ci-build-verify.sh`) so it can't be altered in-PR either. See
@@ -113,9 +113,10 @@ Key enforcement (all mechanical, independent of the prompt):
   submodule and other unsupported content without printing it. Diff generation disables
   external drivers and text conversion. Before upload, a checksum-verified secret scanner
   checks the patch outside the checkout,
-  without its configuration or ignore files. Findings, scanner errors and missing reports stop publication. Vetted content is also
-  scanned under original and neutral filenames so filename-sensitive detection is
-  retained without allowing default filename exclusions to hide content.
+  without its configuration or ignore files. Findings, scanner errors and missing reports stop artifact upload. After upload,
+  `apply-and-push` scans changed, non-deleted files from the vetted tree under
+  original and neutral filenames before pushing. This retains filename-sensitive
+  detection without allowing default filename exclusions to hide those files.
   The agent cannot build or test its fix; `verify` does that.
 - The **allowlist gate** (`scripts/check-fix-allowlist.py`) runs in `analyze` **and again** in
   `apply-and-push` (defense in depth): a file must be inside `allowlist_paths` **and** clear of
@@ -129,7 +130,7 @@ Key enforcement (all mechanical, independent of the prompt):
   client may treat the refused request as an error and fail the build, which fails `verify`
   and stops the push. Keep `build_verify_cmd` free of Actions cache saves. The workflow sets
   `cache-mode: none` for its other jobs too, since none of them uses the cache.
-- `apply-and-push` checks out the same SHA, re-gates and re-scans for secrets the exact tree it
+- `apply-and-push` checks out the same SHA, re-gates fix paths and secret-scans added/modified files from the exact tree it
   commits, bumps `.fix-attempts` (hard cap `max_iterations`), and pushes with `AUTOFIX_TOKEN`.
   It restores nothing from the Actions cache, which the PR's code can write to in other runs
   (for example the PR's own CI).

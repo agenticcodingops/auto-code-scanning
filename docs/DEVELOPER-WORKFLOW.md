@@ -97,7 +97,7 @@ security approval, and expiry is capped at 180 days. Follow
 Validate and commit the reviewed registry:
 
 ```bash
-python scripts/validate-suppressions.py .scan-suppressions.yaml
+python scripts/validate-suppressions.py .scan-suppressions.yaml --ci
 git add .scan-suppressions.yaml
 git commit -m "chore: record reviewed occurrence exceptions"
 ```
@@ -151,7 +151,7 @@ See [baselines](SETUP-GUIDE.md#9-suppressions-and-baselines).
 | Skip a specific hook | `SKIP=hook-id git commit -m "message"` |
 | Skip all hooks | `git commit --no-verify -m "message"` |
 | View last scan results | `cat .scanning/last-scan.json` |
-| Validate suppressions | `python scripts/validate-suppressions.py .scan-suppressions.yaml` |
+| Validate suppressions | `python scripts/validate-suppressions.py .scan-suppressions.yaml --ci` |
 | Clear pre-commit cache | `pre-commit clean` |
 | Upgrade installed hooks | Follow [the coordinated upgrade](SETUP-GUIDE.md#10-upgrade-between-releases) |
 
@@ -266,6 +266,10 @@ jobs:
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
+
+In the release-managed caller example above, `OWNER` means the platform owner:
+use `agenticcodingops` by default, or an explicitly reviewed mirror's owner with
+`scanning-repository` set to that mirror. It does not mean the consumer owner.
 
 `reusable-scan.yml` reads configuration from the reviewed platform repository,
 `agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.

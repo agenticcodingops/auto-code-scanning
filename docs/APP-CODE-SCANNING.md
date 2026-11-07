@@ -36,7 +36,10 @@ languages:
       sqlfluff: { enabled: true, stage: pre-commit }
 ```
 
-`setup-scan-fix --languages csharp,typescript,sql` writes this for you from a tier template.
+For a new config, `setup-scan-fix --languages csharp,typescript,sql` renders the
+selected languages from a tier template. An existing `scan-config.yaml` is kept:
+edit its language enablement and build/tool settings deliberately instead of
+assuming setup changed them. Review any full replacement before using `--force`.
 
 ---
 
@@ -44,8 +47,9 @@ languages:
 
 By default, install ESLint 9+ and Prettier with their parsers/plugins outside the
 consumer. Set `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG`, `SCAN_PRETTIER_BIN` and
-`SCAN_PRETTIER_CONFIG` to absolute reviewed external paths. Config discovery from
-the consumer is disabled. Missing trusted inputs block. Lefthook also invokes
+`SCAN_PRETTIER_CONFIG` to absolute reviewed external paths. ESLint config discovery
+from the consumer is disabled. Prettier uses the external config but may also read
+consumer `.editorconfig` settings that the external config does not override. Missing trusted inputs block. Lefthook also invokes
 Prettier for generated JSON and Markdown in a Terraform-only adoption.
 
 For a developer-owned repository whose executable configuration and dependencies

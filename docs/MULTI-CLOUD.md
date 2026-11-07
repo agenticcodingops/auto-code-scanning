@@ -102,6 +102,11 @@ jobs:
       scanning-repo-ref: v3.0.6 # x-release-please-version
 ```
 
+In the retained release-managed caller example, set `OWNER` to `agenticcodingops`
+for the published platform. For a reviewed mirror, use its owner and set
+`scanning-repository` explicitly. Do not substitute the consumer owner unless
+that reviewed platform copy exists there.
+
 `reusable-scan.yml` reads configuration from the reviewed platform repository,
 `agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.
 Set `scanning-repo-ref` to the same full commit SHA as the workflow pin. A reviewed

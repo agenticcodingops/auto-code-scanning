@@ -16,10 +16,10 @@ credentials in test data. A skipped hook does not prove a scanner ran.
 |---|---|---|
 | Installation | Run the external clone's `scripts/verify-scanning.ps1` with the actual runner and tier | Exit 0; no failed checks |
 | Configuration | `python scripts/validate-scan-config.py` | Exit 0 for valid config |
-| Commit | Stage the clean Terraform example in Getting started, then `git commit` | Secret and IaC hooks run; clean commit succeeds |
+| Commit | Make and stage a new clean change to the Terraform example, then `git commit` | Secret and IaC hooks run; clean commit succeeds |
 | Staged security input | Stage a known scanner fixture, then change only its worktree contents and run the security hook | Security decision follows staged content; SQLFluff/formatters follow worktree content |
 | Terraform on demand | `python scripts/scan.py . --tools trivy --format json` | One JSON document on stdout; diagnostics on stderr; 0 clean, 1 findings, 2 tool error |
-| Suppression | `python scripts/validate-suppressions.py .scan-suppressions.yaml` after creating a schema-2.0 registry | Valid entries pass; invalid metadata/expiry blocks |
+| Suppression | `python scripts/validate-suppressions.py .scan-suppressions.yaml --ci` after creating a schema-2.0 registry | Valid entries pass; invalid metadata/expiry blocks |
 | Report | Inspect `.scanning/last-scan.json` after a reporting hook | Valid JSON; rule/location metadata, no raw secret values |
 
 For deliberate finding tests, use the platform's maintained integration fixtures
@@ -32,7 +32,10 @@ unsafe paths, required snapshots, invalid policy or malformed selected reports.
 ### Push transaction without a network push
 
 From the consumer root after committing, feed a real four-field Git transaction
-to the batch runner. This validates a new branch's exact committed tree locally:
+to the batch runner. First commit a new Terraform change in the range selected
+against the destination's tracked default branch. Confirm the selected files and
+scanner output: a transaction with no selected Terraform can pass by skipping both
+scanners. This validates a new branch's exact committed tree locally:
 
 ```powershell
 $Tip = (git rev-parse HEAD).Trim()
@@ -83,16 +86,18 @@ These complement the full [contributor suite](CONTRIBUTING.md); they do not repl
    merge. Restore the clean state through normal reviewed changes.
 4. If adopting the optional fix workflow, confirm `analyze` emits only a text patch
    after its isolated secret scan; `verify` runs builds without secrets; the final
-   job gates and scans the exact committed tree. A gated path or invalid patch
+   job gates fix paths and secret-scans added/modified files from the candidate
+   tree before adding the counter. A gated path or invalid patch
    must route to `needs-human-review`. Use [FIX-LOOP.md](FIX-LOOP.md) for details.
 
 ## Performance and cleanup
 
 Measure representative changed-file commits and push transactions after caches
 are warm. Targets are 5 seconds per hook, 10 seconds per commit stage and 60 seconds
-per push stage; first-run downloads and large builds can take longer. Use
-`scripts/profile-hook-performance.ps1` from the platform and record scope and tool
-versions alongside timings. Historical full-repository timings do not establish
+per push stage; first-run downloads and large builds can take longer. Time the
+installed runner with representative committed/staged inputs and record scanner
+output, exit codes, selected files and tool versions alongside timings. The old
+profiler does not prove a Lefthook or transaction-bound push scan ran. Historical full-repository timings do not establish
 changed-file hook performance.
 
 Keep the disposable repository and logs until results are reviewed. Delete only

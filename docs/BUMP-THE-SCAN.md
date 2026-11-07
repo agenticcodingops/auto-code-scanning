@@ -109,8 +109,8 @@ gh run watch <run-id>
 gh run download <run-id> --name aggregated-results --dir before
 # LC_ALL=C sorts by byte, so step 6 can compare this file from any shell.
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
-       | [.severity, .tool, .rule_id, .file] | @tsv' before/aggregated.json \
-  | LC_ALL=C sort -u > before.tsv
+       | [.severity, .tool, .rule_id, .file, (.resource // ""), (.line // 0), (.end_line // .line // 0), (.fingerprint // "")] | @tsv' before/aggregated.json \
+  | LC_ALL=C sort > before.tsv
 ```
 
 `aggregated.json` lists every finding with `suppressed` and `baseline` flags
@@ -187,15 +187,17 @@ gh run list --workflow terraform-scan.yml --event pull_request \
 gh run watch <run-id>   # the artifact is uploaded even when the gate fails
 gh run download <run-id> --name aggregated-results --dir after
 jq -r '.findings[] | select((.suppressed or .baseline) | not)
-       | [.severity, .tool, .rule_id, .file] | @tsv' after/aggregated.json \
-  | LC_ALL=C sort -u > after.tsv
+       | [.severity, .tool, .rule_id, .file, (.resource // ""), (.line // 0), (.end_line // .line // 0), (.fingerprint // "")] | @tsv' after/aggregated.json \
+  | LC_ALL=C sort > after.tsv
 LC_ALL=C comm -13 before.tsv after.tsv > new.tsv     # failing only after the bump
 LC_ALL=C comm -23 before.tsv after.tsv > gone.tsv    # failing only before the bump
 ```
 
+The TSV identity includes resource, line range and occurrence fingerprint;
+duplicate records are retained rather than collapsed by `sort -u`.
 `comm` needs both files sorted in the collation it runs under, so keep `LC_ALL=C` on every
 `sort` and `comm`. If you made `before.tsv` without it, re-sort it first with
-`LC_ALL=C sort -u -o before.tsv before.tsv`. If `comm` prints "not in sorted order", do
+`LC_ALL=C sort -o before.tsv before.tsv`. If `comm` prints "not in sorted order", do
 not use its output. Download the artifact within a day of the run: it is kept for one day.
 
 Paste `new.tsv` and `gone.tsv` into the pull request description, with the scanner
@@ -289,6 +291,8 @@ runs the scan on the default branch.
    button, only if the bump pull request changed nothing but pins: both also undo the
    Terraform fixes and baseline entries made in step 7.
 2. Restore vendored hooks, schemas and shared scripts from the same previous revision.
+   Restore the pre-upgrade runner file and `.scanning/configs/`, including reviewed
+   consumer-specific settings.
    Remove any baseline or suppression entries you added only for the new release.
 3. Check that the pull request run used the previous release's versions (job summaries
    and the Checkov banner). Its failed checks need not match `before.tsv`: Terraform

@@ -34,7 +34,9 @@ finding.
 - Access to the reviewed platform revision used by the caller and its
   `scanning-repo-ref`; the default is the published platform, not a same-owner copy.
 - Code scanning available on the module repository, if you want the SARIF results there.
-  Upload failures block by default. If private code scanning is unavailable, set
+  Upload failures fail the separate Upload SARIF job by default. Require that
+  check when enabled if delivery must block merging; the five scan checks alone
+  do not guarantee delivery. If private code scanning is unavailable, set
   `upload-sarif: false`; scanning and finding gates still run. By default three uploads run: the Snyk upload is
   skipped unless the Snyk job, which needs `enable-snyk: true`, wrote a SARIF file
   (`reusable-scan.yml:70-74`, `904`).
@@ -80,8 +82,9 @@ should upload SARIF; see [MULTI-CLOUD.md](MULTI-CLOUD.md#step-4-cicd-for-multi-c
 
 ### 2. Create your owner's copy of the platform
 
-This historical step is no longer required. Use the published platform's full
-release commit SHA from Getting started for both the workflow and helper pins.
+This historical step is no longer required. Use the full platform commit SHA
+selected in Getting started for the local installation, workflow and helper pins,
+including its explicit Windows setup-fix exception when applicable.
 If your organization requires a reviewed mirror, set `scanning-repository` to it
 explicitly and ensure it contains that same commit. `OWNER` in the retained
 release-tagged example below means the platform owner, `agenticcodingops`, unless

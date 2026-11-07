@@ -111,7 +111,10 @@ flowchart TD
     p2 --> impl
     s1 --> impl["per-tool implementation<br/>(reads scan-config + STAGED files)"]
     impl --> outcome{"outcome"}
-    outcome -->|"tool missing / transient"| open["WARN · exit 0  (FAIL-OPEN)"]
+    outcome -->|"tool missing / tool error"| compat{"Supported local compatibility opt-in?"}
+    compat -->|"no"| blocked["error · exit 1 · blocks"]
+    compat -->|"yes"| open["WARN · exit 0"]
+    outcome -->|"unsafe input / invalid selected report"| blocked
     outcome -->|"real finding ≥ blocking"| closed["exit 1  (FAIL-CLOSED → blocks)"]
     outcome -->|"clean"| ok["exit 0"]
 ```
@@ -199,19 +202,22 @@ flowchart LR
     subgraph analyze["analyze"]
         a1["untrusted PR / review text: YES"]
         a2["write token: NO"]
-        a3["network egress: NO"]
+        a3["network access: YES<br/>agent tools restricted"]
         a4["output: a patch artifact"]
     end
+    subgraph verify["verify"]
+        v1["base-sourced build command<br/>no secrets"]
+    end
     subgraph apply["apply-and-push"]
-        p1["untrusted input: NO"]
+        p1["vetted artifacts; no project execution"]
         p2["re-checkout exact SHA"]
-        p3["re-run: allowlist gate +<br/>secret scan + build_verify_cmd"]
+        p3["gate fix paths + secret-scan changed files"]
         p4["AUTOFIX_TOKEN: only on the push URL"]
     end
     subgraph flag["flag-human-review"]
         f1["label needs-human-review<br/>on gate / cap / failure"]
     end
-    config --> analyze --> apply
+    config --> analyze --> verify --> apply
     apply -. on failure .-> flag
     config -. disabled .-> flag
 ```
@@ -233,8 +239,8 @@ sequenceDiagram
     Note over Cfg: reads fix_loop.enabled from BASE ref<br/>(the PR diff cannot change the gate)
     Cfg->>An: enabled == true
     Note over An: read-only token · confined tools<br/>reads untrusted review → scanned text patch
-    An->>Ap: patch artifact (+ .fix-attempts counter)
-    Note over Ap: separate verify job builds without secrets<br/>publication gates + scans exact tree; no project code
+    An->>Ap: patch artifact (after isolated patch secret scan)
+    Note over Ap: separate verify job builds without secrets<br/>publication gates fix paths + scans changed files; no project code<br/>counter is added after those checks
     alt every gate passes & under max_iterations
         Ap->>CI: git push (AUTOFIX_TOKEN) → re-triggers CI
         CI-->>PR: ✅
@@ -251,7 +257,7 @@ sequenceDiagram
 | **Base-ref activation** | `config` reads `fix_loop` from `base.sha`, never the PR head — a PR can't enable/widen the loop via its own diff |
 | **Trust boundary** | non-fork + owner check + trusted reviewer list (CodeRabbit / SonarCloud / OWNER·MEMBER·COLLABORATOR) |
 | **Path allowlist** | `scripts/check-fix-allowlist.py` — only `allowlist_paths`, never `gated_paths` (auth/payment/crypto/`.github`/…); fails **closed** on malformed config |
-| **Re-verification** | `apply-and-push` re-runs the allowlist gate + secret scan + `build_verify_cmd` on the exact SHA before pushing |
+| **Re-verification** | `verify` builds without secrets; `apply-and-push` gates fix paths and secret-scans changed files from the candidate tree before pushing |
 | **Iteration cap** | `max_iterations` via a `.fix-attempts` counter → then `needs-human-review` |
 | **Pinned action** | `claude_code_action_ref` SHA-pinned; CVE-2025-66032 is a CLI flaw fixed in CLI 1.0.93, unrelated to the action's version ([VERSION-PINNING](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b)) |
 | **Token scope** | `AUTOFIX_TOKEN` is injected **only** into the final push URL, never written to disk in `analyze` |
