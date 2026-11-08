@@ -3,7 +3,7 @@
 For installation, use [Getting started](SETUP-GUIDE.md). This page covers controls
 and maintenance after adoption; it does not define a second setup path.
 
-> **This guide uses the current release, `v3.0.7`.** <!-- x-release-please-version -->
+> **This guide uses the current release, `v3.0.8`.** <!-- x-release-please-version -->
 
 ## Branch protection
 
@@ -89,12 +89,12 @@ this page. Resolve the named tag to a full SHA and follow Getting started for
 executable installation commands; `<commit-sha>` and `/path/to` are placeholders.
 
 ```text
-git clone --branch v3.0.7 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning  # x-release-please-version
-git commit -m "chore: adopt auto-code-scanning v3.0.7 (scan + fix-loop)"  # x-release-please-version
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.7 # x-release-please-version
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.0.7 x-release-please-version
-      scanning_repo_ref: <commit-sha> # v3.0.7 x-release-please-version
-   `uses:`, `scanning-repo-ref` and `scanning_repo_ref` to the current release, `v3.0.7`.** <!-- x-release-please-version -->
+git clone --branch v3.0.8 https://github.com/agenticcodingops/auto-code-scanning.git /path/to/auto-code-scanning  # x-release-please-version
+git commit -m "chore: adopt auto-code-scanning v3.0.8 (scan + fix-loop)"  # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.8 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.0.8 x-release-please-version
+      scanning_repo_ref: <commit-sha> # v3.0.8 x-release-please-version
+   `uses:`, `scanning-repo-ref` and `scanning_repo_ref` to the current release, `v3.0.8`.** <!-- x-release-please-version -->
 ```
 
 [Application configuration](APP-CODE-SCANNING.md), [workflow inputs](REUSABLE-WORKFLOWS.md),
