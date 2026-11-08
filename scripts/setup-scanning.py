@@ -71,6 +71,8 @@ def run_cmd(cmd, capture=True, check=False):
             cmd,
             capture_output=capture,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=check,
             timeout=300,
         )
@@ -452,6 +454,11 @@ def verify_installation():
 
 def main():
     global verbose
+
+    # Decoded tool output may contain characters a redirected Windows stream cannot encode.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
     parser = argparse.ArgumentParser(
         description="Set up Terraform security scanning tools",
