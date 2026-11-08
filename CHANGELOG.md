@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.8](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.7...v3.0.8) (2026-11-08)
+
+
+### Bug Fixes
+
+* **scan:** decode captured tool output as UTF-8 ([#109](https://github.com/agenticcodingops/auto-code-scanning/issues/109)) ([b814d6a](https://github.com/agenticcodingops/auto-code-scanning/commit/b814d6a0ad931eb8b4cf667f5dd10ea43f4600f6))
+
 ## [3.0.7](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.6...v3.0.7) (2026-11-07)
 
 
