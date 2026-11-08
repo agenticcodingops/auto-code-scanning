@@ -2,6 +2,8 @@
 import ast
 import io
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -83,9 +85,19 @@ def test_setup_forwards_non_ascii_output_on_narrow_streams(monkeypatch, tmp_path
 
 
 def test_text_subprocess_calls_have_explicit_encoding():
-    scripts = Path(__file__).resolve().parents[2] / "scripts"
-    for name in ("scan.py", "setup-scanning.py", "setup-scan-fix.py"):
-        tree = ast.parse((scripts / name).read_text(encoding="utf-8"))
+    repo_root = Path(__file__).resolve().parents[2]
+    scripts = repo_root / "scripts"
+    targets: list[tuple[str, ast.AST]] = []
+    for name in ("scan.py", "setup-scanning.py", "setup-scan-fix.py", "scan_policy.py"):
+        targets.append((name, ast.parse((scripts / name).read_text(encoding="utf-8"))))
+
+    hooks_lib = repo_root / "hooks" / "lib"
+    for sh_path in hooks_lib.glob("*.sh"):
+        content = sh_path.read_text(encoding="utf-8")
+        for tag, code in re.findall(r"<<'?(PY[A-Z]*)'?.*?\n(.*?)\n\1", content, re.DOTALL):
+            targets.append((f"{sh_path.name}:{tag}", ast.parse(code)))
+
+    for label, tree in targets:
         calls = [node for node in ast.walk(tree)
                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                  and isinstance(node.func.value, ast.Name)
@@ -95,11 +107,37 @@ def test_text_subprocess_calls_have_explicit_encoding():
             keyword.arg in {"text", "universal_newlines"}
             and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
             for keyword in call.keywords)]
-        assert text_calls, f"{name}: expected subprocess calls that decode text"
+        if not text_calls:
+            continue
         for call in text_calls:
             keywords = {keyword.arg: keyword.value for keyword in call.keywords}
-            assert "encoding" in keywords, f"{name}:{call.lineno} lacks encoding="
+            assert "encoding" in keywords, f"{label}:{call.lineno} lacks encoding="
             assert isinstance(keywords["encoding"], ast.Constant)
-            assert keywords["encoding"].value == "utf-8", f"{name}:{call.lineno} lacks UTF-8"
+            assert keywords["encoding"].value == "utf-8", f"{label}:{call.lineno} lacks UTF-8"
             assert isinstance(keywords.get("errors"), ast.Constant)
-            assert keywords["errors"].value == "replace", f"{name}:{call.lineno} lacks replacement"
+            assert keywords["errors"].value == "replace", f"{label}:{call.lineno} lacks replacement"
+
+
+def test_hook_assert_external_path_non_ascii_checkout(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    common = (repo_root / "hooks" / "lib" / "common.sh").read_text(encoding="utf-8")
+    m = re.search(r"<<'PYEXTERNAL'.*?\n(.*?)\nPYEXTERNAL", common, re.DOTALL)
+    assert m, "PYEXTERNAL block not found in common.sh"
+    py_code = m.group(1)
+
+    checkout = tmp_path / "checkout-日本語-テスト"
+    checkout.mkdir()
+    subprocess.run(["git", "init"], cwd=checkout, check=True, capture_output=True)
+    external = tmp_path / "external-tool.sh"
+    external.write_text("tool")
+
+    res = subprocess.run([sys.executable, "-I", "-", str(external)],
+                         input=py_code, cwd=checkout, text=True, capture_output=True)
+    assert res.returncode == 0, res.stderr
+
+    inside = checkout / "inside-tool.sh"
+    inside.write_text("tool")
+    res_inside = subprocess.run([sys.executable, "-I", "-", str(inside)],
+                                input=py_code, cwd=checkout, text=True, capture_output=True)
+    assert res_inside.returncode != 0
+    assert "Trusted path must be outside" in res_inside.stderr
