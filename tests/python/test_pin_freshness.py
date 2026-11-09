@@ -61,6 +61,17 @@ def test_extract_all_occurrences_and_report_drift(tmp_path):
     assert "([release](https://github.com/owner/tool/releases/tag/v2.0.0))" in body
 
 
+def test_drift_summarizes_the_majority_and_lists_each_outlier_once(tmp_path):
+    (tmp_path / "one.txt").write_text("pin=1.0\n" * 5 + "pin=0.9\n", encoding="utf-8")
+    entry = pin(("one.txt", "one.txt"))
+    body, failed = pf.report(tmp_path, [entry], client(), "owner/repo", NOW)
+    assert not failed
+    drift = body.split("## Cross-file drift")[1].split("## Lookup")[0]
+    assert "5 locations = 1.0 (for example one.txt:1)" in drift
+    assert drift.count("one.txt:6 = 0.9") == 1
+    assert "one.txt:2 = 1.0" not in drift
+
+
 def test_minimums_do_not_produce_upgrade_or_false_drift(tmp_path):
     (tmp_path / "one.txt").write_text("pin=1.0\npin=1.0.0\n", encoding="utf-8")
     body, failed = pf.report(tmp_path, [pin(policy="minimum")], client(), "owner/repo", NOW)

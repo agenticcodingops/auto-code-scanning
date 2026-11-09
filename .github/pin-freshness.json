@@ -319,7 +319,7 @@
         "type": "pypi",
         "package": "pytest"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "pytest-cov",
@@ -345,7 +345,7 @@
         "type": "pypi",
         "package": "pytest-cov"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "pyyaml",
@@ -399,7 +399,7 @@
         "type": "pypi",
         "package": "PyYAML"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "jsonschema",
@@ -425,7 +425,7 @@
         "type": "pypi",
         "package": "jsonschema"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "pre-commit",
@@ -471,7 +471,7 @@
         "type": "pypi",
         "package": "pre-commit"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "pip",
@@ -489,7 +489,7 @@
         "type": "pypi",
         "package": "pip"
       },
-      "precondition": "If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
       "id": "semgrep-app",

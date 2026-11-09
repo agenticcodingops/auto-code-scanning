@@ -241,6 +241,21 @@ def md(value):
     return re.sub(r"([\\`*_[\]#|@])", r"\\\1", value)
 
 
+def drift_line(label, observed, keep=3):
+    # Group repeated locations by value so one stray copy stands out; summarize only the largest group.
+    groups = {}
+    for file, line, value in dict.fromkeys(observed):
+        groups.setdefault(value, []).append(f"{md(file)}:{line}")
+    majority = max(groups, key=lambda value: len(groups[value]))
+    parts = []
+    for value, places in groups.items():
+        if value == majority and len(places) > keep:
+            parts.append(f"{len(places)} locations = {md(value)} (for example {places[0]})")
+        else:
+            parts.extend(f"{place} = {md(value)}" for place in places)
+    return f"- **{md(label)}**: " + "; ".join(parts)
+
+
 def report(root, pins, client, repository, now):
     outdated, drift, failures, manual, floors = [], [], [], [], []
     for pin in pins:
@@ -248,15 +263,13 @@ def report(root, pins, client, repository, now):
             observed, errors = extract(root, {**mirror, "id": pin["id"] + "/" + mirror["id"]})
             failures.extend(errors)
             if len({value for _, _, value in observed}) > 1:
-                drift.append(f"- **{pin['id']}/{mirror['id']}**: " + "; ".join(
-                    f"{md(file)}:{line} = {md(value)}" for file, line, value in observed))
+                drift.append(drift_line(f"{pin['id']}/{mirror['id']}", observed))
         values, errors = extract(root, pin)
         failures.extend(errors)
         raw = {item[2] for item in values}
         def record_drift(distinct):
             if len(distinct) > 1:
-                drift.append(f"- **{pin['id']}**: " + "; ".join(
-                    f"{md(file)}:{line} = {md(value)}" for file, line, value in values))
+                drift.append(drift_line(pin["id"], values))
         policy = pin.get("policy", "exact")
         note = f" Precondition: {md(pin['precondition'])}" if pin.get("precondition") else ""
         if policy == "manual":
