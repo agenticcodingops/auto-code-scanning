@@ -119,6 +119,15 @@ def extract(root, pin):
     return values, failures
 
 
+def http_reason(exc):
+    # The API's own message says why (rate limit, access policy); the status code alone does not.
+    try:
+        message = json.loads(exc.read(4096).decode("utf-8", errors="replace")).get("message")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return f" ({' '.join(str(message).split())[:200]})" if message else ""
+
+
 class Client:
     def __init__(self, token):
         self.token = token
@@ -143,7 +152,7 @@ class Client:
             with opener.open(request, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            raise ValueError(f"{parsed.netloc}: HTTP {exc.code}") from None
+            raise ValueError(f"{parsed.netloc}: HTTP {exc.code}{http_reason(exc)}") from None
         except urllib.error.URLError:
             raise ValueError(f"{parsed.netloc}: network lookup failed") from None
 
