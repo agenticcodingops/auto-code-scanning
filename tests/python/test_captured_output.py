@@ -123,7 +123,8 @@ def test_text_subprocess_calls_have_explicit_encoding(name, source):
     for call in text_calls:
         keywords = {keyword.arg: keyword.value for keyword in call.keywords}
         captures = call.func.attr == "check_output" or any(
-            (key == "capture_output" and isinstance(value, ast.Constant) and value.value is True)
+            # A variable flag can enable capture too (setup's run_cmd uses one).
+            (key == "capture_output" and not (isinstance(value, ast.Constant) and not value.value))
             or (key in {"stdout", "stderr"} and isinstance(value, ast.Attribute)
                 and isinstance(value.value, ast.Name) and value.value.id == "subprocess"
                 and value.attr == "PIPE")
