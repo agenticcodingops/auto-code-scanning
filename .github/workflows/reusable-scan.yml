@@ -196,7 +196,7 @@ jobs:
         run: python3 .scanning/configs/checkov-consumer-options.py prepare .scanning/configs/.checkov.yaml
 
       - name: Upload config artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: scanning-configs
           path: .scanning/configs/
@@ -323,7 +323,7 @@ jobs:
 
       - name: Upload Trivy results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: trivy-results
           path: |
@@ -426,7 +426,7 @@ jobs:
 
       - name: Upload Checkov results
         if: always() && steps.filter-checkov-artifact.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: checkov-results
           path: |
@@ -589,7 +589,7 @@ jobs:
 
       - name: Upload TFLint results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: tflint-results
           path: tflint-results.json
@@ -668,7 +668,7 @@ jobs:
 
       - name: Upload Snyk results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: snyk-results
           path: |
@@ -737,7 +737,7 @@ jobs:
 
       - name: Upload aggregated results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: aggregated-results
           path: .scan-results/aggregated.json
@@ -1051,7 +1051,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Upload metrics artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: scan-metrics-${{ inputs.cloud-provider }}-${{ github.run_id }}
           path: .scan-results/metrics/scan-metrics.json
