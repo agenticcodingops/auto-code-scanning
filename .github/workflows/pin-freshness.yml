@@ -1,0 +1,69 @@
+name: Pin Freshness
+
+on:
+  schedule:
+    - cron: '23 8 * * 1'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      manifest-path:
+        description: Caller checkout-relative JSON manifest
+        type: string
+        required: false
+        default: .github/pin-freshness.json
+      issue-title:
+        description: Title of the single rolling issue
+        type: string
+        required: false
+        default: Weekly pin freshness
+      scanning-repo-ref:
+        description: Same full commit SHA as the reusable workflow uses pin
+        type: string
+        required: false
+        default: "v3.0.9"  # x-release-please-version
+
+permissions: {}
+
+concurrency:
+  group: pin-freshness-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout caller data
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          path: caller
+          persist-credentials: false
+      - name: Checkout reviewed report script
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: agenticcodingops/auto-code-scanning
+          # The scheduled pilot uses its own revision; reusable callers select the reviewed ref.
+          ref: ${{ inputs.scanning-repo-ref || github.sha }}
+          path: platform
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Select Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: '3.11'
+      - name: Update rolling freshness issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MANIFEST_PATH: ${{ inputs.manifest-path || '.github/pin-freshness.json' }}
+          ISSUE_TITLE: ${{ inputs.issue-title || 'Weekly pin freshness' }}
+          PYTHONUTF8: '1'
+        # Isolated mode excludes caller modules and PYTHONPATH; only reviewed helpers are imported.
+        run: >-
+          python -I -c 'import runpy, sys; from pathlib import Path;
+          script = Path("platform/scripts/pin_freshness.py").resolve();
+          sys.path.insert(0, str(script.parent)); runpy.run_path(str(script), run_name="__main__")'
+          --root caller --manifest "$MANIFEST_PATH" --issue-title "$ISSUE_TITLE"
