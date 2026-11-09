@@ -21,8 +21,21 @@ under `.github/workflows/`; other paths are relative to the repository root.
 | `reusable-scan.yml` | Scans Terraform with Trivy (misconfigurations and secrets), Checkov, TFLint and, optionally, Snyk IaC. Gates on CRITICAL and HIGH findings, uploads SARIF and comments on the pull request. | `templates/workflows/terraform-scan.yml` | `reusable-scan.yml:5-6`, `184-539` |
 | `code-security-scan.yml` | Scans C# and TypeScript with Semgrep, and the whole checkout with a Trivy secret scan. Uploads SARIF. | `templates/workflows/code-security-scan.yml` | `code-security-scan.yml:5-7`, `126-250` |
 | `autonomous-fix.yml` | Proposes a minimal fix to an opted-in pull request in one job. A second job runs the optional build command on the patched code and holds no secret. A third runs no project code: it re-checks the patch with the path gate and a Trivy secret scan of the changed files, then commits and pushes exactly what it checked. It runs no IaC or code scan of its own. | `templates/fix-loop/autonomous-fix.yml` | `autonomous-fix.yml:9-28`, `436-692` |
+| `pin-freshness.yml` | Reports hand-kept versions, drift, failed lookups and dependency PRs open longer than seven days in one rolling issue. | [Pin freshness caller example](PIN-FRESHNESS.md#call-from-another-repository) | [Workflow](../.github/workflows/pin-freshness.yml) |
 
 For a worked Terraform example, see [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md).
+
+## Pin freshness workflow
+
+`pin-freshness.yml` runs here on Mondays at 08:23 UTC and supports
+`workflow_dispatch` and `workflow_call`. Reusable callers supply `manifest-path`
+(default `.github/pin-freshness.json`), `issue-title` (default `Weekly pin freshness`)
+and `scanning-repo-ref` (set it to the same full SHA as the workflow `uses:` pin).
+The caller's files are data; the report script comes from this public repository
+at the reviewed ref. The job needs `contents: read`, `issues: write` and
+`pull-requests: read`, using only `GITHUB_TOKEN`. It changes one marker-identified
+issue and preserves its state. See the [runbook](PIN-FRESHNESS.md) for the manifest
+schema, preview command, report semantics and a minimal caller pinned by SHA.
 
 ## How a Terraform scan runs
 
