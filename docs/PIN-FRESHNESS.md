@@ -61,6 +61,12 @@ issue-write errors exit `2`. Outdated pins and drift alone exit `0`; they need
 review, rather than implying the report job failed. Inspect the failure section
 even when another lookup succeeded. No failure is silently treated as current.
 
+A failure line carries the API's own error message, not just the status code.
+Some upstream organizations enforce an IP allow list that rejects tokens from
+hosted runners even for their public repositories. When a read is refused for
+that reason, the script repeats that one read once without the token; writes are
+never retried this way. If the anonymous read also fails, the report shows it.
+
 ## Preview locally
 
 Use Python 3.11+ and a token already available in `GITHUB_TOKEN` (or `GH_TOKEN`),

@@ -119,19 +119,28 @@ def extract(root, pin):
     return values, failures
 
 
+def http_reason(exc):
+    # The API's own message says why (rate limit, access policy); the status code alone does not.
+    try:
+        message = json.loads(exc.read(4096).decode("utf-8", errors="replace")).get("message")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return f" ({' '.join(str(message).split())[:200]})" if message else ""
+
+
 class Client:
     def __init__(self, token):
         self.token = token
         self.cache = {}
 
-    def request(self, url, method="GET", data=None):
+    def request(self, url, method="GET", data=None, anonymous=False):
         parsed = urllib.parse.urlsplit(url)
         if parsed.scheme != "https" or parsed.netloc not in {"api.github.com", "pypi.org"}:
             raise ValueError("unsupported API origin")
         headers = {"User-Agent": "pin-freshness", "Accept": "application/json"}
         if parsed.netloc == "api.github.com":
             headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
-            if self.token:
+            if self.token and not anonymous:
                 headers["Authorization"] = f"Bearer {self.token}"
         payload = None if data is None else json.dumps(data).encode("utf-8")
         if payload is not None:
@@ -143,7 +152,13 @@ class Client:
             with opener.open(request, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            raise ValueError(f"{parsed.netloc}: HTTP {exc.code}") from None
+            reason = http_reason(exc)
+            # An upstream org's IP allow list rejects tokens from hosted runners even for its public
+            # repositories; an anonymous read is not subject to it and can reach only public data.
+            if (exc.code == 403 and "IP allow list" in reason and method == "GET" and data is None
+                    and self.token and not anonymous):
+                return self.request(url, method, data, anonymous=True)
+            raise ValueError(f"{parsed.netloc}: HTTP {exc.code}{reason}") from None
         except urllib.error.URLError:
             raise ValueError(f"{parsed.netloc}: network lookup failed") from None
 

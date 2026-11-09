@@ -575,10 +575,12 @@ flowchart LR
   coordinated version/checksum lock. The action version and engine version are
   separate selections; a manual bump must preserve `skip-setup-trivy`.
 
-A separate weekly freshness job will compare hand-kept pins (workflow env vars
+A separate weekly freshness job compares hand-kept pins (workflow env vars
 and inputs, script constants, download locks, unsupported templates and docs)
-with upstream releases and report drift for review, preserving the inventory's
+with upstream releases and reports drift for review, preserving the inventory's
 preconditions and excluding release-managed references and historical evidence.
+[PIN-FRESHNESS.md](PIN-FRESHNESS.md) describes the job, its rolling issue and
+how to add a pin to its manifest.
 
 To add a pin, record its location, update mechanism, merge lane and any existing
 precondition in the inventory; confirm the updater supports its filename and
