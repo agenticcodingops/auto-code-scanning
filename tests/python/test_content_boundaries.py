@@ -394,9 +394,13 @@ def test_windows_yaml_reader_keeps_trusted_user_packages(tmp_path, shell):
     else:
         pwsh=shutil.which('pwsh')
         if not pwsh: pytest.skip('PowerShell unavailable')
+        # The reader resolves Application commands, so a function named python
+        # cannot select this interpreter. Match the user site populated above
+        # even when the pytest runner's virtual environment is first on PATH.
+        env['PATH'] = str(Path(base_python).parent)+os.pathsep+env['PATH']
         ps_common=(ROOT/'hooks/lib/common.ps1').as_posix()
         command = [pwsh, '-NoProfile', '-Command',
-                   f". '{ps_common}'; function python {{ & '{Path(base_python).as_posix()}' @args }}; Read-ScanConfigValue -Key setting -Default missing"]
+                   f". '{ps_common}'; Read-ScanConfigValue -Key setting -Default missing"]
     result=subprocess.run(command,cwd=repo,env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     assert result.stdout.strip()=='trusted-user-setting'

@@ -233,9 +233,15 @@ def test_shell_setup_records_runner_and_verification_failures(tmp_path, failed_s
     for name, path, marker in [('runner', tools / 'lefthook.ps1', 'RUNNER_REACHED'),
                                ('verification', platform / 'scripts/verify-scanning.ps1', 'VERIFY_REACHED')]:
         action = ("throw 'fixture launch failure'" if failure == 'launch' else 'exit 7') if failed_step in (name, 'both') else 'exit 0'
-        path.write_text(f"Write-Output '{marker}'\n{action}\n", encoding='utf-8')
+        output = f"Write-Output '{marker}'\n"
+        if name == 'verification':
+            output += ('1..40 | ForEach-Object { Write-Output "verifier-record-$_" }\n'
+                       "Set-Content -LiteralPath $env:VERIFY_COMPLETED -Value 'drained'\n")
+        path.write_text(output + action + '\n', encoding='utf-8')
     env = clean_env()
     env['RUNNER_TOOL'] = str(tools / 'lefthook.ps1')
+    completed = tmp_path / 'verifier-completed'
+    env['VERIFY_COMPLETED'] = str(completed)
     command = ('function Get-Command { param($Name, $CommandType, $ErrorAction) '
                'if ($Name -eq "lefthook") { [pscustomobject]@{ Source=$env:RUNNER_TOOL } } '
                'elseif ($Name -notin @("pre-commit", "gh")) { '
@@ -250,4 +256,7 @@ def test_shell_setup_records_runner_and_verification_failures(tmp_path, failed_s
         if failed_step in (step, 'both'):
             assert f'[OK]   {label}' not in output
     assert 'VERIFY_REACHED' in output
+    assert 'verifier-record-29' in output
+    assert 'verifier-record-30' not in output
+    assert completed.read_text(encoding='utf-8').strip() == 'drained'
     assert (repo / '.github/workflows/code-security-scan.yml').is_file()

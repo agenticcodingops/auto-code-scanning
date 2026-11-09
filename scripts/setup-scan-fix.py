@@ -76,6 +76,8 @@ def main(argv) -> int:
 
     def install_step(command, label):
         try:
+            # Capture drains both streams and waits for the exit status. Any
+            # future display limit must slice only after that completion.
             result = subprocess.run(command, cwd=repo, check=True, text=True, encoding="utf-8", errors="replace", capture_output=True)
         except (OSError, subprocess.CalledProcessError) as exc:
             if isinstance(exc, subprocess.CalledProcessError):

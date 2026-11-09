@@ -1,10 +1,66 @@
 # create-baseline.Tests.ps1
 # Pester 5+ unit tests for scripts/create-baseline.ps1
 
+$ErrorActionPreference = 'Stop'
+
 BeforeAll {
     $ScriptRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $ScriptPath = Join-Path $ScriptRoot "scripts" "create-baseline.ps1"
     $ScriptContent = Get-Content $ScriptPath -Raw
+}
+
+Describe 'Baseline Python discovery' {
+    BeforeAll {
+        $savedCommonLoaded = $global:_CommonPS1Loaded
+        $global:_CommonPS1Loaded = $false
+        . (Join-Path $ScriptRoot 'hooks/lib/common.ps1')
+        $ast = [Management.Automation.Language.Parser]::ParseInput($ScriptContent, [ref]$null, [ref]$null)
+        $discovery = $ast.Find({ param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Find-BaselinePython'
+        }, $true)
+        . ([scriptblock]::Create($discovery.Extent.Text))
+    }
+
+    AfterAll { $global:_CommonPS1Loaded = $savedCommonLoaded }
+
+    BeforeEach {
+        $onWindows = [Environment]::OSVersion.Platform -eq 'Win32NT'
+        $sourceRoot = $ScriptRoot
+        $TerraformDir = '.'
+        $scopedDirs = @()
+        $script:aliasDirectory = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'aliases') -Force
+        $script:opaqueAlias = Join-Path $script:aliasDirectory.FullName $(if ($onWindows) { 'python.exe' } else { 'python' })
+        Set-Content -LiteralPath $script:opaqueAlias -Value 'must never execute'
+        if (-not $onWindows) { & chmod +x $script:opaqueAlias }
+        $nextApplication = Join-Path $script:aliasDirectory.FullName $(if ($onWindows) { 'python3.exe' } else { 'python3' })
+        Set-Content -LiteralPath $nextApplication -Value 'must only execute the verified path'
+        if (-not $onWindows) { & chmod +x $nextApplication }
+        $script:fallback = Join-Path $TestDrive 'verified-python.ps1'
+        Set-Content -LiteralPath $script:fallback -Value '$global:LASTEXITCODE = 0'
+        $script:savedPath = $env:PATH
+        $env:PATH = $script:aliasDirectory.FullName + [IO.Path]::PathSeparator + $env:PATH
+        Mock Resolve-VerifiedPython {
+            if ($Name -eq 'python') {
+                Write-Error 'Cannot resolve trusted path link' -ErrorId UnresolvableTrustedPathLink -ErrorAction Stop
+            }
+            return $script:fallback
+        }
+    }
+
+    AfterEach { $env:PATH = $script:savedPath }
+
+    It 'Skips an unresolvable alias first on PATH and tries the next application' {
+        (Get-Command python -CommandType Application | Select-Object -First 1).Source | Should -Be $script:opaqueAlias
+        Find-BaselinePython | Should -Be $script:fallback
+        Should -Invoke Resolve-VerifiedPython -Times 1 -Exactly -ParameterFilter { $Name -eq 'python' }
+        Should -Invoke Resolve-VerifiedPython -Times 1 -Exactly -ParameterFilter { $Name -eq 'python3' }
+    }
+
+    It 'Still stops on every other verification failure' {
+        Mock Resolve-VerifiedPython { throw 'Python must resolve outside the scanned and consumer checkouts' }
+        { Find-BaselinePython } | Should -Throw '*must resolve outside*'
+        Should -Invoke Resolve-VerifiedPython -Times 1 -Exactly
+    }
 }
 
 Describe "create-baseline.ps1" {
