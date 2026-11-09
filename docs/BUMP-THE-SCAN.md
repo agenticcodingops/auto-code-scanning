@@ -308,6 +308,8 @@ runs the scan on the default branch.
 ## References
 
 - [VERSION-PINNING.md](VERSION-PINNING.md): pinning rules and scanner versions.
+- [Repository pin inventory](VERSION-PINNING.md#repository-pin-inventory): maintainer
+  snapshot of repeated pins, update lanes, existing preconditions and drift.
 - [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md): inputs, outputs and behaviour of
   `reusable-scan.yml`.
 - [SUPPRESSION-GOVERNANCE.md](SUPPRESSION-GOVERNANCE.md): approval and expiry of
