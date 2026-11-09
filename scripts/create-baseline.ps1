@@ -149,7 +149,13 @@ function Find-BaselinePython {
     $scanDirs = if ($scopedDirs.Count -gt 0) { $scopedDirs } else { @($TerraformDir) }
     foreach ($name in @('python', 'python3', 'py')) {
         if (-not (Get-Command $name -CommandType Application -ErrorAction SilentlyContinue)) { continue }
-        $candidate = Resolve-VerifiedPython -Name $name -AdditionalRoots (@($sourceRoot) + $scanDirs)
+        try { $candidate = Resolve-VerifiedPython -Name $name -AdditionalRoots (@($sourceRoot) + $scanDirs) }
+        catch {
+            # The resolver checks lexical and invoked identities before
+            # returning this error. Only opaque external aliases may skip.
+            if ($_.FullyQualifiedErrorId -like 'UnresolvableTrustedPathLink*') { continue }
+            throw
+        }
         try {
             & $candidate -E -P -c 'pass' 2>$null
             if ($LASTEXITCODE -eq 0) { return $candidate }
