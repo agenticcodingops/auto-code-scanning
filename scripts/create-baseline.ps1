@@ -204,7 +204,7 @@ function New-TrivyBaseline {
                 }
             }
             catch {
-                throw "Failed to parse Trivy output for $dir"
+                throw "Failed to parse Trivy JSON output for scan path '$dir' while creating '$metadataFile'"
             }
         }
     }
@@ -236,9 +236,13 @@ function New-CheckovBaseline {
             $checkovJson = & $scanner -d $dir --framework terraform --output json --compact --config-file $policyFile 2>$null
             if ($LASTEXITCODE -notin @(0, 1)) { throw "Checkov scan failed for $dir (exit $LASTEXITCODE)" }
             if (-not $checkovJson) { throw "Checkov returned no report for $dir" }
+            try { $checkovResults = ($checkovJson -join "`n") | ConvertFrom-Json }
+            catch {
+                throw "Failed to parse Checkov JSON output for scan path '$dir' while creating '$metadataFile'"
+            }
             $baseline.checkov_reports += @{
                 scan_directory = Resolve-HookPath $dir
-                report = ($checkovJson -join "`n") | ConvertFrom-Json
+                report = $checkovResults
                 baselined_date = $dateStamp
             }
         }
@@ -301,7 +305,7 @@ function New-TflintBaseline {
                 }
             }
             catch {
-                throw "Failed to parse tflint output for $dir"
+                throw "Failed to parse tflint JSON output for scan path '$dir' while creating '$metadataFile'"
             }
         }
     }

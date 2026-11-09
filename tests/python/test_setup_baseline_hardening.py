@@ -307,6 +307,11 @@ def test_baseline_invalid_report_preserves_existing_file(tmp_path, tool, report)
     assert result.returncode != 0, result.stdout + result.stderr
     assert Path(env['BASELINE_TRACE']).exists()
     assert baseline.read_text(encoding="utf-8") == 'existing reviewed baseline'
+    if report == '{':
+        scanner = {'trivy': 'Trivy', 'checkov': 'Checkov', 'tflint': 'tflint'}[tool]
+        output = result.stdout + result.stderr
+        assert f"Failed to parse {scanner} JSON output for scan path '.'" in output
+        assert str(baseline) in output
 
 
 def test_baseline_rejects_linked_plugin_cache_before_scanner_runs(tmp_path):
