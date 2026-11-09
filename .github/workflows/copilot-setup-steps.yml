@@ -1,6 +1,6 @@
 # Copilot cloud agent environment, from the template in agenticcodingops/dev-environments (copilot/).
 # Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.66.0,
-# Trivy v0.76.2, Checkov 3.3.19, and Pester 5.
+# Trivy v0.76.2, Checkov 3.4.3, and Pester 5.
 # Dropped: .NET and Terraform. This repository holds Terraform fixtures only.
 # The workflow must be on the default branch to take effect, and the job must stay named copilot-setup-steps.
 # It runs before Copilot starts working. The pull_request trigger below tests the file in the PR that adds it.
@@ -38,7 +38,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python test tools
-        run: pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 pre-commit==4.3.0
+        run: pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 pre-commit==4.7.0
 
       # Binary pin matches reusable-scan.yml. That workflow's setup action is v4.1.1;
       # this file uses the template's v6.3.2 pin of the same action.
@@ -83,10 +83,15 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/trivy-bin" trivy
           echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
 
-      # reusable-scan.yml pins checkov-action v12.3125.0 and notes that equals Checkov 3.3.19.
-      # ci.yml installs Checkov with an unpinned pip install.
+      # reusable-scan.yml pins checkov-action v12.3139.0 and notes that equals Checkov 3.4.3.
+      # Keep Checkov separate from the test runner's packaging dependencies.
       - name: Install Checkov
-        run: pip install checkov==3.3.19
+        run: |
+          python -m venv "$RUNNER_TEMP/checkov"
+          "$RUNNER_TEMP/checkov/bin/python" -m pip install checkov==3.4.3
+          mkdir -p "$RUNNER_TEMP/checkov-launcher"
+          ln -s "$RUNNER_TEMP/checkov/bin/checkov" "$RUNNER_TEMP/checkov-launcher/checkov"
+          echo "$RUNNER_TEMP/checkov-launcher" >> "$GITHUB_PATH"
 
       # PowerShell 7 ships on ubuntu-latest. Install Pester 5 only if the image lacks it.
       # CI imports Pester with -MinimumVersion 5.0.
