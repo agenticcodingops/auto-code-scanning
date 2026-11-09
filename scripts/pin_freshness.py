@@ -119,6 +119,10 @@ def extract(root, pin):
     return values, failures
 
 
+class ResultCap(ValueError):
+    """A GitHub list stopped at its 1,000-result cap before the last page."""
+
+
 def http_reason(exc):
     # The API's own message says why (rate limit, access policy); the status code alone does not.
     try:
@@ -166,13 +170,32 @@ class Client:
         rows = []
         for page in range(1, 101):
             separator = "&" if "?" in path else "?"
-            batch = self.request(f"{API}{path}{separator}per_page=100&page={page}")
+            try:
+                batch = self.request(f"{API}{path}{separator}per_page=100&page={page}")
+            except ValueError as exc:
+                # GitHub refuses list pages past 1,000 results; the rows read so far are incomplete.
+                if "HTTP 422" in str(exc) and "first 1000 results" in str(exc):
+                    raise ResultCap(f"{exc}; list is incomplete") from None
+                raise
             if not isinstance(batch, list):
                 raise ValueError("expected an API list")
             rows.extend(batch)
             if len(batch) < 100:
                 return rows
         raise ValueError("API pagination exceeded 100 pages; result is incomplete")
+
+    def all_tags(self, repo):
+        refs = self.request(f"{API}/repos/{repo}/git/matching-refs/tags/")
+        if not isinstance(refs, list):
+            raise ValueError("expected an API list")
+        rows = []
+        for ref in refs:
+            name = ref["ref"].removeprefix("refs/tags/")
+            target = ref.get("object") or {}
+            # A lightweight tag points at its commit; an annotated tag's ref names the tag object, which
+            # is not the commit a pin records, so it gives a version but no revision mapping.
+            rows.append((name, target.get("sha") if target.get("type") == "commit" else None, False))
+        return rows
 
     def upstream(self, source):
         key = json.dumps(source, sort_keys=True)
@@ -204,10 +227,17 @@ class Client:
             repo = source["repo"]
             kind = "releases" if source["type"] == "github_releases" else "tags"
             pattern = re.compile(source.get("tag_pattern", r"v?(?P<version>\d+(?:\.\d+)*)"))
-            for row in self.pages(f"/repos/{repo}/{kind}"):
-                if row.get("draft") or row.get("prerelease"):
-                    continue
-                tag = row["tag_name"] if kind == "releases" else row["name"]
+            capped = False
+            try:
+                rows = [(row["tag_name"] if kind == "releases" else row["name"],
+                         None if kind == "releases" else row["commit"]["sha"], kind == "releases")
+                        for row in self.pages(f"/repos/{repo}/{kind}")
+                        if not (row.get("draft") or row.get("prerelease"))]
+            except ResultCap:
+                # Past GitHub's 1,000-result list cap, read every tag ref in one unpaginated response so
+                # the highest version is computed over the complete set, never a truncated list.
+                rows, capped = self.all_tags(repo), True
+            for tag, sha, released in rows:
                 match = pattern.fullmatch(tag)
                 if not match:
                     continue
@@ -216,18 +246,33 @@ class Client:
                     parsed = version(name)
                 except ValueError:
                     continue
-                route = "releases/tag" if kind == "releases" else "tree"
+                route = "releases/tag" if released else "tree"
                 url = f"https://github.com/{repo}/{route}/{urllib.parse.quote(tag, safe='')}"
-                candidates.append((parsed, name, url))
-                if kind == "tags":
-                    sha = row["commit"]["sha"]
+                candidates.append((parsed, name, url, tag))
+                if kind == "tags" and sha:
                     # Major aliases and exact tags can identify the same commit.
                     if sha not in revisions or version(revisions[sha]) < parsed:
                         revisions[sha] = name
+            if capped and kind == "releases":
+                # A tag alone does not prove a published stable release: confirm the highest tags against
+                # their release records, newest first, and report the lookup incomplete if none qualifies.
+                return (*self.published_release(repo, candidates), revisions)
         if not candidates:
             raise ValueError("no stable numeric upstream releases found")
         latest = max(candidates)
         return latest[1], latest[2], revisions
+
+    def published_release(self, repo, candidates, limit=20):
+        for _, name, _, tag in sorted(candidates, reverse=True)[:limit]:
+            try:
+                release = self.request(f"{API}/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+            except ValueError as exc:
+                if "HTTP 404" in str(exc):
+                    continue  # a tag with no published release
+                raise
+            if not (release.get("draft") or release.get("prerelease")):
+                return name, f"https://github.com/{repo}/releases/tag/{urllib.parse.quote(tag, safe='')}"
+        raise ResultCap(f"no published stable release among the {limit} highest tags; lookup incomplete")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
