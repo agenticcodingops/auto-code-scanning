@@ -502,6 +502,92 @@ If a pre-commit upgrade causes issues:
    pre-commit run --all-files
    ```
 
+## How pin updates arrive
+
+[`.github/dependabot.yml`](../.github/dependabot.yml) schedules version checks
+every Monday at 06:00 UTC (`Etc/UTC`). Each configured ecosystem gets one group
+for patch and minor updates; majors remain individual PRs. Up to five version
+update PRs per ecosystem can be open. PRs carry the `dependencies` label, which
+the orchestrator must create if absent. This repository is the pilot for the
+org-wide plan; the shared template will be lifted from it later.
+
+Updates start with `chore(deps)`, hidden from release-please, and ship with the
+next release. Before merging a bump that moves a scanner engine or changes scan
+behaviour for callers, retitle it `fix(deps)` and add a one-line release note.
+For example, a deliberate `bridgecrewio/checkov-action` bump that installs a
+newer Checkov becomes `fix(deps): update the Checkov scanner engine`, with a note
+such as "Terraform scans now use the newer Checkov engine and its updated rules."
+That visible commit triggers a release through the normal release PR process.
+
+Bot-opened update PRs receive no automatic review: the review workflows skip
+bot PRs. The orchestrator requests a review of each update PR's current head.
+Agents may merge patch/minor Actions bumps only with a clean review naming that
+head, green checks and at least 15 minutes since the last push. The operator
+handles majors, Terraform CLI/providers, language runtimes, anything touching a
+production-facing workflow, and any pin requiring re-measurement. General hook
+and package updates also stay with the operator, as the inventory records. A
+group containing any operator-only change waits for the operator as a whole.
+
+```mermaid
+flowchart LR
+    schedule["Monday 06:00 UTC"] --> grouped["Grouped patch/minor PR; separate majors"]
+    grouped --> review["Review current head; green checks; wait 15 minutes"]
+    review --> lane{"Merge lane"}
+    lane --> agent["Agent: eligible Actions patch/minor"]
+    lane --> operator["Operator: exceptions and other ecosystems"]
+    agent --> merged["Merge"]
+    operator --> merged
+    merged --> release["fix(deps): release PR; chore(deps): next release"]
+```
+
+### Coverage and exclusions
+
+- `github-actions` at `/` covers external `uses:` refs in `.github/workflows/`
+  and root `action.yml`/`action.yaml`, per the
+  [directory reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#directories-or-directory).
+  The documented Actions configuration uses `/`; no extra template directories
+  are configured. Shipped workflow callers under `templates/workflows/` and
+  `templates/fix-loop/` remain release-managed. There are no composite action
+  manifests under `.github/` today; a future nested composite needs a coverage
+  check rather than an assumption that `/` recurses.
+- `pre-commit` at `/scripts` covers its `.pre-commit-config.yaml`. The
+  [supported ecosystems reference](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories#pre-commit)
+  now lists it without beta enablement. Its dependency name is the hook repository
+  URL, so the ignore for this repository protects its marked hook revision;
+  release-please owns that revision.
+  The six `templates/{starter,standard,strict,aws,azure,gcp}/pre-commit-config.yaml`
+  files lack the leading dot required by the
+  [updater's file matcher](https://github.com/dependabot/dependabot-core/blob/main/pre_commit/lib/dependabot/pre_commit/file_fetcher.rb).
+  Their external revs need freshness reporting and coordinated manual changes;
+  their own-platform revs remain release-managed. The optional Commitizen hook
+  is commented out. Current SHA comments are ordinary version comments, not
+  `frozen:` selectors; the support reference says such hook updates can target
+  default-branch HEAD, so the operator must verify a released tag and coordinate
+  all copies before merging a hook update.
+- `anthropics/claude-code-action` is ignored for **every** update type and every
+  occurrence: the 2026-11-01 decision requires manual re-measurement because a
+  bump moves the bundled CLI, plus coordinated config mirrors (P1/P2 below).
+- `bridgecrewio/checkov-action` is ignored for every update type: P3 requires
+  choosing the embedded Checkov engine deliberately, reviewing its behaviour
+  and releasing it with the matching install strings.
+- `aquasecurity/trivy-action` is ignored for every update type: its inventory
+  rows carry P4, requiring preservation of verified engine downloads and their
+  coordinated version/checksum lock. The action version and engine version are
+  separate selections; a manual bump must preserve `skip-setup-trivy`.
+
+A separate weekly freshness job will compare hand-kept pins (workflow env vars
+and inputs, script constants, download locks, unsupported templates and docs)
+with upstream releases and report drift for review, preserving the inventory's
+preconditions and excluding release-managed references and historical evidence.
+
+To add a pin, record its location, update mechanism, merge lane and any existing
+precondition in the inventory; confirm the updater supports its filename and
+directory, then add it to the existing ecosystem entry or add an entry with the
+same schedule, grouping, labels and commit prefix. Protect release-managed and
+conditional pins with a documented ignore, or put unreadable pins in the
+freshness inventory. Extend [the policy test](../tests/python/test_dependabot_config.py)
+and run the contributor checks before opening the PR.
+
 ## Repository pin inventory
 
 Snapshot of commit `c09ec31`, checked 2026-11-09 for issue #38. This section records
@@ -639,9 +725,11 @@ Checkov remain scanner entries above.
 | pip | `25.2` | [`scripts/setup-scanning-no-admin.ps1`](../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../scripts/setup-scanning.ps1) | Operator; P7 for pre-commit/Checkov environments, otherwise none stated. |
 | Prettier | `3.6.2` | [`docs/SETUP-GUIDE.md`](../docs/SETUP-GUIDE.md), [`docs/V3-WALKTHROUGH-RESULTS.md`](../docs/V3-WALKTHROUGH-RESULTS.md) | Operator; P7 for pre-commit/Checkov environments, otherwise none stated. |
 
-All three hook revision rows are Hand (`pre-commit` is not a supported Dependabot
-ecosystem). Operator owns these general hook updates, including the optional Commitizen hook. `pre-commit autoupdate` can
-rewrite revs, but the coordinated platform upgrade still applies.
+The hook rows retain their snapshot classification below. Current `pre-commit`
+support covers the external revs in `scripts/.pre-commit-config.yaml`; template
+filenames are outside its matcher (see [coverage](#coverage-and-exclusions)).
+Operator owns these general hook updates, including the optional Commitizen hook.
+`pre-commit autoupdate` can rewrite revs, but the coordinated platform upgrade still applies.
 
 | Hook repository | SHA / comment | Every repeating file | Update / precondition |
 |---|---|---|---|
@@ -901,15 +989,19 @@ CIS benchmark labels and TLS minima are not software freshness pins.
 - Old spec Python `3.8+` and review-styleguide `3.10+` differ from the active local
   hook requirement `3.11+`. These are guidance floors, not CI interpreter pins.
 
-### If Dependabot is enabled here
+### Dependabot configured here
 
-This is a text inventory only. The shared update template does not exist yet;
-there is no new `dependabot.yml` or workflow in this change.
+The inventory remains a snapshot; the active configuration is
+[`.github/dependabot.yml`](../.github/dependabot.yml). See
+[How pin updates arrive](#how-pin-updates-arrive) for the schedule and merge rules.
 
 - `github-actions`, directory `/`: covers the external refs under
   `.github/workflows/`, including external reusable workflow refs if added there.
   The two existing local reusable calls need no independent dependency update.
-- `terraform`: one directory per real fixture manifest, because Dependabot does
+- `pre-commit`, directory `/scripts`: covers the two external hook repositories;
+  this repository's own marked hook revision is ignored for release automation.
+- `terraform` is not configured in this pilot. Candidates are one directory per
+  real fixture manifest, because Dependabot does
   not recurse: `/tests/fixtures/terraform-valid`, `/tests/fixtures/terraform-valid/aws`,
   `/tests/fixtures/terraform-valid/azure`, `/tests/fixtures/terraform-valid/gcp`,
   `/tests/fixtures/terraform-critical/aws`, `/tests/fixtures/terraform-critical/azure`,
@@ -919,15 +1011,16 @@ there is no new `dependabot.yml` or workflow in this change.
   these entries. Generated integration manifests are invisible to it.
 - No present `pip`, `npm` or `docker` manifest directories were found. Do not add
   empty ecosystem entries for script install strings or a workflow image literal.
-  Hook configs under `templates/{starter,standard,strict,aws,azure,gcp}/` and
-  `scripts/` are pre-commit files, not Dependabot manifests. The `templates/workflows/`
+  Hook configs under `templates/{starter,standard,strict,aws,azure,gcp}/` lack the
+  supported leading-dot filename and stay hand-kept. The `templates/workflows/`
   and `templates/fix-loop/` caller files are release-managed shipped examples,
   outside the active workflow directory; keep them under release automation.
 - The weekly freshness job must cover workflow env/input engine pins, checksum
   pairs and download lock URLs, container digest/version comments, HCL TFLint
-  plugins, script `pip`/`npm` constants, runtime inputs/floors, hook revisions,
+  plugins, script `pip`/`npm` constants, runtime inputs/floors, unreadable hook revisions,
   schema URL, model/API constants and docs sentences. It must preserve P1–P10 and
-  the release-family exclusion. No updater is being configured by this inventory.
+  the release-family exclusion. Conditional action ignores are listed in
+  [coverage and exclusions](#coverage-and-exclusions).
 
 Unpinned surfaces also need a deliberate freshness policy: the hosted
 `ubuntu-latest` toolchain, local tools already on PATH, the Trivy checks bundle
