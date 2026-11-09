@@ -81,6 +81,13 @@ def test_drift_summarizes_the_majority_and_lists_each_outlier_once(tmp_path):
     assert "one.txt:2 = 1.0" not in drift
 
 
+def test_versions_are_listed_in_numeric_order(tmp_path):
+    (tmp_path / "one.txt").write_text("pin=10\npin=9\n", encoding="utf-8")
+    body, failed = pf.report(tmp_path, [pin()], client("11"), "owner/repo", NOW)
+    assert not failed
+    assert "9, 10 → **11**" in body
+
+
 def test_minimums_do_not_produce_upgrade_or_false_drift(tmp_path):
     (tmp_path / "one.txt").write_text("pin=1.0\npin=1.0.0\n", encoding="utf-8")
     body, failed = pf.report(tmp_path, [pin(policy="minimum")], client(), "owner/repo", NOW)

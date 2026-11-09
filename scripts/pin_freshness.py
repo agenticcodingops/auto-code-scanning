@@ -256,6 +256,11 @@ def drift_line(label, observed, keep=3):
     return f"- **{md(label)}**: " + "; ".join(parts)
 
 
+def ordered(values):
+    # Numeric order for readers; the raw string breaks ties such as 1.0 and 1.0.0 deterministically.
+    return sorted(values, key=lambda value: (version(value), value))
+
+
 def report(root, pins, client, repository, now):
     outdated, drift, failures, manual, floors = [], [], [], [], []
     for pin in pins:
@@ -286,9 +291,9 @@ def report(root, pins, client, repository, now):
                     value = revisions[value]
                 current.add(value)
             record_drift({version(value) for value in current})
-            old = sorted(value for value in current if version(value) < version(latest))
+            old = ordered(value for value in current if version(value) < version(latest))
             if policy == "minimum":
-                floors.append(f"- **{pin['id']}**: minimum {md(', '.join(sorted(current)))}; "
+                floors.append(f"- **{pin['id']}**: minimum {md(', '.join(ordered(current)))}; "
                               f"[latest {md(latest)}]({url}). Compatibility decision; no automatic bump.{note}")
             elif old:
                 outdated.append(f"- **{pin['id']}**: {md(', '.join(old))} → **{md(latest)}** "
