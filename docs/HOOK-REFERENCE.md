@@ -7,8 +7,9 @@ Python 3.9+; the local scanning hooks below already require Python 3.11+.
 The removed `check-byte-order-marker` and `fix-encoding-pragma` hooks are
 not used by these configurations.
 
-The configured upstream hook IDs and arguments remain supported. For strict-tier
-`terraform_docs`, install **terraform-docs 0.12.0 or newer**: support for older
+The configured upstream hook IDs and arguments remain supported. For
+`terraform_docs` in the strict, AWS, Azure and GCP templates, install
+**terraform-docs 0.12.0 or newer**: support for older
 versions was dropped in [v1.95.0](https://github.com/antonbabenko/pre-commit-terraform/releases/tag/v1.95.0).
 The [v1.88.0 to v1.109.4 release notes](https://github.com/antonbabenko/pre-commit-terraform/compare/v1.88.0...v1.109.4)
 also include a migration to native terraform-docs output and markers, expanded
