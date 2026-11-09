@@ -120,6 +120,9 @@ def test_text_subprocess_calls_have_explicit_encoding(name, source):
         keyword.arg in {"text", "universal_newlines"}
         and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
         for keyword in call.keywords)]
+    if name in {"scripts/scan.py", "scripts/setup-scanning.py", "scripts/setup-scan-fix.py",
+                "scripts/scan_policy.py", "hooks/lib/common.sh:PYEXTERNAL"}:
+        assert text_calls, f"{name}: expected subprocess calls that decode text"
     for call in text_calls:
         keywords = {keyword.arg: keyword.value for keyword in call.keywords}
         captures = call.func.attr == "check_output" or any(
