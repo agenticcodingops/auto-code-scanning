@@ -31,7 +31,7 @@ MIN_VERSIONS = {
     "trivy": (0, 48, 0),
     "checkov": (3, 0, 0),
     "tflint": (0, 50, 0),
-    "pre-commit": (3, 0, 0),
+    "pre-commit": (3, 2, 0),
 }
 
 # Track installation results

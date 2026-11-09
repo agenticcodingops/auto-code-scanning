@@ -25,7 +25,16 @@ class TestMinVersions:
         assert setup_scanning.MIN_VERSIONS["tflint"] == (0, 50, 0)
 
     def test_precommit_min_version(self):
-        assert setup_scanning.MIN_VERSIONS["pre-commit"] == (3, 0, 0)
+        assert setup_scanning.MIN_VERSIONS["pre-commit"] == (3, 2, 0)
+
+    @pytest.mark.parametrize("version, accepted", [
+        ((3, 0, 0), False),
+        ((3, 1, 9), False),
+        ((3, 2, 0), True),
+        ((4, 3, 0), True),
+    ])
+    def test_precommit_version_boundary(self, version, accepted):
+        assert setup_scanning.meets_minimum("pre-commit", version) is accepted
 
 
 class TestTotalTools:

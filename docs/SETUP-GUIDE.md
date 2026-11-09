@@ -26,16 +26,19 @@ combination has been tested; the release's exact scanner versions are in
 | Checkov | 3.0.0+ | Terraform policy and setup verification |
 | TFLint | 0.50.0+; release lock selects 0.64.0 | Terraform lint and setup verification |
 | Gitleaks | 8+; release lock selects 8.30.1 | Additional local secret checks |
-| Lefthook **or** pre-commit | 1.6+ **or** 3.0+ | Git hook runner; Lefthook is the default |
+| Lefthook **or** pre-commit | 1.6+ **or** 3.2.0+ | Git hook runner; Lefthook is the default |
 | Terraform | Match your project's `required_version` | Terraform formatting, validation and setup verification |
-| terraform-docs | Compatible with the pinned pre-commit-terraform revision | Required only for the strict pre-commit runner's `terraform_docs` hook |
+| terraform-docs | 0.12.0+ | Required for `terraform_docs` in the strict, AWS, Azure and GCP pre-commit templates |
 | Node.js / npm | Supported long-term support (LTS) release | JavaScript runtime/package manager; external Prettier for Lefthook |
 | Semgrep | 1.60+ | C# and TypeScript security checks |
 | .NET SDK | 8+ or your project's required SDK | C# formatting and builds |
 | SQLFluff | 3+ | SQL linting, if selected |
 | GitHub CLI (`gh`) | Current supported release | Optional fix-loop labels and secret verification |
 
-For strict pre-commit, install `terraform-docs` from your managed package source
+The pre-commit templates use pre-commit-hooks v6.0.0 and pre-commit-terraform
+v1.109.4; see the [upstream hook compatibility notes](HOOK-REFERENCE.md).
+
+For those pre-commit templates, install `terraform-docs` from your managed package source
 and check `terraform-docs --version` before staging Terraform. Lefthook does not
 require it merely because its configuration tier is strict.
 

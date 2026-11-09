@@ -59,7 +59,7 @@ Setting up security scanning for AWS (starter tier)...
   [OK] Checkov v3.2.1 (>= 3.0.0)
   [WARN] tflint installation failed - run manually: brew install tflint
   [OK] Gitleaks v8.18.0
-  [OK] pre-commit v3.6.0 (>= 3.0.0)
+  [OK] pre-commit v3.6.0 (>= 3.2.0)
   [OK] Configs copied to .scanning/configs/
   [OK] pre-commit hooks installed
 

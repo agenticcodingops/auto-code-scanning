@@ -67,7 +67,7 @@ $Script:MinVersions = @{
     trivy        = [version]"0.48.0"
     checkov      = [version]"3.0.0"
     tflint       = [version]"0.50.0"
-    "pre-commit" = [version]"3.0.0"
+    "pre-commit" = [version]"3.2.0"
 }
 $Script:ToolsInstalled = 0
 $Script:ToolsFailed = 0

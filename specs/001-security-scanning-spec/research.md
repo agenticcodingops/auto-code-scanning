@@ -169,7 +169,7 @@ This document consolidates technical research performed during planning. All "NE
 | Trivy | >=0.48.0 | SemVer range |
 | Checkov | >=3.0.0 | SemVer range |
 | tflint | >=0.50.0 | SemVer range |
-| pre-commit | >=3.0.0 | SemVer range |
+| pre-commit | >=3.2.0 | SemVer range |
 
 **Rationale**: Exact pins create upgrade friction and don't reflect actual compatibility. Minimum ranges ensure required features are available while allowing patch/minor upgrades. The setup script validates versions at install time. Templates pin to a specific release tag (`rev: v1.0.0`) for reproducibility of *this repo's* hooks.
 
