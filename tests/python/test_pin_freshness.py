@@ -61,6 +61,15 @@ def test_extract_all_occurrences_and_report_drift(tmp_path):
     assert "([release](https://github.com/owner/tool/releases/tag/v2.0.0))" in body
 
 
+def test_multiline_pattern_reports_the_value_line(tmp_path):
+    (tmp_path / "one.json").write_text('{\n  "tool": {\n    "version": "1.2"\n  }\n}\n', encoding="utf-8")
+    entry = pin(("one.json",))
+    entry["locations"][0]["pattern"] = r'(?s:"tool":\s*\{.*?"version":\s*")(?P<value>[0-9.]+)'
+    values, errors = pf.extract(tmp_path, entry)
+    assert not errors
+    assert values == [("one.json", 3, "1.2")]
+
+
 def test_drift_summarizes_the_majority_and_lists_each_outlier_once(tmp_path):
     (tmp_path / "one.txt").write_text("pin=1.0\n" * 5 + "pin=0.9\n", encoding="utf-8")
     entry = pin(("one.txt", "one.txt"))

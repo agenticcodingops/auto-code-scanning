@@ -111,7 +111,7 @@ def extract(root, pin):
                 value = normalized(match["value"])
                 if not value:
                     raise ValueError("pattern extracted an empty value")
-                values.append((location["file"], text.count("\n", 0, match.start()) + 1, value))
+                values.append((location["file"], text.count("\n", 0, match.start("value")) + 1, value))
         except (OSError, ValueError, UnicodeError, re.error) as exc:
             # Path names are manifest-relative; OS exception text may expose a local path.
             failures.append(f"{pin['id']} ({location['file']}): {type(exc).__name__}: extraction failed" +
