@@ -38,7 +38,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python test tools
-        run: pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 pre-commit==4.7.0
+        run: pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 
       # Binary pin matches reusable-scan.yml. That workflow's setup action is v4.1.1;
       # this file uses the template's v6.3.2 pin of the same action.
