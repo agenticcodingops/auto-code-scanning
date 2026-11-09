@@ -4,7 +4,7 @@ Complete [Getting started](SETUP-GUIDE.md) first. This reference tests the insta
 system; it replaces the historical setup walkthrough and its old result counts.
 
 > **Pin the
-> consuming repo to `@v3.0.8` (or a SHA) — never `@main`.** <!-- x-release-please-version -->
+> consuming repo to `@v3.0.9` (or a SHA) — never `@main`.** <!-- x-release-please-version -->
 
 ## Local acceptance
 

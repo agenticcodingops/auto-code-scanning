@@ -5,7 +5,7 @@ that uses the platform. A **hook** is a program Git runs before a commit or push
 **CI** (continuous integration) repeats security checks on the hosted pull request.
 Start with scanning; enable the optional automatic fix workflow only after scans work.
 
-> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v3.0.8`. <!-- x-release-please-version -->
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v3.0.9`. <!-- x-release-please-version -->
 
 ## 1. Prerequisites
 
@@ -381,7 +381,7 @@ permissions:
   pull-requests: write
 jobs:
   code-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.8 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.9 # x-release-please-version
     with:
       fail-on-findings: true
       # upload-sarif: false  # private repository without code scanning
@@ -398,11 +398,11 @@ permissions:
   pull-requests: write
 jobs:
   terraform-scan:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.8 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.9 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"          # aws | azure | gcp
-      scanning-repo-ref: "v3.0.8" # x-release-please-version
+      scanning-repo-ref: "v3.0.9" # x-release-please-version
       # upload-sarif: false  # private repository without code scanning
 ```
 

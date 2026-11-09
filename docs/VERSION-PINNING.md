@@ -2,7 +2,7 @@
 
 How to manage versions of auto-code-scanning in your repository.
 
-The current release is **`v3.0.8`**. <!-- x-release-please-version -->
+The current release is **`v3.0.9`**. <!-- x-release-please-version -->
 
 > **On a release before `v2.1.0`?** Your Terraform scan (`reusable-scan.yml`) did not run Checkov, and TFLint
 > linted at most one directory. Read
@@ -33,7 +33,7 @@ source before updating this lock.
 ## Pin to a Release Tag — Never `@main`
 
 > **MANDATORY.** Consumers **MUST** pin every reference to this repo to a release
-> tag (e.g. `@v3.0.8`) or a full 40-character commit SHA. **Never** reference <!-- x-release-please-version -->
+> tag (e.g. `@v3.0.9`) or a full 40-character commit SHA. **Never** reference <!-- x-release-please-version -->
 > `@main`. This applies to **both**:
 >
 > - pre-commit `rev:` in `.pre-commit-config.yaml`, and
@@ -88,7 +88,7 @@ Consuming repos pin to a specific version via the `rev:` field in `.pre-commit-c
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.0.8    # Pinned to exact version — never @main  x-release-please-version
+    rev: v3.0.9    # Pinned to exact version — never @main  x-release-please-version
     hooks:
       - id: trivy-iac-critical
       - id: trivy-secrets
@@ -260,28 +260,28 @@ permissions:
   pull-requests: write
 jobs:
   code-scan:
-    uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.8 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.0.9 # x-release-please-version
 ```
 
 ```yaml
 # .github/workflows/terraform-scan.yml: Terraform
 jobs:
   terraform-scan:
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.8 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.9 # x-release-please-version
     with:
       cloud-provider: aws
-      scanning-repo-ref: v3.0.8 # x-release-please-version
+      scanning-repo-ref: v3.0.9 # x-release-please-version
 ```
 
 ```yaml
 # .github/workflows/autonomous-fix.yml: optional fix loop (Layer B)
 jobs:
   fix:
-    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.0.8 x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.0.9 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       scanning_repo: OWNER/auto-code-scanning   # defaults to the upstream repository
-      scanning_repo_ref: <commit-sha> # v3.0.8 x-release-please-version
+      scanning_repo_ref: <commit-sha> # v3.0.9 x-release-please-version
     secrets:
       AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -461,7 +461,7 @@ discipline in your own workflows when you copy the caller templates.
 
 ## Recommended Practices
 
-1. **Pin to exact versions in production**: Use `v3.0.8` (or a full SHA), never `main` <!-- x-release-please-version -->
+1. **Pin to exact versions in production**: Use `v3.0.9` (or a full SHA), never `main` <!-- x-release-please-version -->
 2. **Pin pre-commit `rev:` AND workflow `uses:` together**: keep both at the same tag
 3. **Review release notes before upgrading**: Check for breaking changes
 4. **Test after upgrading**: Run `pre-commit run --all-files` to verify
