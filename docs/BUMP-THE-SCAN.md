@@ -229,8 +229,11 @@ For **v3.0.0 and later**, active CRITICAL and HIGH findings fail when
 HIGH; TFLint errors count as HIGH. Missing tools, failed jobs and incomplete
 reports fail even in report-only mode. See
 [the workflow gate](REUSABLE-WORKFLOWS.md#the-gate-counts-critical-and-high-only).
-For older targets, inspect the pinned workflow's severity mapping and require
-the separate report-verification gate described under [Verify](#verify).
+For older targets, prefer upgrading to **v3.0.0 or later**. If an older target
+must be retained, inspect its severity mapping and require both independent
+report validation and a finding gate that includes HIGH/CRITICAL Trivy secret
+findings, as described under [Verify](#verify). Report-health checks alone do not
+gate findings.
 
 | Decision | Required action |
 |---|---|
@@ -282,8 +285,10 @@ runs the scan on the default branch.
   gated by aggregation, and scanner failures or incomplete reports fail the scan
   (the `SCANNER_RESULTS` and `health_errors` checks in
   [aggregate_scan.py](../scripts/aggregate_scan.py)). Earlier releases, including
-  **v2.2.0**, can pass despite scanner failures or missing reports; require a
-  separate report-verification gate for those targets.
+  **v2.2.0**, can pass despite scanner failures or missing reports, and can omit
+  secret findings from the finding gate. Upgrade those targets, or require both
+  independent report validation and a gate that evaluates HIGH/CRITICAL Trivy
+  secret findings.
   The `scan-trivy` job's `Upload Trivy results` step and the `scan-tflint` job's
   `Upload TFLint results` step in
   [reusable-scan.yml](../.github/workflows/reusable-scan.yml) set `retention-days: 1`.
@@ -297,12 +302,19 @@ runs the scan on the default branch.
   jq -e '(.errors | length) == 0' after-tflint/tflint-results.json >/dev/null
   ```
 
-  These report checks mirror the `verify` job's `Check the reports` step in
-  [reusable-scan-self-test.yml](../.github/workflows/reusable-scan-self-test.yml).
-  For **v3.0.0 and later**, scanner health is already enforced by the reusable
-  scan's aggregate job; a separate report-verification job is optional. For older
-  releases, add a required report-verification job to your caller that rejects
-  missing or invalid reports and TFLint errors, following that self-test. See
+  These quick sanity checks mirror checks in the `verify` job's `Check the reports`
+  step in [reusable-scan-self-test.yml](../.github/workflows/reusable-scan-self-test.yml);
+  neither these commands nor that self-test are a complete report validator or
+  finding gate. For **v3.0.0 and later**, scanner health is already enforced by
+  the reusable scan's aggregate job; a separate report-verification job is optional.
+  If retaining an older release, require an independent report-validation job
+  that checks structure and scanner errors: reject missing or malformed reports,
+  Checkov parsing errors, missing/non-array TFLint `issues`, and TFLint errors.
+  Use `load_report()` and `validate_report()` in
+  [scan_reports.py](../scripts/scan_reports.py) as the validation reference,
+  adapted to the pinned scanners' report formats. Separately require a finding
+  gate that includes HIGH/CRITICAL Trivy secret findings; report health alone
+  cannot reject a valid report containing a secret. See
   [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#scanner-health-and-secret-findings)
   for the current enforcement behavior.
 - If every finding of one tool moved to `gone.tsv`, treat that scanner as broken until its
