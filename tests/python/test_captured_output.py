@@ -193,3 +193,34 @@ def test_hook_path_check_rejects_undecodable_git_root(tmp_path, inside):
     assert result.returncode == 1, result.stderr
     assert "Cannot decode Git checkout root as UTF-8" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize("filesystem_encoding", ["utf-8", "latin-1"])
+@pytest.mark.parametrize("inside", [True, False], ids=["inside", "outside"])
+def test_hook_path_check_matches_filesystem_decoding(tmp_path, filesystem_encoding, inside):
+    # Model a POSIX filesystem's view of UTF-8 filename bytes independently of
+    # the host's installed locales. Candidate argv paths use filesystem decoding.
+    root_bytes = "/checkout-café".encode("utf-8")
+    root = root_bytes.decode(filesystem_encoding)
+    target = root + "/trusted-config" if inside else "/external/trusted-config"
+    prelude = f"""import os, pathlib, subprocess
+class ResolvedPath(pathlib.PurePosixPath):
+    def resolve(self):
+        return self
+    @classmethod
+    def cwd(cls):
+        return cls({root + '/nested'!r})
+pathlib.Path = ResolvedPath
+os.fsdecode = lambda value: value.decode({filesystem_encoding!r}) if isinstance(value, bytes) else value
+subprocess.check_output = lambda *args, **kwargs: {root_bytes!r}.decode(kwargs['encoding'], kwargs['errors'])
+"""
+    body = dict(python_heredocs(ROOT / "hooks/lib/common.sh"))["PYEXTERNAL"]
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.startswith("SCAN_") and not key.startswith("GIT_")}
+    result = subprocess.run([sys.executable, "-I", "-c", prelude + body, target],
+                            cwd=tmp_path, env=environment, capture_output=True,
+                            text=True, encoding="utf-8", errors="replace")
+
+    assert result.returncode == (1 if inside else 0), result.stderr
+    if inside:
+        assert "Trusted path must be outside" in result.stderr
