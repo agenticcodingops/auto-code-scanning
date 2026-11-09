@@ -5,7 +5,7 @@ what changes in its results. For installed local hooks, also follow
 [Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releases): re-vendor
 shared files and move every local and hosted pin together.
 
-The current release is `v3.0.9`. <!-- x-release-please-version -->
+The current release is `v3.1.0`. <!-- x-release-please-version -->
 
 References below name searchable jobs, steps and keys in the linked files. When
 upgrading, inspect those names at the release commit you are evaluating. Workflow

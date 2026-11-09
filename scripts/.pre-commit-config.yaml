@@ -24,7 +24,7 @@ repos:
       - id: terraform_validate
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.0.9  # x-release-please-version
+    rev: v3.1.0  # x-release-please-version
     hooks:
       - id: tflint
         stages: [pre-push]
