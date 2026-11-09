@@ -1,5 +1,6 @@
 """Freshness reporting is read-only except for one marker-bound issue upsert."""
 from datetime import datetime, timedelta, timezone
+import io
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, Mock
@@ -294,6 +295,51 @@ def test_http_errors_do_not_expose_headers_or_response_body(monkeypatch):
     monkeypatch.setattr(pf.urllib.request, "build_opener", lambda _: opener)
     with pytest.raises(ValueError, match="^api.github.com: HTTP 403$"):
         pf.Client("token").request(pf.API)
+
+
+def http_error(code, body):
+    return urllib.error.HTTPError(pf.API, code, "sensitive", {}, io.BytesIO(json.dumps(body).encode()))
+
+
+def test_http_error_reports_only_the_api_message(monkeypatch):
+    opener = Mock()
+    opener.open.side_effect = http_error(403, {"message": "API rate\nlimit exceeded", "token": "sensitive"})
+    monkeypatch.setattr(pf.urllib.request, "build_opener", lambda _: opener)
+    with pytest.raises(ValueError, match=r"^api.github.com: HTTP 403 \(API rate limit exceeded\)$"):
+        pf.Client("token").request(pf.API)
+
+
+def test_ip_allow_list_rejection_retries_once_without_the_token(monkeypatch):
+    opener = MagicMock()
+    response = Mock()
+    response.read.return_value = b'[]'
+    opener.open.side_effect = [
+        http_error(403, {"message": "the `owner` organization has an IP allow list enabled"}),
+        MagicMock(__enter__=Mock(return_value=response)),
+    ]
+    monkeypatch.setattr(pf.urllib.request, "build_opener", lambda _: opener)
+    assert pf.Client("sensitive").request(pf.API + "/repos/owner/tool/releases") == []
+    first, second = (call.args[0] for call in opener.open.call_args_list)
+    assert first.get_header("Authorization") == "Bearer sensitive"
+    assert second.get_header("Authorization") is None
+
+
+def test_ip_allow_list_rejection_is_reported_when_anonymous_also_fails(monkeypatch):
+    opener = Mock()
+    opener.open.side_effect = [http_error(403, {"message": "IP allow list enabled"}) for _ in range(2)]
+    monkeypatch.setattr(pf.urllib.request, "build_opener", lambda _: opener)
+    with pytest.raises(ValueError, match="IP allow list"):
+        pf.Client("token").request(pf.API)
+    assert opener.open.call_count == 2
+
+
+def test_writes_are_never_retried_anonymously(monkeypatch):
+    opener = Mock()
+    opener.open.side_effect = http_error(403, {"message": "IP allow list enabled"})
+    monkeypatch.setattr(pf.urllib.request, "build_opener", lambda _: opener)
+    with pytest.raises(ValueError):
+        pf.Client("token").request(pf.API + "/repos/o/r/issues", method="POST", data={"title": "x"})
+    assert opener.open.call_count == 1
 
 
 def test_untrusted_markdown_is_escaped():
