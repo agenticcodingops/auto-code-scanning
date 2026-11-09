@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload SARIF (distinct category)
         if: always() && inputs.upload-sarif
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: semgrep-${{ matrix.language }}.sarif
           category: ${{ needs.detect.outputs.category_prefix }}semgrep-${{ matrix.language }}
@@ -349,7 +349,7 @@ jobs:
 
       - name: Upload secrets SARIF (distinct category)
         if: always() && inputs.upload-sarif
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: trivy-secrets.sarif
           category: ${{ needs.detect.outputs.category_prefix }}trivy-secrets

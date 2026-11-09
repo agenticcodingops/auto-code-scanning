@@ -836,7 +836,7 @@ jobs:
         id: upload-trivy-iac
         continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
         if: always() && hashFiles('scan-artifacts/trivy-results/trivy-iac-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: scan-artifacts/trivy-results/trivy-iac-results.sarif
           category: trivy-iac
@@ -845,7 +845,7 @@ jobs:
         id: upload-trivy-secrets
         continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
         if: always() && hashFiles('scan-artifacts/trivy-results/trivy-secrets-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: scan-artifacts/trivy-results/trivy-secrets-results.sarif
           category: trivy-secrets
@@ -856,7 +856,7 @@ jobs:
         # Never upload raw results after a filter error, even though other uploads
         # use always() to report scanner failures.
         if: always() && steps.filter-checkov.outcome == 'success'
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: scan-artifacts/checkov-results/checkov-results.sarif
           category: checkov
@@ -865,7 +865,7 @@ jobs:
         id: upload-snyk
         continue-on-error: ${{ inputs.allow-sarif-upload-errors }}
         if: always() && hashFiles('scan-artifacts/snyk-results/snyk-iac-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@b5ebac6f4c00c8ccddb7cdcd45fdb248329f808a  # v3.32.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: scan-artifacts/snyk-results/snyk-iac-results.sarif
           category: snyk-iac
