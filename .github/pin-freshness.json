@@ -30,7 +30,7 @@
         },
         {
           "file": "README.md",
-          "pattern": "(?:Trivy |trivy )(?P<value>0\\.\\d+\\.\\d+)\\b"
+          "pattern": "(?:Trivy |trivy )(?P<value>\\d+\\.\\d+\\.\\d+)\\b"
         },
         {
           "file": "scripts/scanner-downloads.json",
@@ -269,10 +269,6 @@
           "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
         },
         {
-          "file": "docs/V3-WALKTHROUGH-RESULTS.md",
-          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
-        },
-        {
           "file": ".github/workflows/copilot-setup-steps.yml",
           "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
         },
@@ -391,10 +387,6 @@
           "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
         },
         {
-          "file": "docs/V3-WALKTHROUGH-RESULTS.md",
-          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
-        },
-        {
           "file": "tests/python/test_autonomous_fix_trust_boundary.py",
           "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
         },
@@ -426,10 +418,6 @@
         },
         {
           "file": "docs/SETUP-GUIDE.md",
-          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
-        },
-        {
-          "file": "docs/V3-WALKTHROUGH-RESULTS.md",
           "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
@@ -573,10 +561,6 @@
       "locations": [
         {
           "file": "docs/SETUP-GUIDE.md",
-          "pattern": "prettier@(?P<value>\\d+(?:\\.\\d+)*)"
-        },
-        {
-          "file": "docs/V3-WALKTHROUGH-RESULTS.md",
           "pattern": "prettier@(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
@@ -1012,39 +996,39 @@
         },
         {
           "file": "README.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "docs/CONSUMER-MIGRATION.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "docs/CONTRIBUTING.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "docs/HOOK-REFERENCE.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "docs/SETUP-GUIDE.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "docs/TROUBLESHOOTING.md",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "hooks/lib/common.ps1",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "hooks/lib/common.sh",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": "scripts/create-baseline.ps1",
-          "pattern": "Python (?:\\| )?(?P<value>3\\.\\d+)(?:\\+| or newer| or later)"
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
         },
         {
           "file": ".github/workflows/pin-freshness.yml",
@@ -1121,27 +1105,23 @@
       "locations": [
         {
           "file": ".github/workflows/ci.yml",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
         },
         {
           "file": ".github/workflows/copilot-setup-steps.yml",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
         },
         {
           "file": "README.md",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
         },
         {
           "file": "docs/CONTRIBUTING.md",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
         },
         {
           "file": "docs/agent-team-implementation-guide.md",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
-        },
-        {
-          "file": "specs/001-security-scanning-spec/plan.md",
-          "pattern": "(?:-MinimumVersion |Pester )(?P<value>5(?:\\.0)*)(?![\\d.])"
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
         }
       ],
       "source": {
@@ -1243,7 +1223,7 @@
       "locations": [
         {
           "file": "tests/integration/test-consuming-repo.sh",
-          "pattern": "version\\s*=\\s*\"~> (?P<value>5\\.\\d+)"
+          "pattern": "version\\s*=\\s*\"~> (?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -1257,59 +1237,59 @@
       "locations": [
         {
           "file": ".github/workflows/autonomous-fix.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/bypass-detection.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/ci.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/claude-code-review.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/claude.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/code-security-scan.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/copilot-setup-steps.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/gemini-code-review.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/performance-check.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/pin-freshness.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/release.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/reusable-scan-self-test.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/reusable-scan.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         },
         {
           "file": ".github/workflows/semgrep.yml",
-          "pattern": "runs-on:\\s*(?P<value>ubuntu-latest)"
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
         }
       ],
       "source": {
@@ -1339,7 +1319,7 @@
       "locations": [
         {
           "file": ".github/scripts/gemini_review.py",
-          "pattern": "googleapis\\.com/(?P<value>v1beta)/"
+          "pattern": "googleapis\\.com/(?P<value>v\\d+(?:[a-z]+\\d*)?)/"
         }
       ],
       "source": {

@@ -44,6 +44,11 @@ The issue is identified by this exact standalone hidden body line, never its tit
 <!-- pin-freshness:rolling-report:v1 -->
 ```
 
+Only issues created by `github-actions[bot]` match in workflow runs. Local write
+mode uses the token's authenticated user identity from the API instead. The issue
+query is filtered by creator and each returned author is checked, so another
+user's copy of the marker cannot hijack or block the report.
+
 Keep the marker when renaming the issue. Each successful write replaces its body;
 put durable discussion in comments. The script searches open and closed issues,
 preserves their state, and never closes or reopens one. More than one matching

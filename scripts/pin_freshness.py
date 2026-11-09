@@ -15,6 +15,7 @@ import urllib.request
 from safe_io import assert_safe_path
 
 MARKER = "<!-- pin-freshness:rolling-report:v1 -->"
+REPORT_AUTHOR = "github-actions[bot]"
 API = "https://api.github.com"
 VERSION = re.compile(r"v?(\d+(?:\.\d+)*)(?:\+[0-9A-Za-z.-]+)?$")
 REPOSITORY = re.compile(r"[\w.-]+/[\w.-]+$")
@@ -301,9 +302,12 @@ def report(root, pins, client, repository, now):
     return "\n".join(lines) + "\n", bool(failures)
 
 
-def upsert_issue(client, repository, title, body):
-    issues = [issue for issue in client.pages(f"/repos/{repository}/issues?state=all")
-              if "pull_request" not in issue and MARKER in (issue.get("body") or "").splitlines()]
+def upsert_issue(client, repository, title, body, author=REPORT_AUTHOR):
+    creator = urllib.parse.quote(author, safe="")
+    issues = [issue for issue in client.pages(f"/repos/{repository}/issues?state=all&creator={creator}")
+              if "pull_request" not in issue
+              and (issue.get("user") or {}).get("login") == author
+              and MARKER in (issue.get("body") or "").splitlines()]
     if len(issues) > 1:
         raise ValueError("multiple rolling-issue markers found; refusing an ambiguous update")
     payload = {"title": title, "body": body}
@@ -334,7 +338,13 @@ def main(argv=None):
         if not args.dry_run:
             if not client.token:
                 raise ValueError("GITHUB_TOKEN is required to write the rolling issue")
-            upsert_issue(client, args.repository, args.issue_title, body)
+            author = REPORT_AUTHOR
+            if os.environ.get("GITHUB_ACTIONS") != "true":
+                # A local personal token creates user-owned issues, not workflow-bot issues.
+                author = client.request(f"{API}/user")["login"]
+                if not isinstance(author, str) or not re.fullmatch(r"[\w-]+(?:\[bot\])?", author):
+                    raise ValueError("cannot determine the authenticated issue author")
+            upsert_issue(client, args.repository, args.issue_title, body, author=author)
         return 1 if failed else 0
     except (OSError, ValueError, KeyError, TypeError, re.error) as exc:
         print(f"pin freshness failed: {type(exc).__name__}: {exc}", file=sys.stderr)

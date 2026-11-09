@@ -129,7 +129,8 @@ def test_marker_upsert_preserves_state_and_ignores_title_and_prs():
     api = client()
     api.pages.return_value = [{"number": 1, "title": "Weekly pin freshness", "body": "unrelated"},
                              {"number": 2, "pull_request": {}, "body": pf.MARKER},
-                             {"number": 3, "state": "closed", "title": "renamed", "body": pf.MARKER + "\nold"}]
+                             {"number": 3, "state": "closed", "title": "renamed", "body": pf.MARKER + "\nold",
+                              "user": {"login": pf.REPORT_AUTHOR}}]
     pf.upsert_issue(api, "owner/repo", "New title", pf.MARKER + "\nnew")
     api.request.assert_called_once_with(pf.API + "/repos/owner/repo/issues/3", "PATCH",
                                         {"title": "New title", "body": pf.MARKER + "\nnew"})
@@ -140,10 +141,35 @@ def test_marker_create_and_duplicate_refusal():
     pf.upsert_issue(api, "owner/repo", "title", pf.MARKER)
     assert api.request.call_args.args[1] == "POST"
     api.request.reset_mock()
-    api.pages.return_value = [{"number": n, "body": pf.MARKER} for n in (1, 2)]
+    api.pages.return_value = [{"number": n, "body": pf.MARKER, "user": {"login": pf.REPORT_AUTHOR}}
+                             for n in (1, 2)]
     with pytest.raises(ValueError, match="multiple"):
         pf.upsert_issue(api, "owner/repo", "title", pf.MARKER)
     api.request.assert_not_called()
+
+
+@pytest.mark.parametrize("author", [pf.REPORT_AUTHOR, "local-maintainer"])
+def test_spoofed_marker_issues_are_ignored_and_query_is_author_scoped(author):
+    api = client()
+    api.pages.return_value = [{"number": 1, "body": pf.MARKER, "user": {"login": "unrelated-user"}}]
+    pf.upsert_issue(api, "owner/repo", "title", pf.MARKER, author=author)
+    assert api.request.call_args.args[1] == "POST"
+    assert api.pages.call_args.args[0].endswith("&creator=" + pf.urllib.parse.quote(author, safe=""))
+
+
+def test_local_write_uses_authenticated_author(tmp_path, monkeypatch):
+    (tmp_path / "manifest.json").write_text(json.dumps({"pins": [pin()]}), encoding="utf-8")
+    (tmp_path / "one.txt").write_text("pin=1", encoding="utf-8")
+    api = client()
+    api.token = "token"
+    api.request.return_value = {"login": "local-maintainer"}
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(pf, "Client", lambda _: api)
+    monkeypatch.setattr(pf, "upsert_issue", Mock())
+    assert pf.main(["--root", str(tmp_path), "--manifest", "manifest.json",
+                    "--repository", "owner/repo"]) == 0
+    api.request.assert_called_once_with(pf.API + "/user")
+    assert pf.upsert_issue.call_args.kwargs == {"author": "local-maintainer"}
 
 
 def pr(number, age, login="someone", labels=()):
@@ -271,6 +297,31 @@ def test_real_gitleaks_patterns_do_not_capture_other_scanners():
     assert not errors
     assert {value for _, _, value in values} == {lock["gitleaks"]["version"]}
     assert any(file == ".github/workflows/ci.yml" for file, _, _ in values)
+
+
+def test_future_pester_bump_is_observed_despite_unchanged_comments(tmp_path):
+    pins = pf.load_manifest(ROOT, ".github/pin-freshness.json")
+    entry = next(p for p in pins if p["id"] == "pester-minimum")
+    for location in entry["locations"]:
+        file = location["file"]
+        text = (ROOT / file).read_text(encoding="utf-8")
+        if file == ".github/workflows/copilot-setup-steps.yml":
+            text = text.replace("Install-Module Pester -MinimumVersion 5.0.0",
+                                "Install-Module Pester -MinimumVersion 5.7.1")
+        path = tmp_path / file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    body, failed = pf.report(tmp_path, [entry], client("6.2.0"), "owner/repo", NOW)
+    assert not failed
+    assert "5.7.1" in body.split("## Cross-file drift")[1].split("## Lookup")[0]
+
+
+def test_historical_walkthrough_and_specifications_are_not_upgrade_targets():
+    pins = pf.load_manifest(ROOT, ".github/pin-freshness.json")
+    for entry in pins:
+        files = {location["file"] for location in entry["locations"]}
+        assert "docs/V3-WALKTHROUGH-RESULTS.md" not in files
+        assert not any(file.startswith("specs/") for file in files)
 
 
 def test_manual_selections_do_not_pretend_to_have_release_versions(tmp_path):
