@@ -124,11 +124,15 @@ group, for prefixes such as `tool-v1.2.3`. The default accepts `v1.2.3` or `1.2.
 Numeric components compare numerically; leading `v`, trailing zero components and
 build metadata do not change ordering. Unsupported current version syntax is a
 reported failure. All API lists are paginated; exceeding the safety limit fails
-explicitly. GitHub stops list pagination at 1,000 results: a `github_releases`
-source (listed newest first) stops there and still finds the latest release, while
-any other list fails explicitly at that cap. A pinned commit older than the first
-1,000 entries is reported as having no stable upstream tag. Results and failures
-are cached per source for the duration of one run.
+explicitly. GitHub stops list pagination at 1,000 results. When a `github_releases`
+or `github_tags` lookup reaches that cap, the script reads every tag ref of the
+repository in one unpaginated request and takes the highest stable version from
+the complete set, so a truncated list never decides "latest". Versions found this
+way link to the tag rather than a release page. For SHA pins, only lightweight
+tags map to a commit there: a pin whose tag is annotated is reported as having no
+stable upstream tag. Other lists (such as the dependency-update PR lookup) still
+fail explicitly at the cap. Results and failures are cached per source for the
+duration of one run.
 GitHub credentials go only to the GitHub API; redirects are rejected.
 
 For SHA-pinned hooks, include both the revision and its version comment as

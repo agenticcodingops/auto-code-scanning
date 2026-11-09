@@ -119,6 +119,10 @@ def extract(root, pin):
     return values, failures
 
 
+class ResultCap(ValueError):
+    """A GitHub list stopped at its 1,000-result cap before the last page."""
+
+
 def http_reason(exc):
     # The API's own message says why (rate limit, access policy); the status code alone does not.
     try:
@@ -162,17 +166,16 @@ class Client:
         except urllib.error.URLError:
             raise ValueError(f"{parsed.netloc}: network lookup failed") from None
 
-    def pages(self, path, newest_first=False):
+    def pages(self, path):
         rows = []
         for page in range(1, 101):
             separator = "&" if "?" in path else "?"
             try:
                 batch = self.request(f"{API}{path}{separator}per_page=100&page={page}")
             except ValueError as exc:
-                # GitHub stops list pagination at 1,000 results (HTTP 422). For a newest-first list the
-                # rows already read hold the latest entries, so stop there; any other list stays an error.
-                if newest_first and rows and "HTTP 422" in str(exc) and "first 1000 results" in str(exc):
-                    return rows
+                # GitHub refuses list pages past 1,000 results; the rows read so far are incomplete.
+                if "HTTP 422" in str(exc) and "first 1000 results" in str(exc):
+                    raise ResultCap(f"{exc}; list is incomplete") from None
                 raise
             if not isinstance(batch, list):
                 raise ValueError("expected an API list")
@@ -180,6 +183,19 @@ class Client:
             if len(batch) < 100:
                 return rows
         raise ValueError("API pagination exceeded 100 pages; result is incomplete")
+
+    def all_tags(self, repo):
+        refs = self.request(f"{API}/repos/{repo}/git/matching-refs/tags/")
+        if not isinstance(refs, list):
+            raise ValueError("expected an API list")
+        rows = []
+        for ref in refs:
+            name = ref["ref"].removeprefix("refs/tags/")
+            target = ref.get("object") or {}
+            # A lightweight tag points at its commit; an annotated tag's ref names the tag object, which
+            # is not the commit a pin records, so it gives a version but no revision mapping.
+            rows.append((name, target.get("sha") if target.get("type") == "commit" else None, False))
+        return rows
 
     def upstream(self, source):
         key = json.dumps(source, sort_keys=True)
@@ -211,10 +227,16 @@ class Client:
             repo = source["repo"]
             kind = "releases" if source["type"] == "github_releases" else "tags"
             pattern = re.compile(source.get("tag_pattern", r"v?(?P<version>\d+(?:\.\d+)*)"))
-            for row in self.pages(f"/repos/{repo}/{kind}", newest_first=kind == "releases"):
-                if row.get("draft") or row.get("prerelease"):
-                    continue
-                tag = row["tag_name"] if kind == "releases" else row["name"]
+            try:
+                rows = [(row["tag_name"] if kind == "releases" else row["name"],
+                         None if kind == "releases" else row["commit"]["sha"], kind == "releases")
+                        for row in self.pages(f"/repos/{repo}/{kind}")
+                        if not (row.get("draft") or row.get("prerelease"))]
+            except ResultCap:
+                # Past GitHub's 1,000-result list cap, read every tag ref in one unpaginated response so
+                # the highest version is computed over the complete set, never a truncated list.
+                rows = self.all_tags(repo)
+            for tag, sha, released in rows:
                 match = pattern.fullmatch(tag)
                 if not match:
                     continue
@@ -223,11 +245,10 @@ class Client:
                     parsed = version(name)
                 except ValueError:
                     continue
-                route = "releases/tag" if kind == "releases" else "tree"
+                route = "releases/tag" if released else "tree"
                 url = f"https://github.com/{repo}/{route}/{urllib.parse.quote(tag, safe='')}"
                 candidates.append((parsed, name, url))
-                if kind == "tags":
-                    sha = row["commit"]["sha"]
+                if kind == "tags" and sha:
                     # Major aliases and exact tags can identify the same commit.
                     if sha not in revisions or version(revisions[sha]) < parsed:
                         revisions[sha] = name

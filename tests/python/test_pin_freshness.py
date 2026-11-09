@@ -271,27 +271,38 @@ def test_pagination_reads_all_pages():
 CAP = ValueError("api.github.com: HTTP 422 (Only the first 1000 results are available.)")
 
 
-def test_newest_first_list_stops_at_the_api_result_cap():
+def test_any_list_at_the_api_result_cap_is_reported_incomplete():
     api = pf.Client("")
     api.request = Mock(side_effect=[[{}] * 100] * 10 + [CAP])
-    assert len(api.pages("/repos/owner/tool/releases", newest_first=True)) == 1000
+    with pytest.raises(pf.ResultCap, match="incomplete"):
+        api.pages("/repos/owner/tool/issues")
 
 
-def test_other_lists_still_fail_at_the_api_result_cap():
+def refs(*entries):
+    return [{"ref": f"refs/tags/{name}", "object": {"sha": sha, "type": kind}} for name, sha, kind in entries]
+
+
+def test_releases_past_the_cap_use_every_tag_for_the_highest_version():
     api = pf.Client("")
-    api.request = Mock(side_effect=[[{}] * 100] * 10 + [CAP])
-    with pytest.raises(ValueError, match="HTTP 422"):
-        api.pages("/repos/owner/tool/tags")
+    # Chronological pages hold only maintenance releases; the newer major is older than the cap.
+    maintenance = [{"tag_name": f"v1.{n}.0"} for n in range(100)]
+    all_refs = refs(("v1.5.0", "a" * 40, "commit"), ("v2.0.0", "b" * 40, "tag"), ("v2.0.0-rc1", "c" * 40, "commit"))
+    api.request = Mock(side_effect=[maintenance] * 10 + [CAP, all_refs])
+    latest, url, revisions = api.upstream({"type": "github_releases", "repo": "owner/tool"})
+    assert latest == "2.0.0"
+    assert url == "https://github.com/owner/tool/tree/v2.0.0"
+    assert revisions == {}
+    assert api.request.call_args.args[0] == pf.API + "/repos/owner/tool/git/matching-refs/tags/"
 
 
-def test_releases_lookup_finds_the_latest_despite_the_cap():
+def test_tags_past_the_cap_map_only_lightweight_tags_to_commits():
     api = pf.Client("")
-    newest = [{"tag_name": f"v3.4.{n}"} for n in range(100, 0, -1)]
-    older = [{"tag_name": f"v3.3.{n}"} for n in range(100, 0, -1)]
-    api.request = Mock(side_effect=[newest] + [older] * 9 + [CAP])
-    latest, url, _ = api.upstream({"type": "github_releases", "repo": "owner/tool"})
-    assert latest == "3.4.100"
-    assert url.endswith("/releases/tag/v3.4.100")
+    page = [{"name": f"v1.{n}.0", "commit": {"sha": "0" * 40}} for n in range(100)]
+    all_refs = refs(("v1.0.0", "a" * 40, "commit"), ("v1.1.0", "b" * 40, "tag"))
+    api.request = Mock(side_effect=[page] * 10 + [CAP, all_refs])
+    latest, _, revisions = api.upstream({"type": "github_tags", "repo": "owner/tool"})
+    assert latest == "1.1.0"
+    assert revisions == {"a" * 40: "1.0.0"}
 
 
 def test_token_only_sent_to_github_and_redirects_disabled(monkeypatch):
