@@ -168,7 +168,7 @@ on:
 permissions: {}
 jobs:
   freshness:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/pin-freshness.yml@e526a6354e5b57c5bc6dbcf0c58a8fabc9ef5955 # initial implementation
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/pin-freshness.yml@802dccfd345272083a934b14a09b6cde850eb10a # initial implementation
     permissions:
       contents: read
       issues: write
@@ -176,7 +176,7 @@ jobs:
     with:
       manifest-path: .github/pin-freshness.json
       issue-title: Weekly pin freshness
-      scanning-repo-ref: e526a6354e5b57c5bc6dbcf0c58a8fabc9ef5955
+      scanning-repo-ref: 802dccfd345272083a934b14a09b6cde850eb10a
 ```
 
 The workflow checks out caller data in `caller` and this repository's `scripts` at
