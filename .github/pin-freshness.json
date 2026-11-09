@@ -43,6 +43,14 @@
         {
           "file": "scripts/scanner-downloads.json",
           "pattern": "trivy_(?P<value>\\d+(?:\\.\\d+)*)_"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Trivy \\|[^\\n]*?release lock selects (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
+          "pattern": "Runs the Secret scan job: Trivy (?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -112,6 +120,14 @@
         {
           "file": "scripts/scanner-downloads.json",
           "pattern": "github\\.com/terraform-linters/tflint/releases/download/v(?P<value>\\d+(?:\\.\\d+)*)/"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| TFLint \\|[^\\n]*?release lock selects (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "TFLint (?P<value>\\d+\\.\\d+\\.\\d+)"
         }
       ],
       "source": {
@@ -271,6 +287,10 @@
         {
           "file": "README.md",
           "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])Checkov (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
         }
       ],
       "source": {
@@ -377,6 +397,10 @@
         {
           "file": "tests/python/test_autonomous_fix_trust_boundary.py",
           "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])PyYAML (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
         }
       ],
       "source": {
@@ -449,6 +473,10 @@
         {
           "file": "docs/SETUP-GUIDE.md",
           "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])pre-commit (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
         }
       ],
       "source": {
@@ -481,6 +509,10 @@
         {
           "file": ".github/workflows/code-security-scan.yml",
           "pattern": "(?s:semgrep-version:.*?default:\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
+          "pattern": "\\| `semgrep-version` \\| string \\| no \\| `(?P<value>\\d+(?:\\.\\d+)*)`"
         }
       ],
       "source": {
@@ -494,6 +526,10 @@
         {
           "file": ".github/workflows/semgrep.yml",
           "pattern": "deliberately\\. semgrep (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "\\(semgrep (?P<value>\\d+(?:\\.\\d+)*)\\)"
         }
       ],
       "source": {
@@ -519,6 +555,10 @@
         },
         {
           "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
           "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
@@ -784,7 +824,7 @@
         "type": "github_tags",
         "repo": "anthropics/claude-code-action"
       },
-      "precondition": "change it in every place listed above together, in the same commit"
+      "precondition": "change it in every place listed above together, in the same commit; When you bump, check the `@anthropic-ai/claude-agent-sdk` version locked in that action release's `bun.lock`; It must be 1.0.93 or later."
     },
     {
       "id": "inactive-login-example",
