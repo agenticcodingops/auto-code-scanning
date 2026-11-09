@@ -34,7 +34,7 @@ external Python environment. Windows, from PowerShell 7:
 ```powershell
 python -m venv "$HOME/.venvs/acs-contribute"
 & "$HOME/.venvs/acs-contribute/Scripts/Activate.ps1"
-python -m pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 jsonschema==4.25.1 pre-commit==4.3.0
+python -m pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
 ```
 
@@ -43,7 +43,7 @@ macOS/Linux:
 ```bash
 python3 -m venv "$HOME/.venvs/acs-contribute"
 . "$HOME/.venvs/acs-contribute/bin/activate"
-python -m pip install pytest==8.4.2 pytest-cov==7.0.0 PyYAML==6.0.3 jsonschema==4.25.1 pre-commit==4.3.0
+python -m pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
 ```
 
@@ -67,7 +67,7 @@ the test packages: current runner dependencies and Checkov have incompatible
 
 ```powershell
 python -m venv "$HOME/.venvs/acs-checkov"
-& "$HOME/.venvs/acs-checkov/Scripts/python.exe" -m pip install checkov==3.3.19
+& "$HOME/.venvs/acs-checkov/Scripts/python.exe" -m pip install checkov==3.4.3
 $env:CHECKOV_PYTHON = "$HOME/.venvs/acs-checkov/Scripts/python.exe".Replace('\', '/')
 & $env:CHECKOV_PYTHON -m checkov.main --version
 ```
@@ -76,7 +76,7 @@ macOS/Linux:
 
 ```bash
 python -m venv "$HOME/.venvs/acs-checkov"
-"$HOME/.venvs/acs-checkov/bin/python" -m pip install checkov==3.3.19
+"$HOME/.venvs/acs-checkov/bin/python" -m pip install checkov==3.4.3
 export CHECKOV_PYTHON="$HOME/.venvs/acs-checkov/bin/python"
 "$CHECKOV_PYTHON" -m checkov.main --version
 ```

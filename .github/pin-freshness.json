@@ -405,6 +405,10 @@
       "id": "jsonschema",
       "locations": [
         {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
           "file": ".github/workflows/ci.yml",
           "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
         },

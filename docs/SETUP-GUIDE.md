@@ -68,7 +68,7 @@ PowerShell (keep this environment active for subsequent steps):
 ```powershell
 python -m venv "$HOME/.venvs/auto-code-scanning"
 & "$HOME/.venvs/auto-code-scanning/Scripts/Activate.ps1"
-python -m pip install PyYAML==6.0.3 jsonschema==4.25.1 checkov==3.3.19
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.3
 ```
 
 macOS/Linux equivalent:
@@ -76,7 +76,7 @@ macOS/Linux equivalent:
 ```bash
 python3 -m venv "$HOME/.venvs/auto-code-scanning"
 . "$HOME/.venvs/auto-code-scanning/bin/activate"
-python -m pip install PyYAML==6.0.3 jsonschema==4.25.1 checkov==3.3.19
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.3
 ```
 
 Install Lefthook from your managed package source. If choosing pre-commit instead,
@@ -85,7 +85,7 @@ a newer `packaging` package than Checkov accepts. In PowerShell:
 
 ```powershell
 python -m venv "$HOME/.venvs/acs-pre-commit"
-& "$HOME/.venvs/acs-pre-commit/Scripts/python.exe" -m pip install pre-commit==4.3.0
+& "$HOME/.venvs/acs-pre-commit/Scripts/python.exe" -m pip install pre-commit==4.7.0
 $env:PATH = "$HOME/.venvs/auto-code-scanning/Scripts;$HOME/.venvs/acs-pre-commit/Scripts;$env:PATH"
 pre-commit --version
 ```
@@ -94,7 +94,7 @@ macOS/Linux:
 
 ```bash
 python -m venv "$HOME/.venvs/acs-pre-commit"
-"$HOME/.venvs/acs-pre-commit/bin/python" -m pip install pre-commit==4.3.0
+"$HOME/.venvs/acs-pre-commit/bin/python" -m pip install pre-commit==4.7.0
 export PATH="$HOME/.venvs/auto-code-scanning/bin:$HOME/.venvs/acs-pre-commit/bin:$PATH"
 pre-commit --version
 ```

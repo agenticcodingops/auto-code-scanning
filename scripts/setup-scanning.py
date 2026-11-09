@@ -174,7 +174,7 @@ def install_pip_tool(package, display_name, cmd_name=None):
             return True
 
     log_info(f"Installing {display_name} via pip...")
-    rc, _, stderr = run_cmd([sys.executable, "-m", "pip", "install", {"pre-commit":"pre-commit==4.3.0", "checkov":"checkov==3.3.19"}[package], "--quiet"])
+    rc, _, stderr = run_cmd([sys.executable, "-m", "pip", "install", {"pre-commit":"pre-commit==4.7.0", "checkov":"checkov==3.4.3"}[package], "--quiet"])
     if rc == 0:
         # pip install may put the command somewhere not yet on PATH; recheck
         if command_exists(cmd_name):

@@ -216,7 +216,7 @@ if (-not $SkipTools) {
 
     Write-Info "Upgrading pip..."
     try {
-        python -m pip install pip==25.2 --quiet 2>&1 | Out-Null
+        python -m pip install pip==26.3 --quiet 2>&1 | Out-Null
     } catch {
         Write-Warn "Could not upgrade pip: $_"
     }
@@ -224,7 +224,7 @@ if (-not $SkipTools) {
     # Install pre-commit
     Write-Info "Installing pre-commit..."
     try {
-        python -m pip install pre-commit==4.3.0 --quiet 2>&1 | Out-Null
+        python -m pip install pre-commit==4.7.0 --quiet 2>&1 | Out-Null
         if (Test-CommandExists "pre-commit") {
             $version = Get-ToolVersion -Command "pre-commit"
             if ($version -and (Test-ToolMeetsMinimum -ToolName "pre-commit" -Actual $version)) {
@@ -246,7 +246,7 @@ if (-not $SkipTools) {
     # Install Checkov
     Write-Info "Installing Checkov (this may take a minute)..."
     try {
-        python -m pip install checkov==3.3.19 --quiet 2>&1 | Out-Null
+        python -m pip install checkov==3.4.3 --quiet 2>&1 | Out-Null
         if (Test-CommandExists "checkov") {
             $version = Get-ToolVersion -Command "checkov"
             if ($version -and (Test-ToolMeetsMinimum -ToolName "checkov" -Actual $version)) {

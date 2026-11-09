@@ -226,7 +226,7 @@ function Install-PythonTools {
 
     # Ensure pip is available and upgraded
     & $Script:PythonCmd -m ensurepip --upgrade 2>$null
-    & $Script:PythonCmd -m pip install pip==25.2 --user --quiet 2>$null
+    & $Script:PythonCmd -m pip install pip==26.3 --user --quiet 2>$null
 
     # Install pre-commit
     Install-PipPackage -Name "pre-commit"
@@ -245,7 +245,7 @@ function Install-PipPackage {
     param([string]$Name)
 
     Write-Info "Installing $Name..."
-    $pinned = @{ 'pre-commit' = 'pre-commit==4.3.0'; 'checkov' = 'checkov==3.3.19' }
+    $pinned = @{ 'pre-commit' = 'pre-commit==4.7.0'; 'checkov' = 'checkov==3.4.3' }
     & $Script:PythonCmd -m pip install $pinned[$Name] --user --quiet 2>$null
 }
 

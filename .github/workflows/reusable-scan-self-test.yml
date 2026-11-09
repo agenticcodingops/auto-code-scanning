@@ -75,7 +75,7 @@ jobs:
         run: python3 scripts/checkov-consumer-options.py prepare configs/azure/.checkov.yaml
 
       - name: Scan fixture at the default render limit
-        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
+        uses: bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa  # v12.3139.0 = Checkov 3.4.3
         with:
           directory: .checkov-consumer-fixture
           config_file: configs/azure/.checkov.yaml
@@ -86,7 +86,7 @@ jobs:
           download_external_modules: false
 
       - name: Scan local composition and inline skip fixture
-        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
+        uses: bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa  # v12.3139.0 = Checkov 3.4.3
         env: ${{ fromJSON(steps.options.outputs.render-env) }}
         with:
           directory: .checkov-consumer-fixture
@@ -174,7 +174,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Scan trusted, edited and new inline skips
-        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e  # v12.3125.0 = Checkov 3.3.19
+        uses: bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa  # v12.3139.0 = Checkov 3.4.3
         with:
           directory: .inline-trust-fixture
           framework: terraform
