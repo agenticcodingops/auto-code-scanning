@@ -67,11 +67,11 @@ jobs:
         )
       )
     # PIN to a release tag (or SHA) — NEVER @main. Bump deliberately.
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v3.1.1  # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@v3.1.2  # x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
-      scanning_repo_ref: v3.1.1  # x-release-please-version
+      scanning_repo_ref: v3.1.2  # x-release-please-version
     # Pass only the three secrets the reusable workflow declares, never
     # `secrets: inherit` (that hands it every secret of the repository and org).
     secrets:

@@ -27,7 +27,7 @@ repos:
       - id: terraform_docs
 
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.1.1  # x-release-please-version
+    rev: v3.1.2  # x-release-please-version
     hooks:
       # Fast checks at pre-commit
       - id: trivy-iac-critical

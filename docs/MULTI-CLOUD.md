@@ -88,11 +88,11 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.1 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.2 # x-release-please-version
     with:
       terraform-directory: aws
       cloud-provider: aws
-      scanning-repo-ref: v3.1.1 # x-release-please-version
+      scanning-repo-ref: v3.1.2 # x-release-please-version
 ```
 
 In the retained release-managed caller example, set `OWNER` to `agenticcodingops`
