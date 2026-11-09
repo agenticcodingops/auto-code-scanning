@@ -436,7 +436,14 @@ STRICT=1 python scripts/validate-scan-config.py
 ```
 
 Expect exit 0 and zero failed verifier checks. An optional missing `.trivyignore`
-can produce a warning. This proves installation, not that every security rule was
+can produce a warning. Setup may display only a bounded prefix of verification
+output, but must still drain the verifier to completion and preserve its exit
+status. PowerShell setup uses `Select-Object -First 30 -Wait` and checks
+`$LASTEXITCODE`; Python setup captures both streams and checks the completed
+process status before displaying output. Any added output limit must retain
+that contract. See [verification output troubleshooting](TROUBLESHOOTING.md#setup-verification-output).
+
+This proves installation, not that every security rule was
 exercised. The verifier checks the shipped runner template exactly, including pre-commit
 revisions. With that alternative runner, verify the generated tag-based template
 before replacing its platform `rev:` with the full SHA, then review that pin change

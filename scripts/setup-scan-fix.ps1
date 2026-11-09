@@ -248,6 +248,8 @@ if ((Test-Path $verify) -and $setupTools['pwsh']) {
     Push-Location $RepoPath
     try {
         Install-Step 'scan verification' {
+            # Bound display only: -Wait drains the verifier through completion,
+            # leaving its exit status in LASTEXITCODE for Install-Step to check.
             & $setupTools['pwsh'] -NoProfile -ExecutionPolicy Bypass -File $verify -HooksRunner $HooksRunner -Tier $Tier 2>&1 | Select-Object -First 30 -Wait
         }
     } finally { Pop-Location }

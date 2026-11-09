@@ -5,6 +5,22 @@ table covers the v3 Bash/Python floors, verified tools, external policy, tracked
 configuration, formatter setup, report publication and SARIF permissions. This page
 adds operational cases for Terraform scans.
 
+## Setup verification output
+
+PowerShell setup displays the first 30 verifier output records. A short display
+does not imply success: the pipeline must drain the verifier to completion and
+retain its exit status, including a failure after record 30. Keep the `-Wait` in
+`Select-Object -First 30 -Wait` and check `$LASTEXITCODE` immediately afterward.
+Python setup captures both streams and checks the completed process status;
+apply any display limit only after capture completes. A replacement Bash pipeline
+must also drain the producer: enable `pipefail` and immediately save the verifier's
+entry in `PIPESTATUS` before another command overwrites it. An early-closing prefix
+reader can terminate the verifier prematurely.
+
+If setup reports failed verification after the visible prefix, run the full
+[setup verifier](SETUP-GUIDE.md#7-verify-setup) from the consumer root to see all
+diagnostics. A nonzero verifier exit must remain a setup failure.
+
 ## Issue 1: Hook Timeout
 
 **Symptom**: Pre-commit hook hangs or takes longer than 5 seconds.
