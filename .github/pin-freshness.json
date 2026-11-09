@@ -824,7 +824,7 @@
         "type": "github_tags",
         "repo": "anthropics/claude-code-action"
       },
-      "precondition": "change it in every place listed above together, in the same commit; When you bump, check the `@anthropic-ai/claude-agent-sdk` version locked in that action release's `bun.lock`; It must be 1.0.93 or later."
+      "precondition": "change it in every place listed above together, in the same commit"
     },
     {
       "id": "inactive-login-example",

@@ -200,7 +200,8 @@ class Client:
                     parsed = version(name)
                 except ValueError:
                     continue
-                url = f"https://github.com/{repo}/releases/tag/{urllib.parse.quote(tag, safe='')}"
+                route = "releases/tag" if kind == "releases" else "tree"
+                url = f"https://github.com/{repo}/{route}/{urllib.parse.quote(tag, safe='')}"
                 candidates.append((parsed, name, url))
                 if kind == "tags":
                     sha = row["commit"]["sha"]
@@ -224,7 +225,8 @@ def stale_prs(client, repository, now):
         labels = {label["name"].lower() for label in pr["labels"]}
         login = pr["user"]["login"].lower()
         dependency = "dependencies" in labels or login in {
-            "dependabot[bot]", "dependabot-preview[bot]", "renovate[bot]", "app/dependabot", "app/renovate"
+            "dependabot[bot]", "dependabot-preview[bot]", "renovate[bot]", "dependabot", "renovate",
+            "app/dependabot", "app/renovate"
         }
         created = datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00"))
         if dependency and now - created > timedelta(days=7):
