@@ -227,6 +227,7 @@ class Client:
             repo = source["repo"]
             kind = "releases" if source["type"] == "github_releases" else "tags"
             pattern = re.compile(source.get("tag_pattern", r"v?(?P<version>\d+(?:\.\d+)*)"))
+            capped = False
             try:
                 rows = [(row["tag_name"] if kind == "releases" else row["name"],
                          None if kind == "releases" else row["commit"]["sha"], kind == "releases")
@@ -235,7 +236,7 @@ class Client:
             except ResultCap:
                 # Past GitHub's 1,000-result list cap, read every tag ref in one unpaginated response so
                 # the highest version is computed over the complete set, never a truncated list.
-                rows = self.all_tags(repo)
+                rows, capped = self.all_tags(repo), True
             for tag, sha, released in rows:
                 match = pattern.fullmatch(tag)
                 if not match:
@@ -247,15 +248,31 @@ class Client:
                     continue
                 route = "releases/tag" if released else "tree"
                 url = f"https://github.com/{repo}/{route}/{urllib.parse.quote(tag, safe='')}"
-                candidates.append((parsed, name, url))
+                candidates.append((parsed, name, url, tag))
                 if kind == "tags" and sha:
                     # Major aliases and exact tags can identify the same commit.
                     if sha not in revisions or version(revisions[sha]) < parsed:
                         revisions[sha] = name
+            if capped and kind == "releases":
+                # A tag alone does not prove a published stable release: confirm the highest tags against
+                # their release records, newest first, and report the lookup incomplete if none qualifies.
+                return (*self.published_release(repo, candidates), revisions)
         if not candidates:
             raise ValueError("no stable numeric upstream releases found")
         latest = max(candidates)
         return latest[1], latest[2], revisions
+
+    def published_release(self, repo, candidates, limit=20):
+        for _, name, _, tag in sorted(candidates, reverse=True)[:limit]:
+            try:
+                release = self.request(f"{API}/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+            except ValueError as exc:
+                if "HTTP 404" in str(exc):
+                    continue  # a tag with no published release
+                raise
+            if not (release.get("draft") or release.get("prerelease")):
+                return name, f"https://github.com/{repo}/releases/tag/{urllib.parse.quote(tag, safe='')}"
+        raise ResultCap(f"no published stable release among the {limit} highest tags; lookup incomplete")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

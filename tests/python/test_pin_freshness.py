@@ -287,12 +287,32 @@ def test_releases_past_the_cap_use_every_tag_for_the_highest_version():
     # Chronological pages hold only maintenance releases; the newer major is older than the cap.
     maintenance = [{"tag_name": f"v1.{n}.0"} for n in range(100)]
     all_refs = refs(("v1.5.0", "a" * 40, "commit"), ("v2.0.0", "b" * 40, "tag"), ("v2.0.0-rc1", "c" * 40, "commit"))
-    api.request = Mock(side_effect=[maintenance] * 10 + [CAP, all_refs])
+    api.request = Mock(side_effect=[maintenance] * 10 + [CAP, all_refs, {"draft": False, "prerelease": False}])
     latest, url, revisions = api.upstream({"type": "github_releases", "repo": "owner/tool"})
     assert latest == "2.0.0"
-    assert url == "https://github.com/owner/tool/tree/v2.0.0"
+    assert url == "https://github.com/owner/tool/releases/tag/v2.0.0"
     assert revisions == {}
-    assert api.request.call_args.args[0] == pf.API + "/repos/owner/tool/git/matching-refs/tags/"
+    assert api.request.call_args_list[11].args[0] == pf.API + "/repos/owner/tool/git/matching-refs/tags/"
+    assert api.request.call_args.args[0] == pf.API + "/repos/owner/tool/releases/tags/v2.0.0"
+
+
+def test_capped_releases_skip_prerelease_and_unpublished_tags():
+    api = pf.Client("")
+    page = [{"tag_name": f"v1.{n}.0"} for n in range(100)]
+    all_refs = refs(("v1.10.0", "a" * 40, "commit"), ("v8.0.0", "b" * 40, "commit"), ("v9.0.0", "c" * 40, "commit"))
+    unpublished = ValueError("api.github.com: HTTP 404 (Not Found)")
+    api.request = Mock(side_effect=[page] * 10 + [CAP, all_refs, unpublished, {"prerelease": True}, {"prerelease": False}])
+    latest, url, _ = api.upstream({"type": "github_releases", "repo": "owner/tool"})
+    assert latest == "1.10.0"
+    assert url == "https://github.com/owner/tool/releases/tag/v1.10.0"
+
+
+def test_capped_releases_with_no_published_stable_release_are_incomplete():
+    api = pf.Client("")
+    page = [{"tag_name": f"v1.{n}.0"} for n in range(100)]
+    api.request = Mock(side_effect=[page] * 10 + [CAP, refs(("v1.0.0", "a" * 40, "commit")), {"draft": True}])
+    with pytest.raises(pf.ResultCap, match="lookup incomplete"):
+        api.upstream({"type": "github_releases", "repo": "owner/tool"})
 
 
 def test_tags_past_the_cap_map_only_lightweight_tags_to_commits():
