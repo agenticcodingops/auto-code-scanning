@@ -126,7 +126,7 @@ jobs:
           done
 
       - name: Checkout TRUSTED base config (NEVER the PR head)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # SECURITY: read fix_loop (build_verify_cmd, allowlist_paths, gated_paths,
           # max_iterations, …) from the already-merged BASE ref, so a PR can NEVER
@@ -250,14 +250,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout head SHA (read-only, no persisted creds)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ steps.ctx.outputs.head_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout shared scanning scripts (pinned)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: ${{ inputs.scanning_repo }}
           ref: ${{ inputs.scanning_repo_ref }}
@@ -764,7 +764,7 @@ jobs:
     cache-mode: none
     steps:
       - name: Checkout the EXACT vetted SHA (no persisted creds)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ needs.analyze.outputs.head_sha }}
           fetch-depth: 0
@@ -824,7 +824,7 @@ jobs:
       contents: read   # workflow token stays read-only; push uses AUTOFIX_TOKEN in one step
     steps:
       - name: Checkout the EXACT vetted SHA into pr-head/ (NO token on disk)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # SECURITY: persist-credentials:false => AUTOFIX_TOKEN is NEVER written to
           # .git/config. The checkout goes to pr-head/, not the working directory, so
@@ -836,7 +836,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout shared scanning scripts (pinned)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: ${{ inputs.scanning_repo }}
           ref: ${{ inputs.scanning_repo_ref }}
