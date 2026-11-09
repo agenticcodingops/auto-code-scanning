@@ -7,11 +7,9 @@ shared files and move every local and hosted pin together.
 
 The current release is `v3.0.8`. <!-- x-release-please-version -->
 
-Every `file:line` reference on this page, such as `reusable-scan.yml:44`, means that line
-at commit
-[`7cd34a5`](https://github.com/agenticcodingops/auto-code-scanning/tree/7cd34a52c823a725575ef3b59ab34e062d1d83dd)
-on `main`. Workflow file names such as `reusable-scan.yml` and `autonomous-fix.yml` are
-under `.github/workflows/`; other paths are relative to the repository root.
+References below name searchable jobs, steps and keys in the linked files. When
+upgrading, inspect those names at the release commit you are evaluating. Workflow
+files are under `.github/workflows/`; other paths are relative to the repository root.
 
 ## Purpose
 
@@ -37,7 +35,8 @@ the change merges.
   [TERRAFORM-MODULE-ADOPTION.md](TERRAFORM-MODULE-ADOPTION.md). This runbook calls it
   `terraform-scan.yml`.
 - The caller runs on `pull_request`, `push` to the default branch and
-  `workflow_dispatch`, like the template (`templates/workflows/terraform-scan.yml:7-12`).
+  `workflow_dispatch`, like the `on` block in the
+  [terraform-scan.yml caller template](../templates/workflows/terraform-scan.yml).
 - The reviewed platform repository holds the target release. The default is
   `agenticcodingops/auto-code-scanning`; a mirror requires an explicit
   `scanning-repository`. See [configuration sources](REUSABLE-WORKFLOWS.md#configs-come-from-the-reviewed-platform-revision).
@@ -64,8 +63,9 @@ git diff <current-pin> vX.Y.Z -- .github/workflows/reusable-scan.yml configs/
 ```
 
 `CHANGELOG.md` is not enough: release-please leaves out `ci:`, `chore:` and `build:`
-commits (`release-please-config.json:12-18`), and scanner pins have been changed under
-`ci(scan):`.
+commits (the `changelog-sections` entries with `hidden: true` in
+[release-please-config.json](../release-please-config.json)), and scanner pins have
+been changed under `ci(scan):`.
 
 For a target of `v2.2.0` or later, the tag's Release Verification run
 (`release-verify.yml`) logs the Checkov, Trivy and TFLint versions and the azurerm
@@ -95,8 +95,10 @@ same commit exists in the reviewed platform or explicitly selected mirror.
 - **Operator STOP:** no
 
 Run the scan on the default branch at the current pin, then save its findings. The
-`aggregated-results` artifact is kept for one day only (`reusable-scan.yml:789-795`), so
-download it soon after the run.
+`aggregated-results` artifact is kept for one day only (`retention-days` on the
+`aggregate` job's `Upload aggregated results` step in
+[reusable-scan.yml](../.github/workflows/reusable-scan.yml)), so download it soon
+after the run.
 
 ```bash
 BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
@@ -114,9 +116,13 @@ jq -r '.findings[] | select((.suppressed or .baseline) | not)
 ```
 
 `aggregated.json` lists every finding with `suppressed` and `baseline` flags
-(`reusable-scan.yml:597-686`, `758-768`); the filter keeps the active ones. Save the run's
-job summaries too: they name the Trivy, TFLint and ruleset versions
-(`reusable-scan.yml:189-201`, `371-383`).
+(the `findings` list and `apply_exceptions()` call in
+[aggregate_scan.py](../scripts/aggregate_scan.py), invoked by the `aggregate` job's
+`Aggregate and filter results` step in
+[reusable-scan.yml](../.github/workflows/reusable-scan.yml)); the filter keeps the active ones.
+Save the run's job summaries too: the `scan-trivy` job's `Show Trivy version` step and
+the `scan-tflint` job's `Show TFLint version` step in that workflow name the Trivy,
+TFLint and ruleset versions.
 
 The current aggregate includes secret findings as well as IaC findings. Compare
 those entries and, when uploads are enabled, the `trivy-secrets` code scanning
@@ -139,9 +145,11 @@ jobs:
 ```
 
 The `uses:` ref selects the workflow. `scanning-repo-ref` selects the configs it scans
-with (`reusable-scan.yml:123-131`). If they differ, the run uses one release's workflow
-with another release's configs. The default lives inside the workflow revision that `uses:`
-pins (`reusable-scan.yml:40-44`): from the release that carries this change on, release-please
+with (the `setup` job's `Checkout scanning repo configs` step in
+[reusable-scan.yml](../.github/workflows/reusable-scan.yml)). If they differ, the run uses
+one release's workflow with another release's configs. The default is
+`on.workflow_call.inputs.scanning-repo-ref.default` in the workflow revision that
+`uses:` pins: from the release that carries this change on, release-please
 sets it to that release's tag, so an unset input reads the same release's configs. Earlier
 releases default to `v1.0.0`, which is not a tag, so a caller pinned to one of them must set it.
 
@@ -152,8 +160,9 @@ grep -rnE 'auto-code-scanning|scanning-repo-ref|scanning_repo(_ref)?:' .github/w
 grep -n -A1 'auto-code-scanning' .pre-commit-config.yaml 2>/dev/null   # the rev: line follows
 ```
 
-That includes `scanning_repo_ref` in an `autonomous-fix.yml` caller
-(`autonomous-fix.yml:59-63`) and a pre-commit `rev:`.
+That includes the caller's `with.scanning_repo_ref`, declared as
+`on.workflow_call.inputs.scanning_repo_ref` in
+[autonomous-fix.yml](../.github/workflows/autonomous-fix.yml), and a pre-commit `rev:`.
 
 If an `autonomous-fix.yml` caller is among the pins, compare
 `.github/workflows/autonomous-fix.yml`, `scripts/check-fix-allowlist.py` and
@@ -260,13 +269,18 @@ runs the scan on the default branch.
   generated from commit subjects, so they name a scanner version only when a commit
   subject does.
 - The Setup Scanning Tools, Trivy IaC Scan, Checkov Policy Scan, TFLint Scan and Aggregate
-  Results jobs all passed. Aggregate runs even when a scan job fails
-  (`reusable-scan.yml:514`), so check every job.
+  Results jobs all passed. The `aggregate` job in
+  [reusable-scan.yml](../.github/workflows/reusable-scan.yml) uses `if: always()`, so it
+  runs even when a scan job fails; check every job.
 - The `checkov-results` artifact contains `checkov-results.json`. Before `v2.1.0`, Checkov
   wrote no report (the 2.1.0 entry of `CHANGELOG.md`).
-- The Trivy and TFLint reports are usable. The scan jobs stay green when a scanner fails
-  (`reusable-scan.yml:187`, `442`). The artifacts are kept for one day
-  (`reusable-scan.yml:251`, `450`). Use the pull request run from step 6:
+- The Trivy and TFLint reports are usable. Findings are gated by aggregation;
+  scanner failures or incomplete reports fail the scan (the `SCANNER_RESULTS` and
+  `health_errors` checks in [aggregate_scan.py](../scripts/aggregate_scan.py)).
+  The `scan-trivy` job's `Upload Trivy results` step and the `scan-tflint` job's
+  `Upload TFLint results` step in
+  [reusable-scan.yml](../.github/workflows/reusable-scan.yml) set `retention-days: 1`.
+  Use the pull request run from step 6:
 
   ```bash
   gh run download <run-id> --name trivy-results --dir after-trivy
@@ -276,9 +290,10 @@ runs the scan on the default branch.
   jq -e '(.errors | length) == 0' after-tflint/tflint-results.json >/dev/null
   ```
 
-  These are the checks the platform's self-test makes
-  (`reusable-scan-self-test.yml:91-119`). To run them on every pull request, add a job
-  like it to your caller (see
+  These report checks mirror the `verify` job's `Check the reports` step in
+  [reusable-scan-self-test.yml](../.github/workflows/reusable-scan-self-test.yml).
+  Scanner health is already enforced by the reusable scan's aggregate job. To add
+  a separate report-verification job to your caller, follow that self-test (see
   [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#scanner-health-and-secret-findings)).
 - If every finding of one tool moved to `gone.tsv`, treat that scanner as broken until its
   log and report show it ran and Aggregate read its findings.

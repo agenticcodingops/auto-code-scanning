@@ -156,7 +156,7 @@ and after.
 
 If you pin any release before `v2.1.0` (`v2.0.9` or earlier), `reusable-scan.yml` did not
 scan the way its name suggests. The 2.1.0 entry of [CHANGELOG.md](../CHANGELOG.md)
-records it (`CHANGELOG.md:18-31` at commit `7cd34a5`):
+records these failures under its **2.1.0** heading:
 
 - **Checkov never ran.** It rejected the output list it was given, wrote no report, and
   `continue-on-error` kept the job green.
@@ -175,20 +175,27 @@ gated severities. On `v2.0.0` to `v2.0.4`, Trivy did not scan at all, so a passi
 shows nothing. When you move to `v2.1.0` or later:
 
 - Expect findings the scan never showed: TFLint warnings and Checkov failed checks in the
-  pull request comment, and Checkov alerts in code scanning (`CHANGELOG.md:57-59`).
-- Checkov findings normally count as MEDIUM and do not block (`CHANGELOG.md:46-47`). A
-  TFLint rule at `error` level counts as HIGH and does block
-  (`.github/workflows/reusable-scan.yml:646`).
-- Checkov uses this repository's `configs/<cloud>/.checkov.yaml`, not your own Checkov
-  config (`CHANGELOG.md:59-60`).
-- Set `scanning-repo-ref` to the same commit as `uses:` (`CHANGELOG.md:60-61`). Unset, it
-  takes the default baked into the pinned workflow revision
-  (`.github/workflows/reusable-scan.yml:40-44`): that release's own tag from the release that
-  carries this change on, and `v1.0.0`, which is not a tag, on earlier releases. A commit pin
+  pull request comment, and Checkov alerts in code scanning (the **2.1.0** entry in
+  [CHANGELOG.md](../CHANGELOG.md)).
+- In the current workflow, Checkov findings without a severity count as HIGH, and a
+  TFLint rule at `error` level also counts as HIGH. Active HIGH findings block when
+  `fail-on-findings` is true. See the `Parse Checkov findings` block,
+  `tflint_severity_map` and `FAIL_ON_FINDINGS` in
+  [aggregate_scan.py](../scripts/aggregate_scan.py). The **2.1.0** changelog entry
+  describes the older MEDIUM default for Checkov.
+- Checkov uses the platform's `configs/<cloud>/.checkov.yaml` as its base config; the
+  `setup` job's `Validate Checkov consumer settings` step in
+  [reusable-scan.yml](../.github/workflows/reusable-scan.yml) applies the supported
+  consumer inputs. See
+  [scanner configuration](REUSABLE-WORKFLOWS.md#scanner-configuration).
+- Set `scanning-repo-ref` to the same commit as `uses:`. Unset, it takes
+  `on.workflow_call.inputs.scanning-repo-ref.default` in the pinned
+  [reusable-scan.yml](../.github/workflows/reusable-scan.yml): that release's own tag
+  from the release that carries this change on, and `v1.0.0`, which is not a tag, on
+  earlier releases. A commit pin
   therefore needs an explicit value whenever the configs at the tag and at the commit differ.
 
-Line references are at commit `7cd34a5`. Follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) for
-the upgrade.
+Follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) for the upgrade.
 
 ### Automatic Update
 
@@ -291,8 +298,9 @@ leave out permissions. See
 call needs.
 
 The fix loop is the one call that pushes to your repository, so pin the commit and pass
-only the three secrets `autonomous-fix.yml` declares (`autonomous-fix.yml:64-73`), as the
-shipped `templates/fix-loop/autonomous-fix.yml` now does. Its copies from releases up to
+only `AUTOFIX_TOKEN`, `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN`, declared under
+`on.workflow_call.secrets` in
+[autonomous-fix.yml](../.github/workflows/autonomous-fix.yml), as the shipped `templates/fix-loop/autonomous-fix.yml` now does. Its copies from releases up to
 and including v2.3.4 say `secrets: inherit`; replace that. Never use `secrets: inherit`
 there: it hands the called workflow every secret of your repository
 and organisation. See [step 4 of CONSUMER-MIGRATION.md](CONSUMER-MIGRATION.md#4-pin-the-callers-and-grant-their-permissions).
@@ -309,7 +317,9 @@ repository at the release they ship in. Releases up to and including v2.3.1 pinn
 `rev: v1.0.0`, a tag that does not exist. With `--hooks-runner pre-commit`,
 `setup-scan-fix` copies `templates/<tier>/pre-commit-config.yaml` to
 `.pre-commit-config.yaml` when that file does not exist yet
-(`scripts/setup-scan-fix.py:91-95`, `scripts/setup-scan-fix.ps1:100-102`), and
+(the `pc_src`/`pc_dst` branch in `main()` in
+[setup-scan-fix.py](../scripts/setup-scan-fix.py), and the `$pcSrc`/`$pcDest` branch in
+[setup-scan-fix.ps1](../scripts/setup-scan-fix.ps1)), and
 [Getting started](SETUP-GUIDE.md) now uses the platform setup command. If you copied
 a template from one of those releases, change `rev:` to the current release before your
 first commit or `pre-commit run`, because until then pre-commit cannot fetch the hooks.
@@ -334,15 +344,16 @@ at that ref.
 | Trivy | 0.75.0 | `TRIVY_VERSION` and `TRIVY_SHA256` on the `Install Trivy` step, which downloads the GitHub release and verifies its checksum; the four `aquasecurity/trivy-action` steps set `skip-setup-trivy` |
 | TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
 | TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
-| Snyk CLI (optional job) | 1.1307.4 | `npm install -g snyk@1.1307.4` in the `scan-snyk` job (`reusable-scan.yml:507-508`) |
+| Snyk CLI (optional job) | 1.1307.4 | `npm install -g snyk@1.1307.4` in the `scan-snyk` job's `Install Snyk CLI` step in [reusable-scan.yml](../.github/workflows/reusable-scan.yml) |
 
 Every run logs the Checkov, Trivy and TFLint versions it used: the Checkov step's image
 tag and banner, the `Show Trivy version` step, and the `Show TFLint version` step, which
 lists each ruleset. Some inputs still move without a pin. Trivy downloads its
 misconfiguration checks bundle at run time, and `Show Trivy version` logs that bundle's
 digest. When `enable-snyk` is `true`, the Snyk job installs the `snyk` package at the
-exact version above (`reusable-scan.yml:507-508`), but npm still resolves that package's
-own dependencies at run time, and no step logs the version it installed.
+exact version above in the `scan-snyk` job's `Install Snyk CLI` step in
+[reusable-scan.yml](../.github/workflows/reusable-scan.yml), but npm still resolves
+that package's own dependencies at run time, and no step logs the version it installed.
 
 To bump a scanner, change it in one release:
 
@@ -359,8 +370,10 @@ To bump a scanner, change it in one release:
    `checksums.txt`.
 4. Rulesets: change the `version` in every `configs/<cloud>/.tflint.hcl` that uses
    the plugin.
-5. Snyk: change the version in `npm install -g snyk@<version>` (`reusable-scan.yml:508`,
-   the job is optional) to the one `npm view snyk dist-tags.latest` reports, and update the
+5. Snyk: change the version in `npm install -g snyk@<version>` in the optional
+   `scan-snyk` job's `Install Snyk CLI` step in
+   [reusable-scan.yml](../.github/workflows/reusable-scan.yml) to the one
+   `npm view snyk dist-tags.latest` reports, and update the
    table. `tests/python/test_workflow_pins.py` fails if the version is not exact.
 
 `.github/workflows/reusable-scan-self-test.yml` runs the scan on any change to it or
@@ -381,8 +394,10 @@ The agentic fix loop calls Anthropic's `claude-code-action`. That action is
   v1.0.148, locks `@anthropic-ai/claude-agent-sdk` 0.3.177 in its `bun.lock`, and that
   SDK release matches Claude Code 2.1.177, well past the fix.
 
-The SHA is set in `.github/workflows/autonomous-fix.yml`, the source of truth (line 333;
-the header comment at lines 35-37 names the version). It is mirrored as
+The SHA is set in the `analyze` job's `Run Claude Code (FIX-ONLY)` step in
+[autonomous-fix.yml](../.github/workflows/autonomous-fix.yml), the source of truth.
+The header comment beginning `claude-code-action is SHA-pinned` names the version.
+It is mirrored as
 `fix_loop.claude_code_action_ref` in `scan-config.yaml` and in
 `templates/scan-config/starter.yaml`, `standard.yaml` and `strict.yaml`, which
 `setup-scan-fix` copies into a new adopter's `scan-config.yaml`. Nothing checks that
@@ -396,7 +411,8 @@ installed, and the validator must find `schemas/scan-config.schema.json`.
 `setup-scan-fix` vendors `schemas/` with the validator, so an adopter gets the schema at
 the path the validator expects. If the schema is later removed, the validator prints a
 warning and exits 0 unless `STRICT=1` is set, which turns the skip into a failure
-(`scripts/validate-scan-config.py:40-60`). No CI workflow runs it.
+(the `schema_path is None` branch in `main()` in
+[validate-scan-config.py](../scripts/validate-scan-config.py)). No CI workflow runs it directly.
 
 Because the action is referenced only from the reusable workflow, every consumer that
 `uses:` `autonomous-fix.yml@v2.0.0` gets the safe pin automatically — there is nothing
