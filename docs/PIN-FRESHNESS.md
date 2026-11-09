@@ -136,8 +136,10 @@ extracts values and detects drift, but performs no numeric upstream lookup.
 This manifest covers the inventory's scanner engines/plugins, installed package
 strings, hook revisions, Bun, schema URL, action config mirrors, inactive login
 example, runtime/floor selections and generated integration constraints. It also
-keeps floating runner and service identifiers visible. Active Actions are handled
-by the dependency updater. Release-managed platform references, the documented
+keeps floating runner and service identifiers and the Pester compatibility cap
+visible. The checkout example in the active review styleguide is monitored beside
+its workflow anchors; its Python language floor is a separate compatibility role.
+Active Actions are handled by the dependency updater. Release-managed platform references, the documented
 historical workaround, captured scanner evidence, old specifications/research and
 transitive SDK/CLI measurements remain historical; they are not new upgrade targets.
 The inventory snapshot itself is not an executable pin source.

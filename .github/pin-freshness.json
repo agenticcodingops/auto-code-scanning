@@ -1033,6 +1033,14 @@
         {
           "file": ".github/workflows/pin-freshness.yml",
           "pattern": "python-version:\\s*'(?P<value>\\d+\\.\\d+)'"
+        },
+        {
+          "file": "docs/PIN-FRESHNESS.md",
+          "pattern": "Python (?P<value>\\d+\\.\\d+)\\+"
+        },
+        {
+          "file": "scripts/pin_freshness.py",
+          "pattern": "Python (?P<value>\\d+\\.\\d+)\\+"
         }
       ],
       "source": {
@@ -1092,6 +1100,26 @@
         {
           "file": "docs/CONTRIBUTING.md",
           "pattern": "(?:PowerShell |PowerShell \\| )(?P<value>\\d+)(?:\\+| and)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "\\$PSVersionTable\\.PSVersion\\.Major -lt (?P<value>\\d+)"
         }
       ],
       "source": {
@@ -1328,6 +1356,56 @@
       },
       "policy": "manual",
       "review_reason": "API channel is not a numeric release; review against the service API reference"
+    },
+    {
+      "id": "checkout-styleguide-mirror",
+      "locations": [
+        {
+          "file": ".gemini/styleguide.md",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/gemini-code-review.yml",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "actions/checkout"
+      }
+    },
+    {
+      "id": "pester-maximum",
+      "locations": [
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "-MaximumVersion (?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "pester/Pester"
+      },
+      "policy": "manual",
+      "review_reason": "Compatibility upper bound; review it together with pester-minimum"
+    },
+    {
+      "id": "python-styleguide-minimum",
+      "locations": [
+        {
+          "file": ".gemini/styleguide.md",
+          "pattern": "Language Level\\*\\*: Python (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "python/cpython"
+      },
+      "policy": "minimum"
     }
   ]
 }
