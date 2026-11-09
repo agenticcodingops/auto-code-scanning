@@ -10,7 +10,7 @@ Build a reusable, multi-cloud Terraform security scanning solution providing sha
 ## Technical Context
 
 **Language/Version**: PowerShell 7+ (Windows scripts), Python 3.8+ (cross-platform: scan.py, setup-scanning.py, validate-suppressions.py), Bash (Unix hook wrappers)
-**Primary Dependencies**: pre-commit framework 3.0+, Trivy >=0.48.0, Checkov >=3.0.0, tflint >=0.50.0, PyYAML (Python)
+**Primary Dependencies**: pre-commit framework 3.2.0+, Trivy >=0.48.0, Checkov >=3.0.0, tflint >=0.50.0, PyYAML (Python)
 **Storage**: JSON files (.scanning/last-scan.json, .scan-baseline/, .scan-results/), YAML configs (.scan-suppressions.yaml)
 **Testing**: Pester 5+ (PowerShell), pytest (Python), Terraform fixtures (integration), GitHub Actions CI
 **Target Platform**: Windows (primary), macOS, Linux — all via pre-commit framework

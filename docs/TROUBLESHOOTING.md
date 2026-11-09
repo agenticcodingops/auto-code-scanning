@@ -61,7 +61,7 @@ trivy config .
 
 - **Not installed**: Run the setup script to install all tools.
 - **Not in PATH**: Ensure tool installation directories are in your system PATH.
-- **Version too old**: Minimum versions: trivy>=0.48.0, checkov>=3.0.0, tflint>=0.50.0, pre-commit>=3.0.0.
+- **Version too old**: Minimum versions: trivy>=0.48.0, checkov>=3.0.0, tflint>=0.50.0, pre-commit>=3.2.0.
 
 ```bash
 # Windows (admin)

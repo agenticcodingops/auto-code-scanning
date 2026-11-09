@@ -5,9 +5,10 @@
 # Adds to standard: terraform_docs, trivy-iac-full (pre-push),
 #                    checkov-strict (pre-push), validate-suppressions
 ---
+minimum_pre_commit_version: "3.2.0"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: c4a0b883114b00d8d76b479c820ce7950211c99b  # v4.5.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -19,7 +20,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: 4bf25029a7a45d7d69592250dd3c327a74d77631  # v1.88.0
+    rev: 4c4437d784e93cacb1f05f1d7bc28e4354fafd20  # v1.109.4
     hooks:
       - id: terraform_fmt
       - id: terraform_validate

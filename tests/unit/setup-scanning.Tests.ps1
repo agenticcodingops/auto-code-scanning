@@ -63,7 +63,7 @@ Describe "setup-scanning.ps1" {
             $content | Should -Match "trivy.*0\.48\.0"
             $content | Should -Match "checkov.*3\.0\.0"
             $content | Should -Match "tflint.*0\.50\.0"
-            $content | Should -Match "pre-commit.*3\.0\.0"
+            $content | Should -Match "pre-commit.*3\.2\.0"
         }
 
         It "Should track 5 total tools" {

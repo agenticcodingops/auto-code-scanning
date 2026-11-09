@@ -428,7 +428,7 @@ The following matrix defines the expected exit codes for each fixture-hook combi
 
 #### Compatibility
 
-- **NFR-011**: Hooks MUST work with pre-commit framework version 3.0+
+- **NFR-011**: Hooks MUST work with pre-commit framework version 3.2.0+
 - **NFR-012**: Setup scripts MUST support PowerShell 7+ (Windows) and Python 3.8+ (all platforms)
 - **NFR-013**: CI workflows MUST run on `ubuntu-latest` runners
 - **NFR-013a**: Hook entry scripts MUST work on Windows (PowerShell/Git Bash), macOS (bash/zsh), and Linux (bash) via dual-wrapper architecture
