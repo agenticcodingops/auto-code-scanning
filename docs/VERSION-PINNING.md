@@ -559,7 +559,7 @@ plugins, not Terraform providers.
 
 | Scanner / plugin | Snapshot value | Every installing/config file | Hand update / existing precondition |
 |---|---|---|---|
-| Trivy | `0.75.0` | [`.github/workflows/autonomous-fix.yml`](../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../scripts/scanner-downloads.json), [`tests/python/test_autofix_file_guard.py`](../tests/python/test_autofix_file_guard.py), [`tests/python/test_workflow_pins.py`](../tests/python/test_workflow_pins.py) | Workflow env/version+SHA pair; release download lock; P4. |
+| Trivy | `0.75.0` | [`.github/workflows/autonomous-fix.yml`](../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../scripts/scanner-downloads.json) | Workflow env/version+SHA pair; release download lock; P4. |
 | Checkov | `3.3.19` | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan-self-test.yml`](../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml), [`scripts/setup-scanning-no-admin.ps1`](../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../scripts/setup-scanning.ps1), [`scripts/setup-scanning.py`](../scripts/setup-scanning.py), [`docs/CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](SETUP-GUIDE.md) | pip install strings plus the Checkov action above; P3, P7. |
 | TFLint | `0.64.0` | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../scripts/scanner-downloads.json) | Workflow with/input plus release download lock; P5. |
 | Gitleaks | `8.30.1` | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`scripts/scanner-downloads.json`](../scripts/scanner-downloads.json) | Release download lock and ci.yml shell version/expected checksum; P4. Local hooks execute the trusted installed binary. |
@@ -587,6 +587,10 @@ than carrying another version. The full platform hashes/URLs remain in that lock
 Linux amd64 archive URL construction and SHA-256
 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`;
 move its shell version, digest and version assertion with the lock.
+The tests [test_autofix_file_guard.py](../tests/python/test_autofix_file_guard.py)
+and [test_workflow_pins.py](../tests/python/test_workflow_pins.py) compare Trivy's
+workflow version/checksum dynamically against the lock; they do not repeat the
+literal engine version.
 
 The fix action's `d5726de019ec4498aa667642bc3a80fca83aa102` SHA also appears in
 [root scan-config](../scan-config.yaml) and all three
@@ -757,8 +761,8 @@ These are existing instructions, quoted without adding a new bump requirement.
   “Dependabot does not update a workflow's container image, so renew the digest
   deliberately.” The comment records “semgrep 1.178.0, resolved 2026-10-07.”
 - **P7 — Python environments**, [Getting started](SETUP-GUIDE.md):
-  “Install pre-commit in a separate external environment: its current dependencies need
-  a newer `packaging` package than Checkov accepts.”
+  “If choosing pre-commit instead, keep it in a separate external environment: its
+  virtualenv dependency can require a newer `packaging` package than Checkov accepts.”
 - **P8 — Snyk**, [scanner procedure](#scanner-versions-in-the-terraform-scan):
   “change the version in `npm install -g snyk@<version>`”; “update the table.”
   The same section notes “npm still resolves that package's own dependencies at run time”.
