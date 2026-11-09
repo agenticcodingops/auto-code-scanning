@@ -225,7 +225,7 @@ jobs:
           mkdir -- .scan-tooling
 
       - name: Download configs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: scanning-configs
           path: .scan-tooling/
@@ -353,7 +353,7 @@ jobs:
           mkdir -- .scan-tooling
 
       - name: Download configs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: scanning-configs
           path: .scan-tooling/
@@ -456,7 +456,7 @@ jobs:
           mkdir -- .scan-tooling
 
       - name: Download configs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: scanning-configs
           path: .scan-tooling/
@@ -617,7 +617,7 @@ jobs:
           mkdir -- .scan-tooling
 
       - name: Download configs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: scanning-configs
           path: .scan-tooling/
@@ -713,7 +713,7 @@ jobs:
         run: python3 -I -m pip install --disable-pip-version-check PyYAML==6.0.3
 
       - name: Download all results
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           path: ${{ runner.temp }}/scan-artifacts/
 
@@ -761,7 +761,7 @@ jobs:
       sarif-uploaded: ${{ steps.set-output.outputs.sarif-uploaded }}
     steps:
       - name: Download scan results
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           path: scan-artifacts/
 
@@ -898,7 +898,7 @@ jobs:
     if: always() && inputs.post-pr-comment && github.event_name == 'pull_request'
     steps:
       - name: Download aggregated results
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: aggregated-results
           path: aggregated/
@@ -1008,7 +1008,7 @@ jobs:
     if: always() && inputs.upload-metrics
     steps:
       - name: Download aggregated results
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: aggregated-results
           path: aggregated/
