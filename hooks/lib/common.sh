@@ -202,7 +202,11 @@ assert_external_path() {
 import os, pathlib, subprocess, sys
 try:
     root = (pathlib.Path.cwd() if any(os.environ.get(key) == '1' for key in ('SCAN_PUSH_SNAPSHOT', 'SCAN_INDEX_SNAPSHOT')) else
-            pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())).resolve()
+            pathlib.Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True,
+                                                 encoding='utf-8', errors='strict').strip())).resolve()
+except UnicodeDecodeError:
+    # Replacing bytes could move the boundary and allow a checkout-owned path.
+    sys.exit("Cannot decode Git checkout root as UTF-8; refusing trusted path")
 except subprocess.CalledProcessError:
     root = pathlib.Path.cwd().resolve()
 p = pathlib.Path(sys.argv[1])
