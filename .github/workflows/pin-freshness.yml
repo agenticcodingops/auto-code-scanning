@@ -20,7 +20,7 @@ on:
         description: Same full commit SHA as the reusable workflow uses pin
         type: string
         required: false
-        default: "v3.0.9"  # x-release-please-version
+        default: "v3.1.0"  # x-release-please-version
 
 permissions: {}
 

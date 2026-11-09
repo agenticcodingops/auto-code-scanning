@@ -468,7 +468,7 @@ stages, or files in their `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: v3.0.9    # always pin to a release tag, never @main  x-release-please-version
+    rev: v3.1.0    # always pin to a release tag, never @main  x-release-please-version
     hooks:
       - id: trivy-iac-critical
         stages: [pre-push]          # Override: move to pre-push

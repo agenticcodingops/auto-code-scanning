@@ -8,6 +8,19 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.9...v3.1.0) (2026-11-09)
+
+
+### Features
+
+* weekly freshness report for hand-kept pins ([#118](https://github.com/agenticcodingops/auto-code-scanning/issues/118)) ([da68364](https://github.com/agenticcodingops/auto-code-scanning/commit/da68364b8a6541339ee7f5cb6c3090c60788b803))
+
+
+### Bug Fixes
+
+* **deps:** update the shared pre-commit hooks ([#127](https://github.com/agenticcodingops/auto-code-scanning/issues/127)) ([64e17fa](https://github.com/agenticcodingops/auto-code-scanning/commit/64e17fa96b6bab901d69e2447409dc934f5c0b1d))
+* read past upstream IP allow lists in the freshness report ([#133](https://github.com/agenticcodingops/auto-code-scanning/issues/133)) ([7bea71e](https://github.com/agenticcodingops/auto-code-scanning/commit/7bea71e738daf12f2abdadd435cbf39c8bc0e3ec))
+
 ## [3.0.9](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.0.8...v3.0.9) (2026-11-09)
 
 

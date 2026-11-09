@@ -5,7 +5,7 @@ hosted acceptance for a repository that publishes a Terraform module. Its source
 line references describe the historical revision named below; current configuration
 sources and security contracts are in [the workflow reference](REUSABLE-WORKFLOWS.md).
 
-The current release is `v3.0.9`. <!-- x-release-please-version -->
+The current release is `v3.1.0`. <!-- x-release-please-version -->
 
 Every `file:line` reference on this page, such as `reusable-scan.yml:126`, means that line
 at commit
@@ -121,11 +121,11 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.0.9 # x-release-please-version
+    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.0 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "azure"
-      scanning-repo-ref: "v3.0.9" # x-release-please-version
+      scanning-repo-ref: "v3.1.0" # x-release-please-version
 ```
 
 - Set `OWNER` to the reviewed platform owner (`agenticcodingops` by default), and
