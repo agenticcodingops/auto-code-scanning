@@ -1,0 +1,1411 @@
+{
+  "$schema": "../schemas/pin-freshness.schema.json",
+  "pins": [
+    {
+      "id": "trivy",
+      "locations": [
+        {
+          "file": ".github/workflows/autonomous-fix.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": ".github/workflows/code-security-scan.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": ".github/workflows/performance-check.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?:Trivy |trivy )(?P<value>\\d+\\.\\d+\\.\\d+)\\b"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "(?s:\"trivy\":\\s*\\{.*?\"version\":\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "github\\.com/aquasecurity/trivy/releases/download/v(?P<value>\\d+(?:\\.\\d+)*)/"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "trivy_(?P<value>\\d+(?:\\.\\d+)*)_"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Trivy \\|[^\\n]*?release lock selects (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
+          "pattern": "Runs the Secret scan job: Trivy (?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "aquasecurity/trivy"
+      },
+      "precondition": "Verify new hashes against the publisher's checksum source before updating this lock.",
+      "mirrors": [
+        {
+          "id": "linux-amd64-sha256",
+          "locations": [
+            {
+              "file": "scripts/scanner-downloads.json",
+              "pattern": "(?s:\"trivy\":\\s*\\{.*?\"linux-amd64\":\\s*\\{.*?\"sha256\":\\s*\")(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/autonomous-fix.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/code-security-scan.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/copilot-setup-steps.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/performance-check.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/reusable-scan.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tflint",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "tflint_version:\\s*[\\'\"]?v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "tflint_version:\\s*[\\'\"]?v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/performance-check.yml",
+          "pattern": "tflint_version:\\s*[\\'\"]?v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "tflint_version:\\s*[\\'\"]?v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "(?s:\"tflint\":\\s*\\{.*?\"version\":\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "github\\.com/terraform-linters/tflint/releases/download/v(?P<value>\\d+(?:\\.\\d+)*)/"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| TFLint \\|[^\\n]*?release lock selects (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "TFLint (?P<value>\\d+\\.\\d+\\.\\d+)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint"
+      },
+      "precondition": "exact pin; bump deliberately; Verify new hashes against the publisher's checksum source before updating this lock.",
+      "mirrors": [
+        {
+          "id": "linux-amd64-sha256",
+          "locations": [
+            {
+              "file": "scripts/scanner-downloads.json",
+              "pattern": "(?s:\"tflint\":\\s*\\{.*?\"linux-amd64\":\\s*\\{.*?\"sha256\":\\s*\")(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/performance-check.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/reusable-scan.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            }
+          ]
+        },
+        {
+          "id": "linux-arm64-sha256",
+          "locations": [
+            {
+              "file": "scripts/scanner-downloads.json",
+              "pattern": "(?s:\"tflint\":\\s*\\{.*?\"linux-arm64\":\\s*\\{.*?\"sha256\":\\s*\")(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*[0-9a-f]{64}\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/performance-check.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*[0-9a-f]{64}\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/reusable-scan.yml",
+              "pattern": "checksums:\\s*\\|\\s*\\n\\s*[0-9a-f]{64}\\s*\\n\\s*(?P<value>[0-9a-f]{64})"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gitleaks",
+      "locations": [
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "(?s:\"gitleaks\":\\s*\\{.*?\"version\":\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "github\\.com/gitleaks/gitleaks/releases/download/v(?P<value>\\d+(?:\\.\\d+)*)/"
+        },
+        {
+          "file": "scripts/scanner-downloads.json",
+          "pattern": "gitleaks_(?P<value>\\d+(?:\\.\\d+)*)_"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Gitleaks \\|[^\\n]*?release lock selects (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "Gitleaks (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?s:Install pinned Gitleaks[^\\n]*\\n.*?version=\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "\\$\\(gitleaks version\\)\" = \"(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "gitleaks/gitleaks"
+      },
+      "precondition": "Verify new hashes against the publisher's checksum source before updating this lock.",
+      "mirrors": [
+        {
+          "id": "linux-amd64-sha256",
+          "locations": [
+            {
+              "file": "scripts/scanner-downloads.json",
+              "pattern": "(?s:\"gitleaks\":\\s*\\{.*?\"linux-amd64\":\\s*\\{.*?\"sha256\":\\s*\")(?P<value>[0-9a-f]{64})"
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "pattern": "(?s:asset=\"gitleaks_[^\\n]*\\n\\s*expected=\")(?P<value>[0-9a-f]{64})"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checkov",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/performance-check.yml",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan-self-test.yml",
+          "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "Checkov (?P<value>\\d+\\.\\d+\\.\\d+)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])Checkov (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "checkov"
+      },
+      "precondition": "choose the `checkov-action` tag whose `action.yml` names the Checkov image you want, and pin that tag's commit SHA. If choosing pre-commit instead, keep it in a separate external environment: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "pytest",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pytest"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "pytest-cov",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pytest-cov"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "pyyaml",
+      "locations": [
+        {
+          "file": ".github/workflows/autonomous-fix.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/code-security-scan.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan-self-test.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "tests/python/test_autonomous_fix_trust_boundary.py",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])PyYAML (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "PyYAML"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "jsonschema",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "jsonschema"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "pre-commit",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?<![\\w-])pre-commit (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pre-commit"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "pip",
+      "locations": [
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?i:(?<![\\w-])pip==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?i:(?<![\\w-])pip==)(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pip"
+      },
+      "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
+    },
+    {
+      "id": "semgrep-app",
+      "locations": [
+        {
+          "file": ".github/workflows/code-security-scan.yml",
+          "pattern": "(?s:semgrep-version:.*?default:\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
+          "pattern": "\\| `semgrep-version` \\| string \\| no \\| `(?P<value>\\d+(?:\\.\\d+)*)`"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "semgrep"
+      }
+    },
+    {
+      "id": "semgrep-container",
+      "locations": [
+        {
+          "file": ".github/workflows/semgrep.yml",
+          "pattern": "deliberately\\. semgrep (?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "\\(semgrep (?P<value>\\d+(?:\\.\\d+)*)\\)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "semgrep/semgrep"
+      },
+      "precondition": "Dependabot does not update a workflow's container image, so renew the digest deliberately."
+    },
+    {
+      "id": "snyk",
+      "locations": [
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/REUSABLE-WORKFLOWS.md",
+          "pattern": "snyk@(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "snyk/cli"
+      },
+      "precondition": "change the version in `npm install -g snyk@<version>`"
+    },
+    {
+      "id": "prettier",
+      "locations": [
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "prettier@(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "prettier/prettier"
+      }
+    },
+    {
+      "id": "tflint-ruleset-terraform",
+      "locations": [
+        {
+          "file": "configs/aws/.tflint.hcl",
+          "pattern": "(?s:plugin \"terraform\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "configs/azure/.tflint.hcl",
+          "pattern": "(?s:plugin \"terraform\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "configs/gcp/.tflint.hcl",
+          "pattern": "(?s:plugin \"terraform\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint-ruleset-terraform"
+      },
+      "precondition": "exact pin; bump deliberately"
+    },
+    {
+      "id": "tflint-ruleset-aws",
+      "locations": [
+        {
+          "file": "configs/aws/.tflint.hcl",
+          "pattern": "(?s:plugin \"aws\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint-ruleset-aws"
+      },
+      "precondition": "exact pin; bump deliberately"
+    },
+    {
+      "id": "tflint-ruleset-azurerm",
+      "locations": [
+        {
+          "file": "configs/azure/.tflint.hcl",
+          "pattern": "(?s:plugin \"azurerm\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint-ruleset-azurerm"
+      },
+      "precondition": "exact pin; bump deliberately"
+    },
+    {
+      "id": "tflint-ruleset-google",
+      "locations": [
+        {
+          "file": "configs/gcp/.tflint.hcl",
+          "pattern": "(?s:plugin \"google\"\\s*\\{.*?version\\s*=\\s*\")(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint-ruleset-google"
+      },
+      "precondition": "exact pin; bump deliberately"
+    },
+    {
+      "id": "hook-common",
+      "locations": [
+        {
+          "file": "scripts/.pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/aws/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/azure/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/gcp/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/standard/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/starter/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "scripts/.pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/aws/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/azure/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/gcp/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/standard/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/starter/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/pre-commit/pre-commit-hooks\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "pre-commit/pre-commit-hooks"
+      }
+    },
+    {
+      "id": "hook-terraform",
+      "locations": [
+        {
+          "file": "scripts/.pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/aws/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/azure/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/gcp/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/standard/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/starter/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "scripts/.pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/aws/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/azure/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/gcp/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/standard/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/starter/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/antonbabenko/pre-commit-terraform\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "antonbabenko/pre-commit-terraform"
+      }
+    },
+    {
+      "id": "hook-optional",
+      "locations": [
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/commitizen-tools/commitizen\\s*\\n[^\\n]*rev:\\s*)(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/strict/pre-commit-config.yaml",
+          "pattern": "(?s:repo:\\s*https://github\\.com/commitizen-tools/commitizen\\s*\\n[^\\n]*rev:\\s*)[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "commitizen-tools/commitizen"
+      }
+    },
+    {
+      "id": "fix-action-mirrors",
+      "locations": [
+        {
+          "file": ".github/workflows/autonomous-fix.yml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "scan-config.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/scan-config/standard.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/scan-config/starter.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "templates/scan-config/strict.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "anthropics/claude-code-action"
+      },
+      "precondition": "change it in every place listed above together, in the same commit"
+    },
+    {
+      "id": "inactive-login-example",
+      "locations": [
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "azure/login@(?P<value>[0-9a-f]{40})"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "Azure/login"
+      }
+    },
+    {
+      "id": "bun",
+      "locations": [
+        {
+          "file": ".github/workflows/autonomous-fix.yml",
+          "pattern": "BUN_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "oven-sh/bun",
+        "tag_pattern": "bun-v(?P<version>\\d+(?:\\.\\d+)*)"
+      },
+      "precondition": "Download the release the action pins and check it against a recorded SHA-256 instead."
+    },
+    {
+      "id": "release-schema",
+      "locations": [
+        {
+          "file": "release-please-config.json",
+          "pattern": "release-please/v(?P<value>\\d+(?:\\.\\d+)*)/schemas"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "googleapis/release-please"
+      }
+    },
+    {
+      "id": "trivy-minimum",
+      "locations": [
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "\"trivy\":\\s*\\((?P<value>[\\d, ]+)\\)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?m)^\\s*\"?trivy\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?m)^\\s*\"?trivy\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Trivy[^\\n]*?\\| (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        },
+        {
+          "file": "docs/TROUBLESHOOTING.md",
+          "pattern": "trivy>=(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "aquasecurity/trivy"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "checkov-minimum",
+      "locations": [
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "\"checkov\":\\s*\\((?P<value>[\\d, ]+)\\)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?m)^\\s*\"?checkov\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?m)^\\s*\"?checkov\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Checkov[^\\n]*?\\| (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        },
+        {
+          "file": "docs/TROUBLESHOOTING.md",
+          "pattern": "checkov>=(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "checkov"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "tflint-minimum",
+      "locations": [
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "\"tflint\":\\s*\\((?P<value>[\\d, ]+)\\)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?m)^\\s*\"?tflint\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?m)^\\s*\"?tflint\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| TFLint[^\\n]*?\\| (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        },
+        {
+          "file": "docs/TROUBLESHOOTING.md",
+          "pattern": "tflint>=(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "terraform-linters/tflint"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "pre-commit-minimum",
+      "locations": [
+        {
+          "file": "scripts/setup-scanning.py",
+          "pattern": "\"pre-commit\":\\s*\\((?P<value>[\\d, ]+)\\)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "(?m)^\\s*\"?pre-commit\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "scripts/setup-scanning-no-admin.ps1",
+          "pattern": "(?m)^\\s*\"?pre-commit\"?\\s*=\\s*\\[version\\]\"(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Lefthook[^\\n]*?\\*\\*or\\*\\* (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        },
+        {
+          "file": "docs/TROUBLESHOOTING.md",
+          "pattern": "pre\\-commit>=(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pre-commit"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "python-runtime",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "python-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/code-security-scan.yml",
+          "pattern": "python-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "python-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/pin-freshness.yml",
+          "pattern": "python-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "python-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "docs/CONSUMER-MIGRATION.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "docs/HOOK-REFERENCE.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "docs/TROUBLESHOOTING.md",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "hooks/lib/common.ps1",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "hooks/lib/common.sh",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": "scripts/create-baseline.ps1",
+          "pattern": "Python (?:\\| )?(?P<value>\\d+\\.\\d+)(?:\\+| or newer| or later)"
+        },
+        {
+          "file": ".github/workflows/pin-freshness.yml",
+          "pattern": "python-version:\\s*'(?P<value>\\d+\\.\\d+)'"
+        },
+        {
+          "file": "docs/PIN-FRESHNESS.md",
+          "pattern": "Python (?P<value>\\d+\\.\\d+)\\+"
+        },
+        {
+          "file": "scripts/pin_freshness.py",
+          "pattern": "Python (?P<value>\\d+\\.\\d+)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "python/cpython"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "node-runtime",
+      "locations": [
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "node-version:\\s*[\\'\"](?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "nodejs/node"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "bash-minimum",
+      "locations": [
+        {
+          "file": "hooks/lib/common.sh",
+          "pattern": "Bash (?P<value>\\d+\\.\\d+)(?:\\+| or later)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "Bash (?P<value>\\d+\\.\\d+)(?:\\+| or later)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "Bash (?P<value>\\d+\\.\\d+)(?:\\+| or later)"
+        },
+        {
+          "file": "docs/HOOK-REFERENCE.md",
+          "pattern": "Bash (?P<value>\\d+\\.\\d+)(?:\\+| or later)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "Bash (?P<value>\\d+\\.\\d+)(?:\\+| or later)"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "mirror/bash",
+        "tag_pattern": "bash-(?P<version>\\d+(?:\\.\\d+)*)"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "powershell-minimum",
+      "locations": [
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?:PowerShell |PowerShell \\| )(?P<value>\\d+)(?:\\+| and)"
+        },
+        {
+          "file": "README.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "PowerShell(?: \\(`pwsh`\\) \\| | )(?P<value>\\d+(?:\\.\\d+)*)(?:\\+| with| and|,)"
+        },
+        {
+          "file": "scripts/setup-scanning.ps1",
+          "pattern": "\\$PSVersionTable\\.PSVersion\\.Major -lt (?P<value>\\d+)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "PowerShell/PowerShell"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "pester-minimum",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
+        },
+        {
+          "file": "README.md",
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
+        },
+        {
+          "file": "docs/CONTRIBUTING.md",
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
+        },
+        {
+          "file": "docs/agent-team-implementation-guide.md",
+          "pattern": "(?:-MinimumVersion |Pester )(?P<value>\\d+(?:\\.\\d+)*)(?![\\d.])"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "pester/Pester"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "dotnet-minimum",
+      "locations": [
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\.NET SDK \\| (?P<value>\\d+)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "dotnet/sdk"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "git-minimum",
+      "locations": [
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "\\| Git \\| (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "git/git"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "lefthook-minimum",
+      "locations": [
+        {
+          "file": "templates/lefthook/lefthook.yml",
+          "pattern": "(?:min_version:\\s*[\\'\"]?|Lefthook[^\\n]*?\\| )(?P<value>\\d+\\.\\d+(?:\\.\\d+)?)"
+        },
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?:min_version:\\s*[\\'\"]?|Lefthook[^\\n]*?\\| )(?P<value>\\d+\\.\\d+(?:\\.\\d+)?)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "evilmartians/lefthook"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "gitleaks-minimum",
+      "locations": [
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "Gitleaks \\| (?P<value>\\d+)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "gitleaks/gitleaks"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "semgrep-minimum",
+      "locations": [
+        {
+          "file": "docs/SETUP-GUIDE.md",
+          "pattern": "Semgrep \\| (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "semgrep/semgrep"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "terraform-generated-minimum",
+      "locations": [
+        {
+          "file": "tests/integration/test-consuming-repo.sh",
+          "pattern": "required_version\\s*=\\s*\">= (?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "hashicorp/terraform"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "aws-generated-constraint",
+      "locations": [
+        {
+          "file": "tests/integration/test-consuming-repo.sh",
+          "pattern": "version\\s*=\\s*\"~> (?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "hashicorp/terraform-provider-aws"
+      },
+      "policy": "minimum"
+    },
+    {
+      "id": "hosted-runner",
+      "locations": [
+        {
+          "file": ".github/workflows/autonomous-fix.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/bypass-detection.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/code-security-scan.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/gemini-code-review.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/performance-check.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/pin-freshness.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/release.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan-self-test.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/reusable-scan.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        },
+        {
+          "file": ".github/workflows/semgrep.yml",
+          "pattern": "runs-on:\\s*(?P<value>[^\\s#]+)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "actions/runner-images"
+      },
+      "policy": "manual",
+      "review_reason": "Floating runner label; review image changes and image-supplied tools"
+    },
+    {
+      "id": "review-model",
+      "locations": [
+        {
+          "file": ".github/scripts/gemini_review.py",
+          "pattern": "DEFAULT_MODEL = \"(?P<value>[^\"\\n]+)\""
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "googleapis/googleapis"
+      },
+      "policy": "manual",
+      "review_reason": "Model selection is not a GitHub release or PyPI version; review against the service model catalog"
+    },
+    {
+      "id": "review-api",
+      "locations": [
+        {
+          "file": ".github/scripts/gemini_review.py",
+          "pattern": "googleapis\\.com/(?P<value>v\\d+(?:[a-z]+\\d*)?)/"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "googleapis/googleapis"
+      },
+      "policy": "manual",
+      "review_reason": "API channel is not a numeric release; review against the service API reference"
+    },
+    {
+      "id": "checkout-styleguide-mirror",
+      "locations": [
+        {
+          "file": ".gemini/styleguide.md",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/gemini-code-review.yml",
+          "pattern": "actions/checkout@(?P<value>[0-9a-f]{40})"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "actions/checkout"
+      }
+    },
+    {
+      "id": "pester-maximum",
+      "locations": [
+        {
+          "file": ".github/workflows/copilot-setup-steps.yml",
+          "pattern": "-MaximumVersion (?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "pester/Pester"
+      },
+      "policy": "manual",
+      "review_reason": "Compatibility upper bound; review it together with pester-minimum"
+    },
+    {
+      "id": "python-styleguide-minimum",
+      "locations": [
+        {
+          "file": ".gemini/styleguide.md",
+          "pattern": "Language Level\\*\\*: Python (?P<value>\\d+(?:\\.\\d+)*)\\+"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "python/cpython"
+      },
+      "policy": "minimum"
+    }
+  ]
+}

@@ -25,6 +25,7 @@
       "extra-files": [
         ".github/workflows/autonomous-fix.yml",
         ".github/workflows/reusable-scan.yml",
+        ".github/workflows/pin-freshness.yml",
         "scripts/.pre-commit-config.yaml",
         "README.md",
         "docs/APP-CODE-SCANNING.md",
