@@ -190,10 +190,11 @@ shows nothing. When you move to `v2.1.0` or later:
   [scanner configuration](REUSABLE-WORKFLOWS.md#scanner-configuration).
 - Set `scanning-repo-ref` to the same commit as `uses:`. Unset, it takes
   `on.workflow_call.inputs.scanning-repo-ref.default` in the pinned
-  [reusable-scan.yml](../.github/workflows/reusable-scan.yml): that release's own tag
-  from the release that carries this change on, and `v1.0.0`, which is not a tag, on
-  earlier releases. A commit pin
-  therefore needs an explicit value whenever the configs at the tag and at the commit differ.
+  [reusable-scan.yml](../.github/workflows/reusable-scan.yml). Starting with
+  **v2.3.4**, each release defaults to its own tag (the **2.3.4** entry in
+  [CHANGELOG.md](../CHANGELOG.md)). Earlier releases default to `v1.0.0`, which is
+  not a tag. A commit pin therefore needs an explicit value whenever the configs
+  at the tag and at the commit differ.
 
 Follow [BUMP-THE-SCAN.md](BUMP-THE-SCAN.md) for the upgrade.
 

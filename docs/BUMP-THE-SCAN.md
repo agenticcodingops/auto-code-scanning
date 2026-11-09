@@ -149,9 +149,10 @@ with (the `setup` job's `Checkout scanning repo configs` step in
 [reusable-scan.yml](../.github/workflows/reusable-scan.yml)). If they differ, the run uses
 one release's workflow with another release's configs. The default is
 `on.workflow_call.inputs.scanning-repo-ref.default` in the workflow revision that
-`uses:` pins: from the release that carries this change on, release-please
-sets it to that release's tag, so an unset input reads the same release's configs. Earlier
-releases default to `v1.0.0`, which is not a tag, so a caller pinned to one of them must set it.
+`uses:` pins. Starting with **v2.3.4**, release-please sets it to that release's tag
+(the **2.3.4** entry in [CHANGELOG.md](../CHANGELOG.md)), so an unset input reads
+the same release's configs. Earlier releases default to `v1.0.0`, which is not a
+tag, so a caller pinned to one of them must set it.
 
 Find every other pin to this platform and move it in the same pull request:
 
@@ -223,10 +224,13 @@ versions from both runs' job summaries. Compare the `trivy-secrets` alerts too.
 - **Operator STOP:** yes. Do not merge until every line of `new.tsv` has a recorded
   decision and every line of `gone.tsv` has a recorded reason.
 
-Active CRITICAL and HIGH findings fail when `fail-on-findings: true`, its default.
-Checkov findings without severity count as HIGH; TFLint errors count as HIGH.
-Missing tools, failed jobs and incomplete reports fail even in report-only mode.
-See [the workflow gate](REUSABLE-WORKFLOWS.md#the-gate-counts-critical-and-high-only).
+For **v3.0.0 and later**, active CRITICAL and HIGH findings fail when
+`fail-on-findings: true`, its default. Checkov findings without severity count as
+HIGH; TFLint errors count as HIGH. Missing tools, failed jobs and incomplete
+reports fail even in report-only mode. See
+[the workflow gate](REUSABLE-WORKFLOWS.md#the-gate-counts-critical-and-high-only).
+For older targets, inspect the pinned workflow's severity mapping and require
+the separate report-verification gate described under [Verify](#verify).
 
 | Decision | Required action |
 |---|---|
@@ -274,9 +278,12 @@ runs the scan on the default branch.
   runs even when a scan job fails; check every job.
 - The `checkov-results` artifact contains `checkov-results.json`. Before `v2.1.0`, Checkov
   wrote no report (the 2.1.0 entry of `CHANGELOG.md`).
-- The Trivy and TFLint reports are usable. Findings are gated by aggregation;
-  scanner failures or incomplete reports fail the scan (the `SCANNER_RESULTS` and
-  `health_errors` checks in [aggregate_scan.py](../scripts/aggregate_scan.py)).
+- The Trivy and TFLint reports are usable. For **v3.0.0 and later**, findings are
+  gated by aggregation, and scanner failures or incomplete reports fail the scan
+  (the `SCANNER_RESULTS` and `health_errors` checks in
+  [aggregate_scan.py](../scripts/aggregate_scan.py)). Earlier releases, including
+  **v2.2.0**, can pass despite scanner failures or missing reports; require a
+  separate report-verification gate for those targets.
   The `scan-trivy` job's `Upload Trivy results` step and the `scan-tflint` job's
   `Upload TFLint results` step in
   [reusable-scan.yml](../.github/workflows/reusable-scan.yml) set `retention-days: 1`.
@@ -292,9 +299,12 @@ runs the scan on the default branch.
 
   These report checks mirror the `verify` job's `Check the reports` step in
   [reusable-scan-self-test.yml](../.github/workflows/reusable-scan-self-test.yml).
-  Scanner health is already enforced by the reusable scan's aggregate job. To add
-  a separate report-verification job to your caller, follow that self-test (see
-  [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#scanner-health-and-secret-findings)).
+  For **v3.0.0 and later**, scanner health is already enforced by the reusable
+  scan's aggregate job; a separate report-verification job is optional. For older
+  releases, add a required report-verification job to your caller that rejects
+  missing or invalid reports and TFLint errors, following that self-test. See
+  [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#scanner-health-and-secret-findings)
+  for the current enforcement behavior.
 - If every finding of one tool moved to `gone.tsv`, treat that scanner as broken until its
   log and report show it ran and Aggregate read its findings.
 - The first run on the default branch after the merge passed.
