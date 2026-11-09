@@ -22,9 +22,9 @@ combination has been tested; the release's exact scanner versions are in
 | Python | 3.11+ with PyYAML and jsonschema | Setup, snapshots and validation |
 | PowerShell (`pwsh`) | 7+ | Setup verification on every OS; native Windows hooks |
 | Git | 2.0+ | Repository, index and hooks |
-| Trivy | 0.48.0+; release lock selects 0.75.0 | Secrets and Terraform security |
+| Trivy | 0.48.0+; release lock selects 0.76.2 | Secrets and Terraform security |
 | Checkov | 3.0.0+ | Terraform policy and setup verification |
-| TFLint | 0.50.0+; release lock selects 0.64.0 | Terraform lint and setup verification |
+| TFLint | 0.50.0+; release lock selects 0.66.0 | Terraform lint and setup verification |
 | Gitleaks | 8+; release lock selects 8.30.1 | Additional local secret checks |
 | Lefthook **or** pre-commit | 1.6+ **or** 3.2.0+ | Git hook runner; Lefthook is the default |
 | Terraform | Match your project's `required_version` | Terraform formatting, validation and setup verification |

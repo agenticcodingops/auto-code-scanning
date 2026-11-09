@@ -1,6 +1,6 @@
 # Copilot cloud agent environment, from the template in agenticcodingops/dev-environments (copilot/).
-# Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.64.0,
-# Trivy v0.75.0, Checkov 3.3.19, and Pester 5.
+# Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.66.0,
+# Trivy v0.76.2, Checkov 3.3.19, and Pester 5.
 # Dropped: .NET and Terraform. This repository holds Terraform fixtures only.
 # The workflow must be on the default branch to take effect, and the job must stay named copilot-setup-steps.
 # It runs before Copilot starts working. The pull_request trigger below tests the file in the PR that adds it.
@@ -45,7 +45,7 @@ jobs:
       - name: Set up TFLint
         uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:
-          tflint_version: v0.64.0
+          tflint_version: v0.66.0
 
       # The cloud configs declare external rulesets. setup-tflint installs only the binary.
       # Same retry and token as ci.yml, for aws, azure, and gcp.
@@ -72,8 +72,8 @@ jobs:
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         run: |
           set -euo pipefail
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"

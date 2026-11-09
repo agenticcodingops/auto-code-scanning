@@ -122,8 +122,8 @@ jobs:
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         run: |
           set -euo pipefail
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
@@ -139,10 +139,10 @@ jobs:
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
         with:
-          tflint_version: v0.64.0
+          tflint_version: v0.66.0
           checksums: |
-            cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537
-            560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb
+            22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e
+            1105a0a5ddee7cdac7957a3475571a946b839192ea1bc0c722c6c4686001067e
 
       - name: Initialize TFLint
         # Authenticate plugin downloads with GITHUB_TOKEN (lifts the anonymous GitHub
@@ -328,8 +328,8 @@ jobs:
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         run: |
           set -euo pipefail
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
@@ -389,8 +389,8 @@ jobs:
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         run: |
           set -euo pipefail
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
