@@ -268,6 +268,32 @@ def test_pagination_reads_all_pages():
     assert api.request.call_args.args[0].endswith("&per_page=100&page=2")
 
 
+CAP = ValueError("api.github.com: HTTP 422 (Only the first 1000 results are available.)")
+
+
+def test_newest_first_list_stops_at_the_api_result_cap():
+    api = pf.Client("")
+    api.request = Mock(side_effect=[[{}] * 100] * 10 + [CAP])
+    assert len(api.pages("/repos/owner/tool/releases", newest_first=True)) == 1000
+
+
+def test_other_lists_still_fail_at_the_api_result_cap():
+    api = pf.Client("")
+    api.request = Mock(side_effect=[[{}] * 100] * 10 + [CAP])
+    with pytest.raises(ValueError, match="HTTP 422"):
+        api.pages("/repos/owner/tool/tags")
+
+
+def test_releases_lookup_finds_the_latest_despite_the_cap():
+    api = pf.Client("")
+    newest = [{"tag_name": f"v3.4.{n}"} for n in range(100, 0, -1)]
+    older = [{"tag_name": f"v3.3.{n}"} for n in range(100, 0, -1)]
+    api.request = Mock(side_effect=[newest] + [older] * 9 + [CAP])
+    latest, url, _ = api.upstream({"type": "github_releases", "repo": "owner/tool"})
+    assert latest == "3.4.100"
+    assert url.endswith("/releases/tag/v3.4.100")
+
+
 def test_token_only_sent_to_github_and_redirects_disabled(monkeypatch):
     requests = []
     opener = MagicMock()

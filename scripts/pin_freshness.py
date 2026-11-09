@@ -162,11 +162,18 @@ class Client:
         except urllib.error.URLError:
             raise ValueError(f"{parsed.netloc}: network lookup failed") from None
 
-    def pages(self, path):
+    def pages(self, path, newest_first=False):
         rows = []
         for page in range(1, 101):
             separator = "&" if "?" in path else "?"
-            batch = self.request(f"{API}{path}{separator}per_page=100&page={page}")
+            try:
+                batch = self.request(f"{API}{path}{separator}per_page=100&page={page}")
+            except ValueError as exc:
+                # GitHub stops list pagination at 1,000 results (HTTP 422). For a newest-first list the
+                # rows already read hold the latest entries, so stop there; any other list stays an error.
+                if newest_first and rows and "HTTP 422" in str(exc) and "first 1000 results" in str(exc):
+                    return rows
+                raise
             if not isinstance(batch, list):
                 raise ValueError("expected an API list")
             rows.extend(batch)
@@ -204,7 +211,7 @@ class Client:
             repo = source["repo"]
             kind = "releases" if source["type"] == "github_releases" else "tags"
             pattern = re.compile(source.get("tag_pattern", r"v?(?P<version>\d+(?:\.\d+)*)"))
-            for row in self.pages(f"/repos/{repo}/{kind}"):
+            for row in self.pages(f"/repos/{repo}/{kind}", newest_first=kind == "releases"):
                 if row.get("draft") or row.get("prerelease"):
                     continue
                 tag = row["tag_name"] if kind == "releases" else row["name"]
