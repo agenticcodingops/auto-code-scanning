@@ -699,8 +699,8 @@ jobs:
       - name: Install the checksum-verified patch scanner
         if: steps.capture.outputs.has_changes == 'true' && steps.gate.outputs.gated != 'true'
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         working-directory: ${{ runner.temp }}
         run: |
           set -euo pipefail
@@ -955,8 +955,8 @@ jobs:
         # Download the pinned release from GitHub and verify its checksum. The install
         # script behind setup-trivy fetches from get.trivy.dev, which no longer resolves.
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
         run: |
           set -euo pipefail
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"

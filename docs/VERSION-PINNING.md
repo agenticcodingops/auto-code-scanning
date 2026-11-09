@@ -342,10 +342,10 @@ at that ref.
 | Scanner | Version | Where it is pinned |
 |---|---|---|
 | Checkov | 3.3.19 | the `bridgecrewio/checkov-action` SHA (v12.3125.0): the action's `action.yml` names the image `ghcr.io/bridgecrewio/checkov:3.3.19` |
-| Trivy | 0.75.0 | `TRIVY_VERSION` and `TRIVY_SHA256` on the `Install Trivy` step, which downloads the GitHub release and verifies its checksum; the four `aquasecurity/trivy-action` steps set `skip-setup-trivy` |
-| TFLint | 0.64.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
-| TFLint rulesets | terraform 0.15.0, azurerm 0.32.0, aws 0.49.0, google 0.40.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
-| Snyk CLI (optional job) | 1.1307.4 | `npm install -g snyk@1.1307.4` in the `scan-snyk` job's `Install Snyk CLI` step in [reusable-scan.yml](../.github/workflows/reusable-scan.yml) |
+| Trivy | 0.76.2 | `TRIVY_VERSION` and `TRIVY_SHA256` on the `Install Trivy` step, which downloads the GitHub release and verifies its checksum; the four `aquasecurity/trivy-action` steps set `skip-setup-trivy` |
+| TFLint | 0.66.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
+| TFLint rulesets | terraform 0.17.0, azurerm 0.33.0, aws 0.50.0, google 0.41.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
+| Snyk CLI (optional job) | 1.1308.4 | `npm install -g snyk@1.1308.4` in the `scan-snyk` job's `Install Snyk CLI` step in [reusable-scan.yml](../.github/workflows/reusable-scan.yml) |
 
 Every run logs the Checkov, Trivy and TFLint versions it used: the Checkov step's image
 tag and banner, the `Show Trivy version` step, and the `Show TFLint version` step, which

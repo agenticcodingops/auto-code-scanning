@@ -284,7 +284,7 @@ if (-not $SkipTools) {
     } elseif (Test-CommandExists "npm") {
         Write-Info "Installing Snyk CLI via npm (optional - requires Snyk license)..."
         try {
-            npm install -g snyk@1.1307.4 2>&1 | Out-Null
+            npm install -g snyk@1.1308.4 2>&1 | Out-Null
             if (Test-CommandExists "snyk") {
                 $version = Get-ToolVersion -Command "snyk"
                 Write-Success "Snyk CLI installed (v$version) [optional]"

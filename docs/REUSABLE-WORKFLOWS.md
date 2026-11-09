@@ -139,7 +139,7 @@ Terraform and IaC scan. Called through `workflow_call` (`reusable-scan.yml:23-24
 | `apply-baseline` | boolean | no | `true` | Marks findings listed in `.scan-baseline/baseline.json` as baselined. | `reusable-scan.yml:75-79`, `571`, `777-791` |
 | `allow-legacy-exceptions` | boolean | no | `false` | Explicit schema 1.0 migration opt-in. | `scan_policy.py` |
 | `allow-inline-checkov-skips` | boolean | no | `false` | Honour all source inline skips when explicitly requested by the trusted caller. The default honours only unchanged skips already on the same resource in trusted base policy. | `scan_policy.py` |
-| `enable-snyk` | boolean | no | `false` | Runs the Snyk IaC job. Needs the `SNYK_TOKEN` secret. The job installs `snyk@1.1307.4` from npm (an exact version; before this it installed whatever npm called latest, up to and including v2.3.2). | `reusable-scan.yml:80-84`, `497`, `507-508` |
+| `enable-snyk` | boolean | no | `false` | Runs the Snyk IaC job. Needs the `SNYK_TOKEN` secret. The job installs `snyk@1.1308.4` from npm (an exact version; before this it installed whatever npm called latest, up to and including v2.3.2). | `reusable-scan.yml:80-84`, `497`, `507-508` |
 | `upload-metrics` | boolean | no | `true` | Uploads the artifact `scan-metrics-<cloud-provider>-<run_id>`, kept for 90 days. | `reusable-scan.yml:85-89`, `1092`, `1137-1142` |
 
 For a release or commit containing these inputs, add the following to the caller's
@@ -276,10 +276,10 @@ For the scan-config side, see [APP-CODE-SCANNING.md](APP-CODE-SCANNING.md).
 | Input | Type | Required | Default | What it does | Source |
 |---|---|---|---|---|---|
 | `languages` | string | no | `""` | Comma-separated: `csharp`, `typescript`. Unsupported values fail detection. When empty, the workflow reads `scan-config.yaml` from the trusted base and scans each of those two languages whose `languages.<name>.enabled` is `true`. If it cannot read that file, detection fails. | `code-security-scan.yml:26-30`, `96-115` |
-| `severity` | string | no | `ERROR` | Passed to `semgrep --severity`. Give one level: `INFO`, `WARNING` or `ERROR`. Semgrep reports rules of exactly that level; it is not a minimum. Semgrep 1.100.0 rejects a comma-separated value such as `ERROR,WARNING` with exit code 2 (tested locally): the report step fails rather than substituting an empty report. | `code-security-scan.yml:31-35`, `169-179`, `195-200` |
+| `severity` | string | no | `ERROR` | Passed to `semgrep --severity`. Give one level: `INFO`, `WARNING` or `ERROR`. Semgrep reports rules of exactly that level; it is not a minimum. Semgrep 1.184.0 rejects a comma-separated value such as `ERROR,WARNING` with exit code 2 (tested locally): the report step fails rather than substituting an empty report. | `code-security-scan.yml:31-35`, `169-179`, `195-200` |
 | `category-prefix` | string | no | `scan-` | Prefix of the SARIF categories `<prefix>semgrep-<language>` and `<prefix>trivy-secrets`. An empty value becomes `scan-`. When `languages` is empty and `scan-config.yaml` sets `ci.sarif.category_prefix`, that value replaces this input. | `code-security-scan.yml:36-40`, `97`, `111-113`, `186`, `242` |
-| `semgrep-version` | string | no | `1.100.0` | Semgrep version installed with pip. | `code-security-scan.yml:41-45`, `147-151` |
-| `run-secret-scan` | boolean | no | `true` | Runs the Secret scan job: Trivy 0.71.0, secret scanner, CRITICAL and HIGH, over the whole checkout except `node_modules`, `dist`, `build`, `bin`, `obj` and `.terraform`. | `code-security-scan.yml:46-50`, `210`, `223-235` |
+| `semgrep-version` | string | no | `1.184.0` | Semgrep version installed with pip. | `code-security-scan.yml:41-45`, `147-151` |
+| `run-secret-scan` | boolean | no | `true` | Runs the Secret scan job: Trivy 0.76.2, secret scanner, CRITICAL and HIGH, over the whole checkout except `node_modules`, `dist`, `build`, `bin`, `obj` and `.terraform`. | `code-security-scan.yml:46-50`, `210`, `223-235` |
 | `fail-on-findings` | boolean | no | `true` | Adds a gate step to each job. The Semgrep gate fails on any finding at `severity`. The secret gate fails on any CRITICAL or HIGH secret. | `code-security-scan.yml:51-55`, `189-200`, `245-250` |
 | `upload-sarif` | boolean | no | `true` | Uploads each job's SARIF to code scanning. An upload error does not fail the job. | `code-security-scan.yml:56-60`, `181-187`, `237-243` |
 

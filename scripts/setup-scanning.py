@@ -204,7 +204,7 @@ def install_snyk():
         return False
 
     log_info("Installing Snyk CLI via npm (optional - requires Snyk license)...")
-    rc, _, stderr = run_cmd(["npm", "install", "-g", "snyk@1.1307.4"])
+    rc, _, stderr = run_cmd(["npm", "install", "-g", "snyk@1.1308.4"])
     if rc == 0 and command_exists("snyk"):
         ver = get_tool_version("snyk")
         log_ok(f"Snyk CLI installed (v{version_str(ver)}) [optional]")
