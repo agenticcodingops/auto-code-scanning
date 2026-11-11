@@ -616,7 +616,7 @@ production-facing workflow. Preconditions below are quotations from existing fil
 
 ### Actions and reusable workflows
 
-All 17 distinct active external action refs are full commit SHAs, with the tag in a
+All 16 distinct active external action refs are full commit SHAs, with the tag in a
 comment. There are no floating external `uses:` refs in `.github/workflows/`.
 Dependabot ecosystem `github-actions`, directory `/`, can read these action refs;
 it cannot coordinate their config mirrors or the engines selected in `with:`.
@@ -634,7 +634,6 @@ it cannot coordinate their config mirrors or the engines selected in `with:`.
 | `anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102` | `v1.0.148` | [`.github/workflows/autonomous-fix.yml`](../.github/workflows/autonomous-fix.yml) | Agent; majors Operator; P2; mirrored in root/tier configs (see below). |
 | `aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8` | `v0.33.1` | [`.github/workflows/autonomous-fix.yml`](../.github/workflows/autonomous-fix.yml) | Agent; majors Operator; P4; action version differs from engine. |
 | `aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25` | `v0.36.0` | [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; P4; action version differs from engine. |
-| `azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906` | `v3.1.0` | [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml) | Agent; majors Operator; None stated. |
 | `bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa` | `v12.3139.0 = Checkov 3.4.3` | [`.github/workflows/reusable-scan-self-test.yml`](../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; P3 (engine selected inside action). |
 | `github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066` | `v4.39.3` | [`.github/workflows/code-security-scan.yml`](../.github/workflows/code-security-scan.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; None stated. |
 | `googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7` | `v5.0.0` | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Agent; majors Operator; None stated. |

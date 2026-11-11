@@ -634,6 +634,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '20'
+          # The Snyk install needs no dependency cache; without this, setup-node 5+ caches when a caller's package.json names a packageManager.
+          package-manager-cache: false
 
       - name: Install Snyk CLI
         run: npm install -g snyk@1.1308.4
