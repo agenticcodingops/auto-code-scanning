@@ -637,8 +637,7 @@ it cannot coordinate their config mirrors or the engines selected in `with:`.
 | `bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa` | `v12.3139.0 = Checkov 3.4.3` | [`.github/workflows/reusable-scan-self-test.yml`](../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; P3 (engine selected inside action). |
 | `github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066` | `v4.39.3` | [`.github/workflows/code-security-scan.yml`](../.github/workflows/code-security-scan.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; None stated. |
 | `googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7` | `v5.0.0` | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Agent; majors Operator; None stated. |
-| `terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337` | `v6.3.2` | [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml) | Agent; majors Operator; None stated. |
-| `terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6` | `v4.1.1` | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; None stated. |
+| `terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337` | `v6.3.2` | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../.github/workflows/reusable-scan.yml) | Agent; majors Operator; None stated. |
 
 The following local calls use the same commit as their caller, with no independent
 version to refresh:
@@ -734,7 +733,7 @@ Operator owns these general hook updates, including the optional Commitizen hook
 | Hook repository | SHA / comment | Every repeating file | Update / precondition |
 |---|---|---|---|
 | pre-commit/pre-commit-hooks | `3e8a8703264a2f4a69428a0aa4dcb512790b2c8c` / `v6.0.0` | [`scripts/.pre-commit-config.yaml`](../scripts/.pre-commit-config.yaml), [`templates/aws/pre-commit-config.yaml`](../templates/aws/pre-commit-config.yaml), [`templates/azure/pre-commit-config.yaml`](../templates/azure/pre-commit-config.yaml), [`templates/gcp/pre-commit-config.yaml`](../templates/gcp/pre-commit-config.yaml), [`templates/standard/pre-commit-config.yaml`](../templates/standard/pre-commit-config.yaml), [`templates/starter/pre-commit-config.yaml`](../templates/starter/pre-commit-config.yaml), [`templates/strict/pre-commit-config.yaml`](../templates/strict/pre-commit-config.yaml) | Hand rev/comment; none stated. |
-| antonbabenko/pre-commit-terraform | `4c4437d784e93cacb1f05f1d7bc28e4354fafd20` / `v1.109.4` | [`scripts/.pre-commit-config.yaml`](../scripts/.pre-commit-config.yaml), [`templates/aws/pre-commit-config.yaml`](../templates/aws/pre-commit-config.yaml), [`templates/azure/pre-commit-config.yaml`](../templates/azure/pre-commit-config.yaml), [`templates/gcp/pre-commit-config.yaml`](../templates/gcp/pre-commit-config.yaml), [`templates/standard/pre-commit-config.yaml`](../templates/standard/pre-commit-config.yaml), [`templates/starter/pre-commit-config.yaml`](../templates/starter/pre-commit-config.yaml), [`templates/strict/pre-commit-config.yaml`](../templates/strict/pre-commit-config.yaml) | Hand rev/comment; none stated. |
+| antonbabenko/pre-commit-terraform | `b9e409b0fee34ee0eee7e6f6a407061f15032926` / `v1.109.5` | [`scripts/.pre-commit-config.yaml`](../scripts/.pre-commit-config.yaml), [`templates/aws/pre-commit-config.yaml`](../templates/aws/pre-commit-config.yaml), [`templates/azure/pre-commit-config.yaml`](../templates/azure/pre-commit-config.yaml), [`templates/gcp/pre-commit-config.yaml`](../templates/gcp/pre-commit-config.yaml), [`templates/standard/pre-commit-config.yaml`](../templates/standard/pre-commit-config.yaml), [`templates/starter/pre-commit-config.yaml`](../templates/starter/pre-commit-config.yaml), [`templates/strict/pre-commit-config.yaml`](../templates/strict/pre-commit-config.yaml) | Hand rev/comment; none stated. |
 | commitizen-tools/commitizen (commented opt-in) | `a3498aba5e94c9f7c4acb529b5e7eb6df65fd053` / `v3.29.1` | [`templates/strict/pre-commit-config.yaml`](../templates/strict/pre-commit-config.yaml) | Hand rev/comment; none stated. |
 
 Lefthook invokes vendored hooks; its template has no remote hook `rev:`. Its
@@ -969,8 +968,7 @@ CIS benchmark labels and TLS minima are not software freshness pins.
 ### Drift found (left unchanged)
 
 - `actions/checkout` has three versions: `v4.2.2`, `v6.1.0`, `v7.0.1`; all files
-  are listed in the action table. `setup-tflint` has `v4.1.1` and `v6.3.2` (the setup
-  workflow explicitly documents this split). `trivy-action` has `v0.33.1` in the
+  are listed in the action table. `trivy-action` has `v0.33.1` in the
   fix loop and `v0.36.0` in the reusable scan; the Trivy engine agrees at `0.75.0`.
 - The fix action/config mirrors use `v1.0.148`; review/mention workflows use
   `v1.0.233`. These are distinct roles, not proof of a defect; P1 prevents an
