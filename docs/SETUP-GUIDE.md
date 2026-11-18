@@ -36,7 +36,7 @@ combination has been tested; the release's exact scanner versions are in
 | GitHub CLI (`gh`) | Current supported release | Optional fix-loop labels and secret verification |
 
 The pre-commit templates use pre-commit-hooks v6.0.0 and pre-commit-terraform
-v1.109.4; see the [upstream hook compatibility notes](HOOK-REFERENCE.md).
+v1.109.5; see the [upstream hook compatibility notes](HOOK-REFERENCE.md).
 
 For those pre-commit templates, install `terraform-docs` from your managed package source
 and check `terraform-docs --version` before staging Terraform. Lefthook does not
