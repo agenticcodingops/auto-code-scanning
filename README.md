@@ -127,7 +127,7 @@ flowchart TD
 Use the [contributor setup](docs/CONTRIBUTING.md#set-up-a-contributor-checkout)
 to keep the Python test/runner packages separate from Checkov's environment.
 
-Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11+ with the pinned test packages below, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI downloads Trivy 0.76.2 with a pinned SHA-256 and pins Checkov 3.4.3, TFLint 0.66.0 and PyYAML 6.0.3. Use the release lock and workflow files for exact pins; locally installed versions can differ.
+Run these before pushing. They are what CI runs on a pull request. Prerequisites: Bash 4.4 or later for shell hooks and scripts, Python 3.11+ with the pinned test packages below, Trivy, Checkov, TFLint and PowerShell 7 with Pester 5 on PATH. On macOS, run `brew install bash` and make sure the installed Bash is first on PATH (the system `/bin/bash` is too old). CI downloads Trivy 0.76.2 with a pinned SHA-256 and pins Checkov 3.4.5, TFLint 0.66.0 and PyYAML 6.0.3. Use the release lock and workflow files for exact pins; locally installed versions can differ.
 
 ```bash
 set -euo pipefail   # a failed check stays a failure, loops included
@@ -145,7 +145,7 @@ pytest tests/python/ -v --tb=short
 # ci.yml "Run Pester tests": Pester 5, shell pwsh
 pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'
 
-# ci.yml "test-hooks": same verified Trivy 0.76.2, Checkov 3.4.3, TFLint 0.66.0 (setup-tflint v6.3.2) versions and
+# ci.yml "test-hooks": same verified Trivy 0.76.2, Checkov 3.4.5, TFLint 0.66.0 (setup-tflint v6.3.2) versions and
 # aws/azure/gcp matrix, but hardened beyond it: a dedicated CHECKOV_PYTHON interpreter (see Contributing) and a
 # nonzero-exit check CI's own job does not have (it runs plain `checkov` and ignores its exit code with `|| true`).
 : "${CHECKOV_PYTHON:?Set CHECKOV_PYTHON to the external scanner Python - see Contributing}"

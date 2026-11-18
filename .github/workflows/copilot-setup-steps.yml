@@ -1,6 +1,6 @@
 # Copilot cloud agent environment, from the template in agenticcodingops/dev-environments (copilot/).
 # Kept for this repository: Python 3.11, the test tools CI installs, TFLint v0.66.0,
-# Trivy v0.76.2, Checkov 3.4.3, and Pester 5.
+# Trivy v0.76.2, Checkov 3.4.5, and Pester 5.
 # Dropped: .NET and Terraform. This repository holds Terraform fixtures only.
 # The workflow must be on the default branch to take effect, and the job must stay named copilot-setup-steps.
 # It runs before Copilot starts working. The pull_request trigger below tests the file in the PR that adds it.
@@ -82,12 +82,12 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/trivy-bin" trivy
           echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
 
-      # reusable-scan.yml pins checkov-action v12.3139.0 and notes that equals Checkov 3.4.3.
+      # reusable-scan.yml pins checkov-action v12.3141.0 and notes that equals Checkov 3.4.5.
       # Keep Checkov separate from the test runner's packaging dependencies.
       - name: Install Checkov
         run: |
           python -m venv "$RUNNER_TEMP/checkov"
-          "$RUNNER_TEMP/checkov/bin/python" -m pip install checkov==3.4.3
+          "$RUNNER_TEMP/checkov/bin/python" -m pip install checkov==3.4.5
           mkdir -p "$RUNNER_TEMP/checkov-launcher"
           ln -s "$RUNNER_TEMP/checkov/bin/checkov" "$RUNNER_TEMP/checkov-launcher/checkov"
           echo "$RUNNER_TEMP/checkov-launcher" >> "$GITHUB_PATH"

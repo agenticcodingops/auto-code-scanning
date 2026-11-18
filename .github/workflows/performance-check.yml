@@ -52,7 +52,7 @@ jobs:
 
       - name: Install Checkov
         run: |
-          pip install checkov==3.4.3
+          pip install checkov==3.4.5
           checkov --version
 
       - name: Install TFLint

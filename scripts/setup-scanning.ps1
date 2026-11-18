@@ -246,7 +246,7 @@ if (-not $SkipTools) {
     # Install Checkov
     Write-Info "Installing Checkov (this may take a minute)..."
     try {
-        python -m pip install checkov==3.4.3 --quiet 2>&1 | Out-Null
+        python -m pip install checkov==3.4.5 --quiet 2>&1 | Out-Null
         if (Test-CommandExists "checkov") {
             $version = Get-ToolVersion -Command "checkov"
             if ($version -and (Test-ToolMeetsMinimum -ToolName "checkov" -Actual $version)) {

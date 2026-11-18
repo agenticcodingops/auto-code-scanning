@@ -245,7 +245,7 @@ function Install-PipPackage {
     param([string]$Name)
 
     Write-Info "Installing $Name..."
-    $pinned = @{ 'pre-commit' = 'pre-commit==4.7.0'; 'checkov' = 'checkov==3.4.3' }
+    $pinned = @{ 'pre-commit' = 'pre-commit==4.7.0'; 'checkov' = 'checkov==3.4.5' }
     & $Script:PythonCmd -m pip install $pinned[$Name] --user --quiet 2>$null
 }
 

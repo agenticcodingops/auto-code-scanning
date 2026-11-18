@@ -134,7 +134,7 @@ jobs:
           echo "${RUNNER_TEMP}/trivy-bin" >> "${GITHUB_PATH}"
 
       - name: Install Checkov
-        run: pip install checkov==3.4.3
+        run: pip install checkov==3.4.5
 
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337  # v6.3.2
