@@ -15,11 +15,11 @@
 # minted for each run from the RELEASE_APP_CLIENT_ID variable and the
 # RELEASE_APP_PRIVATE_KEY secret. It covers this repository only, with
 # Contents, Workflows, Pull requests and Issues write, and is revoked when the job ends
-# (docs/CONTRIBUTING.md describes the App and its key rotation). Unlike
+# (docs/MAINTAINERS.md describes the App and its key rotation). Unlike
 # GITHUB_TOKEN, whose PRs, tags and releases start no workflow, it lets CI run
 # on the release PR and lets the release start its verification run.
 #
-# Never create release tags by hand. See "Release Process" in docs/CONTRIBUTING.md.
+# Never create release tags by hand. See "Release process" in docs/MAINTAINERS.md.
 # ============================================================================
 
 name: Release
@@ -58,7 +58,7 @@ jobs:
           HAS_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
         run: |
           if [ "$HAS_CLIENT_ID" != "true" ] || [ "$HAS_PRIVATE_KEY" != "true" ]; then
-            echo "::error::The RELEASE_APP_CLIENT_ID variable or the RELEASE_APP_PRIVATE_KEY secret is not available to this repository. See \"Release Process\" in docs/CONTRIBUTING.md."
+            echo "::error::The RELEASE_APP_CLIENT_ID variable or the RELEASE_APP_PRIVATE_KEY secret is not available to this repository. See \"Release process\" in docs/MAINTAINERS.md."
             exit 1
           fi
 

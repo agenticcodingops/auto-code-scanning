@@ -1,0 +1,91 @@
+name: Bug report
+description: Report something in auto-code-scanning that does not work as documented.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not report security vulnerabilities here**: use
+        the repository's Security tab > Report a vulnerability (see SECURITY.md).
+        Remove secrets, tokens and private paths from anything you paste.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release tag or full commit SHA you use (for example v3.1.2).
+      placeholder: v3.1.2
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - GitHub-hosted runner (CI)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it is installed
+      options:
+        - Lefthook (default local runner)
+        - pre-commit
+        - Reusable workflows only (CI)
+        - Claude Code in-session hooks
+        - AI fix loop (autonomous-fix.yml)
+        - Other
+      multiple: true
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      options:
+        - starter
+        - standard
+        - strict
+        - custom
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: scanners
+    attributes:
+      label: Scanner versions
+      description: Output of the version commands for the scanners involved (for example `trivy --version`, `checkov --version`, `tflint --version`, `gitleaks version`, `semgrep --version`).
+      render: text
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps, files or configuration that shows the problem.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Hook output, workflow logs or error messages, with secrets removed.
+      render: text
