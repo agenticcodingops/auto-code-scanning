@@ -68,7 +68,7 @@ PowerShell (keep this environment active for subsequent steps):
 ```powershell
 python -m venv "$HOME/.venvs/auto-code-scanning"
 & "$HOME/.venvs/auto-code-scanning/Scripts/Activate.ps1"
-python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.3
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.5
 ```
 
 macOS/Linux equivalent:
@@ -76,7 +76,7 @@ macOS/Linux equivalent:
 ```bash
 python3 -m venv "$HOME/.venvs/auto-code-scanning"
 . "$HOME/.venvs/auto-code-scanning/bin/activate"
-python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.3
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.5
 ```
 
 Install Lefthook from your managed package source. If choosing pre-commit instead,

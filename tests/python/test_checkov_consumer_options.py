@@ -154,7 +154,7 @@ def test_workflow_scopes_env_and_gates_upload_after_filter_failure(repo_root):
     scan = next(step for step in jobs["scan-checkov"]["steps"] if step["name"] == "Run Checkov")
     assert scan["env"] == "${{ fromJSON(needs.setup.outputs.checkov-render-env) }}"
     assert scan["with"]["skip_check"] == "${{ needs.setup.outputs.checkov-skip-checks }}"
-    assert scan["uses"].endswith("@45edc9d8856b664db2ec251f5f8632361f0a67aa")
+    assert scan["uses"].endswith("@3f0caf0c3aa9f56ade6b49f6e60b63aaeafb75a3")
     for name, job in jobs.items():
         for step in job["steps"]:
             if step is not scan:

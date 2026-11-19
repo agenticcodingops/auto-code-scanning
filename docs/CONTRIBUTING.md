@@ -67,7 +67,7 @@ the test packages: current runner dependencies and Checkov have incompatible
 
 ```powershell
 python -m venv "$HOME/.venvs/acs-checkov"
-& "$HOME/.venvs/acs-checkov/Scripts/python.exe" -m pip install checkov==3.4.3
+& "$HOME/.venvs/acs-checkov/Scripts/python.exe" -m pip install checkov==3.4.5
 $env:CHECKOV_PYTHON = "$HOME/.venvs/acs-checkov/Scripts/python.exe".Replace('\', '/')
 & $env:CHECKOV_PYTHON -m checkov.main --version
 ```
@@ -76,7 +76,7 @@ macOS/Linux:
 
 ```bash
 python -m venv "$HOME/.venvs/acs-checkov"
-"$HOME/.venvs/acs-checkov/bin/python" -m pip install checkov==3.4.3
+"$HOME/.venvs/acs-checkov/bin/python" -m pip install checkov==3.4.5
 export CHECKOV_PYTHON="$HOME/.venvs/acs-checkov/bin/python"
 "$CHECKOV_PYTHON" -m checkov.main --version
 ```
