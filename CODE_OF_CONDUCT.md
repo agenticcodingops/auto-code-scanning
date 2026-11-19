@@ -62,7 +62,8 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement. Contact the
 maintainers through a private GitHub security advisory
 (<https://github.com/agenticcodingops/auto-code-scanning/security/advisories/new>).
-The form is meant for vulnerabilities, but only maintainers can see it, so use it
+The form is meant for vulnerabilities, but reports there are not public (only the
+reporter and people with security access to the repository can see them), so use it
 for conduct reports too. Do not report an incident in a public issue.
 All complaints will be reviewed and investigated promptly and fairly.
 
