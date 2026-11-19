@@ -1,0 +1,5 @@
+.scan-results/
+.scan-baseline/tmp/
+__pycache__/
+.scanning/*
+!.scanning/configs/

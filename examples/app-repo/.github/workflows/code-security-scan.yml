@@ -1,0 +1,32 @@
+# Example copy of templates/workflows/code-security-scan.yml as shipped in v3.1.2.
+# In your repository, pin the full commit SHA of the release instead of the tag:
+#   uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@179f7e83fb8845aac3fc0f7c01ac0d129e4dfa00  # v3.1.2
+# ============================================================================
+# code-security-scan.yml — CALLER (drop into a consumer repo: .github/workflows/)
+# Thin caller for the reusable APP-CODE scanner. Pin the tag — never @main.
+# ============================================================================
+name: Code Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Explicit caller ceilings require actions: read even when SARIF uploads are
+# disabled. Private uploads also need it to read workflow-run metadata.
+permissions:
+  contents: read
+  actions: read
+  security-events: write   # upload SARIF to code scanning
+  pull-requests: write     # PR annotations
+
+jobs:
+  code-scan:
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.1.2  # x-release-please-version
+    with:
+      # Omit `languages` to auto-detect from scan-config.yaml, or pin explicitly:
+      # languages: "csharp,typescript"
+      category-prefix: "scan-"
+      fail-on-findings: true
