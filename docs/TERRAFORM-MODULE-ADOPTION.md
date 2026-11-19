@@ -5,7 +5,7 @@ hosted acceptance for a repository that publishes a Terraform module. Inputs, ou
 and security contracts are in [the workflow reference](REUSABLE-WORKFLOWS.md). A
 complete example is in [examples/terraform-repo](../examples/terraform-repo/).
 
-The current release is `v3.1.2`. <!-- x-release-please-version -->
+The current release is `v3.1.3`. <!-- x-release-please-version -->
 
 Sources are named by job and step of `.github/workflows/reusable-scan.yml`; other
 paths are relative to the repository root.
@@ -119,11 +119,11 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.2 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.3 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "azure"
-      scanning-repo-ref: "v3.1.2" # x-release-please-version
+      scanning-repo-ref: "v3.1.3" # x-release-please-version
 ```
 
 - Replace both `v3.1.2` values with the full SHA from step 2, keeping the tag as a
