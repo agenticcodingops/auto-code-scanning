@@ -166,8 +166,8 @@ merge.
 - **Operator STOP:** no
 
 The caller templates pin the release they ship in, and release-please moves those pins at
-each release (the lines marked `x-release-please-version` in `templates/workflows/` and
-`templates/fix-loop/autonomous-fix.yml`). Releases up to and including v2.3.1 pinned
+each release (the lines that carry the release-please version marker comment in
+`templates/workflows/` and `templates/fix-loop/autonomous-fix.yml`). Releases up to and including v2.3.1 pinned
 `v2.0.0` there. Check that every pin is the release you checked out in the
 prerequisites, and pin the commit its tag points to, as in
 [VERSION-PINNING.md](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to). For the
@@ -212,7 +212,7 @@ In `terraform-scan.yml`, also set `cloud-provider` to your provider (`aws`, `azu
 With `--hooks-runner pre-commit`, the setup writes `.pre-commit-config.yaml` from
 `templates/<tier>/pre-commit-config.yaml` when the file does not exist yet. Those
 templates pin the `auto-code-scanning` hooks at the release they ship in (the `rev:`
-marked `x-release-please-version`).
+that carries the release-please version marker comment).
 Releases up to and including v2.3.1 pinned `rev: v1.0.0`, which is no tag or branch, so
 pre-commit could not fetch the hooks and every commit through it failed, this migration's
 included. In the same commit as the workflow pins, check that `rev:` is the release you
