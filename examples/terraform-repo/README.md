@@ -1,7 +1,7 @@
 # Example: Terraform repository
 
 The files in this folder show what a Terraform repository adds to adopt
-auto-code-scanning release `v3.1.2` with the **starter** tier and the **Lefthook**
+the auto-code-scanning release named on the callers' `uses:` lines, with the **starter** tier and the **Lefthook**
 runner. They are reference copies to compare against, not a project to run. Follow
 the [Quickstart](../../docs/QUICK-START-5MIN.md) or [Getting started](../../docs/SETUP-GUIDE.md)
 to install; setup writes these files for you.
@@ -11,8 +11,8 @@ to install; setup writes these files for you.
 | File | What it is | Where it comes from |
 |---|---|---|
 | `scan-config.yaml` | Project settings: which languages CI scans, the suppression registry path, the optional fix loop. Here only `languages.terraform` is enabled. | Written by `scripts/render-scan-config.py --tier starter --languages terraform`, which setup runs. Generated with this repository's renderer, not edited by hand. |
-| `.github/workflows/terraform-scan.yml` | Caller of the Terraform scan (`reusable-scan.yml`): Trivy, Checkov and TFLint, gate on CRITICAL and HIGH, SARIF upload, pull request comment. | Copy of `templates/workflows/terraform-scan.yml` as shipped in v3.1.2, with a header comment showing the SHA form. |
-| `.github/workflows/code-security-scan.yml` | Caller of the app-code scan. In a Terraform-only repository it still runs its independent **secret scan** over the whole checkout; no language is enabled, so the Semgrep jobs are skipped. | Copy of `templates/workflows/code-security-scan.yml` as shipped in v3.1.2. |
+| `.github/workflows/terraform-scan.yml` | Caller of the Terraform scan (`reusable-scan.yml`): Trivy, Checkov and TFLint, gate on CRITICAL and HIGH, SARIF upload, pull request comment. | Copy of `templates/workflows/terraform-scan.yml` at that release, with a header comment on pinning the SHA. |
+| `.github/workflows/code-security-scan.yml` | Caller of the app-code scan. In a Terraform-only repository it still runs its independent **secret scan** over the whole checkout; no language is enabled, so the Semgrep jobs are skipped. | Copy of `templates/workflows/code-security-scan.yml` at that release. |
 | `.gitignore` | Keeps run-time reports out of Git while keeping the scanner policy under `.scanning/configs/`. | The lines [Getting started step 5](../../docs/SETUP-GUIDE.md#5-install-local-hooks) asks you to merge in. Setup does not edit `.gitignore` itself. |
 | `.gitattributes` | Keeps the vendored shell, Python, JSON and YAML files at LF line endings, which the hooks need on Windows. | Same as above. |
 
@@ -23,9 +23,8 @@ editor bundle under `.claude/`. Commit them too.
 
 Before you commit the callers:
 
-- Replace `v3.1.2` on each `uses:` line and in `scanning-repo-ref` with the release's
-  full commit SHA, as the header comment shows. The SHA shown is the `v3.1.2` release
-  commit; resolve your own release as in
+- Replace the release tag on each `uses:` line and in `scanning-repo-ref` with the full
+  commit SHA it points to, keeping the tag as a comment. Resolve the SHA as in
   [version pinning](../../docs/VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to).
 - Set `cloud-provider` to `aws`, `azure` or `gcp`, and `terraform-directory` if your
   Terraform is not at the root.

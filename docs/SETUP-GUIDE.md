@@ -329,7 +329,9 @@ export SCAN_PRETTIER_CONFIG="$HOME/.config/auto-code-scanning/formatters/prettie
 PROFILE
 ```
 
-Linux, with bash. Append the same lines, without the Homebrew line, to `~/.profile`:
+Linux, with bash. Append the same lines, without the Homebrew line, to `~/.profile`.
+A terminal opened from an existing desktop session does not read `~/.profile` until you
+log out and back in; until then, run `. ~/.profile` in it:
 
 ```bash
 cat >> ~/.profile <<'PROFILE'

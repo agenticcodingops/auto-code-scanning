@@ -106,7 +106,9 @@ If you change `uses:` to your fork but leave these inputs unset, the scan runs y
 fork's workflow with **upstream** configs and scripts at `scanning-repo-ref`. The
 mirror must contain the commit you pin, and the caller's token must be able to read
 it. For the pre-commit runner, point the `repo:` of the auto-code-scanning entry at
-the mirror as well.
+the mirror as well. `pin-freshness.yml` has no repository input: it always checks out
+its script from `agenticcodingops/auto-code-scanning`, so a caller that pins it to a
+commit that exists only in a fork fails.
 
 ## How Version Pinning Works
 
@@ -242,8 +244,10 @@ Edit `.pre-commit-config.yaml` directly:
 ```yaml
 repos:
   - repo: https://github.com/agenticcodingops/auto-code-scanning
-    rev: vX.Y.Z    # The release you are moving to
+    rev: <full commit SHA of vX.Y.Z>    # vX.Y.Z, the release you are moving to
 ```
+
+Resolve the SHA as in [Pin the commit a release tag points to](#pin-the-commit-a-release-tag-points-to).
 
 ### Verify After Upgrade
 

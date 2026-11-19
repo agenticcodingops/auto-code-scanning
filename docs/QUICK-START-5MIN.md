@@ -11,16 +11,20 @@ has the PowerShell version of each one.
 
 ## 1. Install the prerequisites
 
-Install Git, Bash 4.4 or later, Python 3.11 or later, PowerShell 7, Terraform and
-Lefthook, as listed in [Prerequisites](PREREQUISITES.md). An application-only
+Install Git, Bash 4.4 or later, Python 3.11 or later, PowerShell 7, Terraform,
+Lefthook, and Node.js with npm (step 3 installs Prettier with npm), as listed in [Prerequisites](PREREQUISITES.md). An application-only
 repository needs Terraform, TFLint and Checkov too, because the setup verifier checks
 them. Then create the scanner environment outside your repository:
 
 ```bash
 python3 -m venv "$HOME/.venvs/auto-code-scanning"
-. "$HOME/.venvs/auto-code-scanning/bin/activate"
+. "$HOME/.venvs/auto-code-scanning/bin/activate"   # Windows Git Bash: .../Scripts/activate
 python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.5
 ```
+
+On Windows, Python puts the environment's programs under `Scripts`, not `bin`. In Git
+Bash, run `python -m venv` and then
+`. "$HOME/.venvs/auto-code-scanning/Scripts/activate"`.
 
 ## 2. Clone the platform at the release and install the scanners
 
@@ -107,8 +111,11 @@ __pycache__/
 
 ## 5. Make the first scanned commit
 
+Leave the caller workflows that setup copied into `.github/workflows/` out of this
+commit; step 6 adds them in a second pull request:
+
 ```bash
-git add .
+git add -- . ':(exclude).github/workflows'
 git commit -m "chore: adopt security scanning"
 ```
 

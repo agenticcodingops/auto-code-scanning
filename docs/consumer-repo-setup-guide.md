@@ -86,7 +86,9 @@ verification and first-commit steps. Keep shared files byte-identical to the rel
 ## Uninstall
 
 To pause local hooks without removing anything, set `global.local_hooks_enabled: false`
-in `scan-config.yaml`. CI is not affected. To remove scanning completely, work through
+in `scan-config.yaml`. CI is not affected. Commit hooks read the setting from the working
+tree, but push hooks read it from each pushed commit: to pause push scans, commit the
+change in the commits you push. To remove scanning completely, work through
 the steps below in order. They undo what `scripts/setup-scan-fix.py` installs.
 
 1. **Branch protection first.** Remove the scan checks from the required status checks

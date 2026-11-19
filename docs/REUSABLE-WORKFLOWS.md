@@ -119,8 +119,9 @@ the caller's ([GitHub Docs: Reusing workflow configurations][gh-reuse]). So:
   deadlock (see the header comment in `release-verify.yml`).
 
 `autonomous-fix.yml` uses the group `autonomous-fix-<pr_number>` with
-`cancel-in-progress: false`: runs for one pull request queue and never cancel each
-other.
+`cancel-in-progress: false`: a running fix for a pull request is never cancelled. GitHub
+keeps at most one pending run per group, so a newer request for the same pull request
+replaces a pending one; not every queued request runs.
 
 ## `reusable-scan.yml`
 

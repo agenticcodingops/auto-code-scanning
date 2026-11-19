@@ -1,7 +1,8 @@
 # Example: application repository
 
 The files in this folder show what a C# and TypeScript application repository adds to
-adopt auto-code-scanning release `v3.1.2` with the **starter** tier and the
+adopt the auto-code-scanning release named on the callers' `uses:` lines, with the
+**starter** tier and the
 **Lefthook** runner. They are reference copies to compare against, not a project to
 run. Follow the [Quickstart](../../docs/QUICK-START-5MIN.md) or
 [Getting started](../../docs/SETUP-GUIDE.md) to install; setup writes these files for you.
@@ -11,7 +12,7 @@ run. Follow the [Quickstart](../../docs/QUICK-START-5MIN.md) or
 | File | What it is | Where it comes from |
 |---|---|---|
 | `scan-config.yaml` | Project settings. Here `languages.csharp` and `languages.typescript` are enabled, which tells the CI app-code scan to run Semgrep for both. Set `languages.csharp.build.solution` (relative to `working_dir`) if you use the .NET hooks. | Written by `scripts/render-scan-config.py --tier starter --languages csharp,typescript`, which setup runs. Generated with this repository's renderer, not edited by hand. |
-| `.github/workflows/code-security-scan.yml` | Caller of the app-code scan (`code-security-scan.yml`): Semgrep per enabled language and a Trivy secret scan, each with its own SARIF category. | Copy of `templates/workflows/code-security-scan.yml` as shipped in v3.1.2, with a header comment showing the SHA form. |
+| `.github/workflows/code-security-scan.yml` | Caller of the app-code scan (`code-security-scan.yml`): Semgrep per enabled language and a Trivy secret scan, each with its own SARIF category. | Copy of `templates/workflows/code-security-scan.yml` at that release, with a header comment on pinning the SHA. |
 | `.gitignore` | Keeps run-time reports out of Git while keeping the scanner policy under `.scanning/configs/`. | The lines [Getting started step 5](../../docs/SETUP-GUIDE.md#5-install-local-hooks) asks you to merge in. Setup does not edit `.gitignore` itself. |
 | `.gitattributes` | Keeps the vendored shell, Python, JSON and YAML files at LF line endings, which the hooks need on Windows. | Same as above. |
 
@@ -28,9 +29,8 @@ application-only repository; see [Prerequisites](../../docs/PREREQUISITES.md).
 
 Before you commit the caller:
 
-- Replace `v3.1.2` on the `uses:` line with the release's full commit SHA, as the
-  header comment shows. The SHA shown is the `v3.1.2` release commit; resolve your own
-  release as in [version pinning](../../docs/VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to).
+- Replace the release tag on the `uses:` line with the full commit SHA it points to,
+  keeping the tag as a comment. Resolve the SHA as in [version pinning](../../docs/VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to).
 - Adapt the branch names in the `on:` triggers.
 - For a private repository without code scanning, add `upload-sarif: false` under
   `with:`.

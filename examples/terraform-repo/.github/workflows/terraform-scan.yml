@@ -1,7 +1,7 @@
-# Example copy of templates/workflows/terraform-scan.yml as shipped in v3.1.2.
-# In your repository, pin the full commit SHA of the release instead of the tag:
-#   uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@179f7e83fb8845aac3fc0f7c01ac0d129e4dfa00  # v3.1.2
-#   scanning-repo-ref: "179f7e83fb8845aac3fc0f7c01ac0d129e4dfa00"  # v3.1.2
+# Example copy of templates/workflows/terraform-scan.yml at the release on the uses: line.
+# In your repository, replace the tag on the uses: line and in scanning-repo-ref with the
+# full commit SHA it points to, keeping the tag as a comment (see docs/VERSION-PINNING.md,
+# "Pin the commit a release tag points to").
 # ============================================================================
 # terraform-scan.yml — CALLER (drop into a consumer repo: .github/workflows/)
 # Thin caller for the reusable TERRAFORM/IaC scanner. Pin the tag — never @main.
