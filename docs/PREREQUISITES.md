@@ -34,7 +34,7 @@ Getting started and report the difference.
 |---|---|---|---|---|---|
 | Terraform CLI | Your project's `required_version` | Yes | Yes, see note 1 | Yes | Formatting and validation hooks; the setup verifier checks it. |
 | TFLint | 0.66.0 (installed by `scripts/install-scanner.py`; floor 0.50.0) | Yes | Yes, see note 1 | Yes | Push-time lint. Needs a trusted config outside the repository (`SCAN_TFLINT_CONFIG`, `SCAN_TFLINT_PLUGIN_DIR`). |
-| Checkov | 3.4.3 (floor 3.0.0), in the scanner virtual environment | Yes | Yes, see note 1 | Yes | Push-time policy scan; the setup verifier checks it. |
+| Checkov | 3.4.5 (floor 3.0.0), in the scanner virtual environment | Yes | Yes, see note 1 | Yes | Push-time policy scan; the setup verifier checks it. |
 | terraform-docs | 0.12.0 or later | pre-commit strict, aws, azure and gcp templates only | No | Same as Terraform only | The `terraform_docs` hook in those templates. Lefthook does not use it. |
 | Semgrep | 1.60 or later (CI uses 1.184.0) | No | Yes | Yes | Lefthook runs `semgrep-csharp` on staged `.cs` files and `semgrep-typescript` on staged TS/JS files. |
 | .NET SDK | 8 or later, or your project's SDK | No | C# only | C# only | Lefthook runs `dotnet-format` on staged `.cs`/`.csproj` files and `dotnet-build` at push. |

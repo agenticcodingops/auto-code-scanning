@@ -19,7 +19,7 @@ them. Then create the scanner environment outside your repository:
 ```bash
 python3 -m venv "$HOME/.venvs/auto-code-scanning"
 . "$HOME/.venvs/auto-code-scanning/bin/activate"
-python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.3
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 checkov==3.4.5
 ```
 
 ## 2. Clone the platform at the release and install the scanners

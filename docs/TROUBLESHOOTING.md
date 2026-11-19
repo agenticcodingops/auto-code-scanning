@@ -38,7 +38,7 @@ staged. See [prerequisites](PREREQUISITES.md) for which hook needs which tool.
    ```
 
    They go to `~/.local-scanning-tools/bin`. Install Checkov into the scanner virtual
-   environment (`python -m pip install checkov==3.4.3`), and Semgrep, the .NET SDK or
+   environment (`python -m pip install checkov==3.4.5`), and Semgrep, the .NET SDK or
    SQLFluff only if you commit those file types.
 2. Put the scanner environment and `~/.local-scanning-tools/bin` on `PATH`
    permanently: see [keep the settings](SETUP-GUIDE.md#keep-the-settings-for-new-terminals-ides-and-git-clients).

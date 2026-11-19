@@ -365,7 +365,7 @@ at that ref.
 
 | Scanner | Version | Where it is pinned |
 |---|---|---|
-| Checkov | 3.4.3 | the `bridgecrewio/checkov-action` SHA (v12.3139.0): the action's `action.yml` names the image `ghcr.io/bridgecrewio/checkov:3.4.3` |
+| Checkov | 3.4.5 | the `bridgecrewio/checkov-action` SHA (v12.3141.0): the action's `action.yml` names the image `ghcr.io/bridgecrewio/checkov:3.4.5` |
 | Trivy | 0.76.2 | `TRIVY_VERSION` and `TRIVY_SHA256` on the `Install Trivy` step, which downloads the GitHub release and verifies its checksum; the four `aquasecurity/trivy-action` steps set `skip-setup-trivy` |
 | TFLint | 0.66.0 | `tflint_version:` and `checksums:` on `terraform-linters/setup-tflint` |
 | TFLint rulesets | terraform 0.17.0, azurerm 0.33.0, aws 0.50.0, google 0.41.0 | the `plugin` blocks in `configs/<cloud>/.tflint.hcl` |
