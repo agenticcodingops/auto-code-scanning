@@ -11,7 +11,7 @@ This styleguide defines the architectural conventions, security boundaries, and 
   - Schema adherence is mandatory: changes to configuration structures must validate against `schemas/scan-config.schema.json`.
 - **Defense in Depth**:
   - Local hooks shift enforcement left for developer velocity, but **CI is the authoritative gatekeeper**.
-  - Local hooks must fail open on missing environment/infrastructure prerequisites, while CI reusable workflows fail closed.
+  - Local hooks block by default: a missing prerequisite, a tool error or an incomplete scan fails closed. The documented opt-in `SCAN_ALLOW_TOOL_ERRORS=1` relaxes some tool errors, but not unverified executables or the prerequisites `docs/HOOK-REFERENCE.md` lists as non-bypassable. Only explicitly optional checks (for example Snyk without a token) warn and skip. CI reusable workflows always fail closed on incomplete scans.
 - **Cross-Platform Parity**:
   - Scripts and tooling must support native Windows (PowerShell Core / Windows PowerShell 5.1) and Unix (Linux / macOS Bash).
   - Use `hooks/dispatcher.sh` as the OS-detecting entrypoint for local execution.

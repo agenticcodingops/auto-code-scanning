@@ -1,6 +1,14 @@
 # Severity Normalization Mapping
 
-Consistent severity mapping across scanning tools. The 5 core tools (Trivy, Checkov, tflint, Gitleaks, Snyk) are actively used by hooks; Snyk is optional and requires a license. The 3 additional tools (PSScriptAnalyzer, ShellCheck, hadolint) are mapped in the aggregation script for future v1.1.0 support.
+How each scanner's severity is turned into one of four levels. The 5 core tools (Trivy, Checkov, tflint, Gitleaks, Snyk) are used by hooks; Snyk is optional and requires a license. PSScriptAnalyzer, ShellCheck and hadolint are mapped only by the local PowerShell aggregator (`scripts/aggregate-scan-results.ps1`); no hook runs them yet.
+
+Normalization is implemented in three places, which differ in a few edge cases. Each difference is noted below:
+
+| Where | Used by | Tools covered |
+|---|---|---|
+| `scripts/aggregate_scan.py` | CI: the aggregate step of `reusable-scan.yml` | Trivy (IaC and secrets), Checkov, tflint, Snyk |
+| `scripts/scan.py` | Local on-demand scans and AI agents | Trivy, Checkov, Snyk |
+| `scripts/aggregate-scan-results.ps1` | Local PowerShell aggregation | All tools on this page |
 
 ## Normalized Levels
 
@@ -16,9 +24,9 @@ All tools map to four levels: **CRITICAL**, **HIGH**, **MEDIUM**, **LOW**
 | HIGH | HIGH |
 | MEDIUM | MEDIUM |
 | LOW | LOW |
-| UNKNOWN | LOW |
+| UNKNOWN | LOW locally; kept as UNKNOWN in CI |
 
-Trivy provides native 4-level severity that maps directly. `UNKNOWN` (rare) is treated as LOW.
+Trivy provides native 4-level severity that maps directly. `UNKNOWN` (rare) is treated as LOW by `scan.py` and the PowerShell aggregator. The CI aggregator keeps it as `UNKNOWN`: it is reported but counted in no severity bucket, so it never blocks the CI gate.
 
 ### Checkov
 
@@ -28,8 +36,9 @@ Trivy provides native 4-level severity that maps directly. `UNKNOWN` (rare) is t
 | HIGH | HIGH |
 | MEDIUM | MEDIUM |
 | LOW | LOW |
+| (missing or empty) | HIGH in CI and `scan.py`; MEDIUM in the PowerShell aggregator |
 
-Checkov 3.0+ provides native severity levels that map directly.
+Checkov 3.0+ provides native severity levels that map directly. Many Checkov checks carry no severity unless a Prisma Cloud API key is configured. The CI aggregator and `scan.py` treat a missing severity as HIGH, so missing metadata cannot weaken the gate. `scan.py` maps any other unrecognized value to MEDIUM. The local `checkov` and `checkov-strict` hooks block on any failed check whatever its severity; their summary line counts a missing severity as LOW.
 
 ### tflint
 
@@ -47,7 +56,7 @@ tflint uses a 3-level system. No tflint finding maps to CRITICAL since tflint fo
 |-------------|------------|
 | (all secrets) | HIGH |
 
-Gitleaks does not provide severity levels. All detected secrets are normalized to HIGH because leaked credentials represent a significant security risk.
+Gitleaks does not provide severity levels. The PowerShell aggregator normalizes all Gitleaks findings to HIGH because leaked credentials are a significant security risk. The local `gitleaks` hook blocks on any finding, and CI secret scanning uses Trivy rather than Gitleaks.
 
 ### Snyk
 
@@ -96,7 +105,7 @@ hadolint is used for Dockerfile quality. Same mapping pattern as ShellCheck.
 
 | Tool | CRITICAL | HIGH | MEDIUM | LOW |
 |------|----------|------|--------|-----|
-| **Trivy** | CRITICAL | HIGH | MEDIUM | LOW, UNKNOWN |
+| **Trivy** | CRITICAL | HIGH | MEDIUM | LOW, UNKNOWN (local only) |
 | **Checkov** | CRITICAL | HIGH | MEDIUM | LOW |
 | **tflint** | -- | error | warning | notice |
 | **Gitleaks** | -- | (all secrets) | -- | -- |
@@ -118,7 +127,7 @@ Different contexts block at different severity levels:
 
 ## Cross-Tool Deduplication
 
-When multiple tools detect the same finding, severity is resolved as follows:
+The PowerShell aggregator merges findings that share the same file, resource and category. The CI aggregator does not merge findings across tools. When findings are merged, severity is resolved as follows:
 1. Each tool's native severity is normalized using the mappings above
 2. The **highest** normalized severity across tools is used for the merged finding
 3. The original tool-specific severity is preserved in the `original_severity` field
@@ -128,7 +137,8 @@ Example: If Trivy reports a finding as HIGH and Checkov reports the same finding
 ## Implementation Reference
 
 The severity normalization logic is implemented in:
+- `scripts/aggregate_scan.py` -- the CI aggregator; covers Trivy, Checkov, tflint and Snyk, and gates on CRITICAL and HIGH
+- `scripts/scan.py` (`TRIVY_SEVERITY_MAP`, `CHECKOV_SEVERITY_MAP`, `SNYK_SEVERITY_MAP`) -- covers Trivy, Checkov and Snyk
 - `scripts/aggregate-scan-results.ps1` (`Get-NormalizedSeverity` function) -- covers Trivy, Checkov, tflint, Gitleaks, Snyk, PSScriptAnalyzer, ShellCheck, hadolint
-- `scripts/scan.py` (Python equivalent) -- covers Trivy, Checkov, tflint, Gitleaks, Snyk
 
-The mapping table in `data-model.md` is the authoritative source for all normalization rules.
+The code is the authoritative source. If this page and the code disagree, the code wins; please open an issue.

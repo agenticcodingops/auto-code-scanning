@@ -1,11 +1,39 @@
 # Roadmap
 
-For current shipped contracts and later corrections to these milestones, use the
-[v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md). Begin adoption with [Getting started](SETUP-GUIDE.md).
+This page lists what each major version delivered and what may come next. The
+[changelog](../CHANGELOG.md) is the exact record of every release. To adopt the
+platform, start with [Getting started](SETUP-GUIDE.md).
 
-> The delivered checklists below are historical milestones. Their original job,
-> network and error-handling descriptions are not current operating instructions;
-> the audit and linked current references describe the shipped contracts.
+> The v2 and v1 checklists below are historical. Some of their job, network and
+> error-handling descriptions no longer match the code; the current references in the
+> [documentation index](README.md) describe how it works today.
+
+## v3 — shipped (v3.0.0 to v3.1.2)
+
+v3.0.0 was a breaking release that made local and CI scans stricter and harder to
+bypass by accident. Later v3 releases fixed bugs and added pin maintenance. Highlights,
+from the [changelog](../CHANGELOG.md):
+
+- **Incomplete scans block.** A scanner that fails, writes no report or writes an
+  invalid one blocks the commit, push or CI run instead of passing (v3.0.0).
+- **Push hooks scan what is pushed.** Pre-push hooks read Git's ref update and scan the
+  exact commits being pushed, and only the files each pushed ref changes (v3.0.0, v3.0.1).
+- **Trusted policy and exact approvals.** Pull-request scans read exceptions and
+  baselines from the base commit. Suppressions and baselines use schema 2.0, where each
+  approval covers one fingerprinted finding (v3.0.0). See
+  [suppression governance](SUPPRESSION-GOVERNANCE.md).
+- **Inline Checkov skips from the trusted base** are honoured when unchanged; new or
+  edited skips stay visible until approved (v3.0.1, v3.0.2).
+- **Hardened fix loop.** Agent file tools are confined to the source checkout, and the
+  patch must pass a secret scan before upload (v3.0.3).
+- **Verified scanner downloads.** CI installs Trivy from the GitHub release with a pinned
+  checksum, and hooks check interpreter and scanner paths before running them
+  (v3.0.3, v3.0.5).
+- **Clearer platform requirements.** Hooks require Bash 4.4 or later; setup, scans and hooks decode tool
+  and Git output as UTF-8 (v3.0.6 to v3.0.9).
+- **Pin freshness report.** A weekly workflow reports hand-kept version pins that have
+  newer upstream releases (v3.1.0). See [pin freshness](PIN-FRESHNESS.md).
+- **Updated scanners and tooling** (v3.1.1, v3.1.2).
 
 ## v2.0.0 milestone — Reusable scan→fix platform
 
@@ -37,7 +65,7 @@ multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchan
 - [x] **Lefthook is the default local runner** (`templates/lefthook/lefthook.yml`), calling the same dispatcher scripts; **pre-commit kept as a supported alternative**
 - [x] One-command `setup-scan-fix.{ps1,py}` (idempotent: writes config from a tier template, installs runner + `.claude` bundle + caller workflows, creates labels, **verifies** secrets, runs verify-scanning)
 - [x] Third-party actions SHA-pinned across this repo's own workflows, the semgrep image pinned by digest, and the Snyk CLI pinned to an exact version (see [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo))
-- [x] Docs: `SECURITY-MODEL.md`, `FIX-LOOP.md`, `APP-CODE-SCANNING.md`, `MIGRATION-ANALYSIS.md`, `CONSUMER-MIGRATION.md`; `specs/002-scan-fix-platform/`
+- [x] Docs: `SECURITY-MODEL.md`, `FIX-LOOP.md`, `APP-CODE-SCANNING.md`, `CONSUMER-MIGRATION.md`; the migration analysis and `specs/002-scan-fix-platform/` (now in [archive/](../archive/README.md))
 - [x] Tests: `tests/integration/test-app-code-hooks.sh`, `tests/python/test_check_fix_allowlist.py`, `tests/python/test_dotnet_format_path.py`
 
 ## v1.0.0
@@ -65,11 +93,12 @@ multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchan
 - [x] AI agent scanning interface (scan.py)
 - [x] Suppression validation rewritten in Python (validate-suppressions.py)
 
-## Future
+## Possible future work
 
-Additional language plugins follow the same `languages.*` config pattern, dispatcher
-hooks, and reusable-workflow approach now established in v2.0.0. Config scaffolding
-already exists in `scan-config.yaml` (disabled) for several of these:
+These are plans, not commitments, and have no dates. Additional language plugins would
+follow the same `languages.*` config pattern, dispatcher hooks and reusable workflows
+as the existing languages. Config scaffolding already exists in `scan-config.yaml`
+(disabled) for several of these:
 
 - [ ] PowerShell scanning hooks (PSScriptAnalyzer)
 - [ ] Shell/Bash scanning hooks (ShellCheck, shfmt)
@@ -78,6 +107,7 @@ already exists in `scan-config.yaml` (disabled) for several of these:
 - [ ] Python application scanning (bandit, black)
 - [ ] Java application scanning (SpotBugs, checkstyle)
 
-> **Note:** C#/.NET and JavaScript/TypeScript application scanning — originally
-> planned here as a *separate* repository — were **delivered in v2.0.0** as Layer A
-> language plugins in this repo (see above), alongside the agentic fix-loop (Layer B).
+C#/.NET and JavaScript/TypeScript scanning, once planned as a separate repository,
+were delivered in v2.0.0 as language plugins in this repository.
+
+To suggest or discuss an item, open a feature request.

@@ -65,9 +65,8 @@ does not run Python. The hooks and baseline creator verify the selected interpre
 and run its path directly. An interpreter inside a protected checkout, or an
 ambiguous launcher selection, is rejected before any Python probe.
 
-Complete reference for the hooks provided by auto-code-scanning. As of v2.0.0
-this covers both the original Terraform/IaC hooks and the new app-code hooks
-(C#/.NET, TypeScript/JavaScript, SQL) plus config validation.
+Complete reference for the hooks provided by auto-code-scanning: the Terraform/IaC
+hooks, the app-code hooks (C#/.NET, TypeScript/JavaScript, SQL) and config validation.
 
 ## Architecture
 
@@ -224,7 +223,7 @@ The dispatcher sets these environment variables for hook scripts:
 - **Tool**: Gitleaks 8.19 or newer (`gitleaks git --staged`)
 - **Target**: <5 seconds
 - **Flags**: `--report-format json --report-path - --redact --no-banner --exit-code 1 --log-level error`
-- **Note**: Prints each staged finding's rule, file, and line, without the secret. A configuration error is an incomplete scan and blocks by default. Invalid findings reports block even with tool-error opt-in; known leaks remain findings. On the inputs in [SECRET-SCANNER-EVALUATION.md](SECRET-SCANNER-EVALUATION.md), the tools detect different patterns. CI secret scans stay on Trivy at HIGH/CRITICAL severity.
+- **Note**: Prints each staged finding's rule, file, and line, without the secret. A configuration error is an incomplete scan and blocks by default. Invalid findings reports block even with tool-error opt-in; known leaks remain findings. On the inputs in [SECRET-SCANNER-EVALUATION.md](../archive/SECRET-SCANNER-EVALUATION.md), the tools detect different patterns. CI secret scans stay on Trivy at HIGH/CRITICAL severity.
 
 #### validate-suppressions
 
@@ -303,7 +302,7 @@ This hook is **optional**. It is included as a commented-out entry in standard a
 2. Fall back to `snyk whoami` (checks keychain/config)
 3. If neither succeeds: warn and exit 0 (fail-open)
 
-## App-Code Hooks (v2.0.0)
+## App-Code Hooks
 
 These hooks extend the platform from Terraform-only IaC scanning to application
 code. They follow the **same** dispatcher pattern as the Trivy/Checkov hooks:
