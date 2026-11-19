@@ -309,7 +309,7 @@ flowchart TD
   what they need (`contents:read, actions:read, issues:write, pull-requests:write`).
 - **Vendored, byte-identical:** `hooks/`, `scripts/`, `schemas/` (local hooks must work with no
   network). Re-vendor on every pin bump so the local code matches the referenced workflows.
-- **Pin by SHA, comment the tag** (`@<sha> # v2.0.9`). See [VERSION-PINNING](VERSION-PINNING.md).
+- **Pin by SHA, comment the tag** (`@<sha> # vX.Y.Z`, naming the release the SHA belongs to). See [VERSION-PINNING](VERSION-PINNING.md).
 
 ---
 

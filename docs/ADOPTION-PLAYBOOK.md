@@ -1,10 +1,10 @@
 # Adoption Playbook
 
-Research-backed phased approach to rolling out the security scan→fix platform across the organization.
+A phased plan for rolling out the scan and fix platform across a team or organization.
 
 ## A Two-Layer Platform
 
-As of v2.0.0 this is a reusable **two-layer platform**, not just a Terraform scanner.
+The platform has two layers, and it scans application code as well as Terraform.
 Roll the layers out **independently** — Layer A first, Layer B only when a team is
 ready for autonomous code changes.
 
@@ -34,10 +34,10 @@ sets merely because both installations are called starter.
 
 ### Rollout Steps
 
-1. Identify 3-5 advocate developers who will champion the tool
-2. Deploy starter tier to their repositories
+1. Pick a few developers to act as [scanning champions](#scanning-champions)
+2. Deploy the starter tier to their repositories
 3. Run for at least 2 weeks before measuring
-4. Collect feedback via [developer survey](DEVELOPER-SURVEY.md)
+4. Collect their feedback on speed, false positives and unclear messages
 
 ### Transition Criteria (Move to Standard)
 
@@ -63,8 +63,8 @@ Enable each new scanner only after prerequisites and trusted policy are provisio
 
 1. Create a reviewed schema-2.0 baseline using [Getting started](SETUP-GUIDE.md#9-suppressions-and-baselines).
 2. Upgrade advocate repos to standard tier
-3. Expand to 50%+ of Terraform developers
-4. Monitor metrics via `.\scripts\collect-scan-metrics.ps1`
+3. Expand to about half of the team's repositories
+4. Track the metrics in [Collecting metrics](#collecting-metrics)
 5. Set up CI/CD integration with the reusable workflow
 
 ### Transition Criteria (Move to Strict)
@@ -88,17 +88,17 @@ Enable each new scanner only after prerequisites and trusted policy are provisio
 ### Rollout Steps
 
 1. Upgrade to strict tier in advocate repos first
-2. Expand to 90%+ developer adoption
+2. Expand to most of the team's repositories
 3. Enable suppression validation in CI
 4. Run quarterly suppression reviews
-5. Conduct developer satisfaction survey
+5. Ask developers for feedback again
 
 ### Success Criteria
 
 - Bypass rate <5%
-- CI failures reduced 40% vs. pre-scanning baseline
-- All suppressions have valid business justification
-- Developer satisfaction >3.5/5.0
+- Fewer security-related CI failures than before local scanning
+- All suppressions have a valid business justification
+- Developer feedback is neutral-to-positive
 
 ## Layer B: Enabling the Fix-Loop
 
@@ -143,34 +143,74 @@ Read [FIX-LOOP.md](FIX-LOOP.md) and [SECURITY-MODEL.md](SECURITY-MODEL.md) befor
 
 ## Metrics to Track
 
+These are suggested starting targets, not industry benchmarks. Set your own from the
+first weeks of data.
+
 | Metric | Starter Target | Standard Target | Strict Target |
 |--------|---------------|----------------|---------------|
 | Hook pass rate | >95% | >80% | >80% |
 | Bypass rate | N/A | <10% | <5% |
 | Pre-commit time | <10s | <10s | <10s |
 | Pre-push time | N/A | <60s | <60s |
-| Developer satisfaction | >3.0/5 | >3.5/5 | >3.5/5 |
 
-Collect metrics using:
+### Collecting metrics
+
+`scripts/collect-scan-metrics.ps1` (PowerShell 7) gathers rough adoption numbers for
+one repository. Run it from the repository root:
+
 ```powershell
-.\scripts\collect-scan-metrics.ps1 -OutputDir .scan-results/metrics/
+# Last 30 days (default), written to .scan-results/metrics/
+./scripts/collect-scan-metrics.ps1
+
+# Last 90 days, with more detail
+./scripts/collect-scan-metrics.ps1 -Days 90 -Detailed
+
+# Another output directory
+./scripts/collect-scan-metrics.ps1 -OutputPath ./metrics
 ```
 
-## Key Statistics (Industry Research)
+It writes `metrics-YYYY-MM-DD.json` and `metrics-latest.json`, and compares the result
+with the previous snapshot in the same directory. In GitHub Actions, `-UploadArtifact`
+writes the file path and an artifact name to the step outputs for an upload step.
+Know what the numbers mean before you act on them:
 
-- **30x** cost multiplier for fixing bugs in production vs. development (NIST)
-- **$10.22M** average data breach cost in the US (IBM 2025)
-- **40%** reduction in CI failures with shift-left scanning (Forrester TEI)
+- **Bypass rate** is a heuristic: the share of commits in the period whose subject is
+  not a Conventional Commit. It does not detect `--no-verify` directly.
+- **Hook pass rate** comes from the pre-commit log in the user profile when it exists.
+  Otherwise the script estimates it from the bypass rate. Lefthook runs are not counted.
+- **Finding counts** come from `.scan-results/unified-results-latest.json`, which
+  `scripts/aggregate-scan-results.ps1` writes. Without it, finding counts are zero.
 
-## Champion Network
+To find slow hooks, use `scripts/profile-hook-performance.ps1` and the
+[performance guide](PERFORMANCE-OPTIMIZATION.md).
 
-Identify scanning champions in each team:
-- Champions receive early access to new features
-- Champions provide feedback on false positives and friction points
-- Champions help onboard teammates
-- Schedule monthly champion sync meetings
+## Scanning champions
 
-See [DEVELOPER-SURVEY.md](DEVELOPER-SURVEY.md) for feedback collection templates.
+A scanning champion is a developer in each team who uses the tools daily, helps
+teammates with setup, and passes feedback back to the platform owners.
+
+**Choosing champions:** pick developers who are respected by their peers, work in the
+scanned languages regularly, are comfortable with command-line tools, and can spend an
+hour or two a week on it.
+
+**First two weeks:** install scanning in their own repository, go through the full
+workflow (commit, fix findings, push, read the CI result), and write down any friction.
+
+**Ongoing:**
+
+- Help teammates install and configure the hooks
+- Triage false positives, and request a reviewed exception when one is justified
+  (see [suppression governance](SUPPRESSION-GOVERNANCE.md))
+- Meet the other champions regularly, for example monthly
+- Suggest improvements to hooks and documentation
+
+**Common issues they will see:**
+
+1. **A hook is too slow:** move the check to pre-push; see the [performance guide](PERFORMANCE-OPTIMIZATION.md).
+2. **A false positive:** request an exact-occurrence exception in `.scan-suppressions.yaml`.
+3. **A tool is not installed:** rerun setup; see [troubleshooting](TROUBLESHOOTING.md).
+4. **Someone wants to skip the hooks:** `git commit --no-verify` skips local hooks only.
+   CI still scans the pull request. Record why it was needed.
 
 ## Handling Resistance
 

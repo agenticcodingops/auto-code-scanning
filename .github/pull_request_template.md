@@ -1,21 +1,22 @@
 ## Summary
 
-<!-- What this PR changes and why. Link the issue; a worker's PR closes its task issue. -->
+<!-- What this PR changes and why. Link the issue it fixes, for example "Closes #123". -->
 
-Closes #
+## Type of change
 
-## Documentation
+- [ ] Bug fix (`fix:`)
+- [ ] New feature (`feat:`)
+- [ ] Breaking change (`feat!:` / `fix!:`)
+- [ ] Documentation (`docs:`)
+- [ ] Other (`chore:`, `ci:`, `test:`, `refactor:`)
 
-<!-- List the adopter docs this PR changed, or write "no docs impact" and the reason. -->
+## How it was tested
 
-## Worker report
+<!-- Commands you ran and their results. Name any check you skipped and why.
+     Workflows that need maintainer-only secrets skip or fail on forks; that is expected. -->
 
-<!-- Filled in by the worker that made the change. A PR written by hand may delete this section. -->
+## Checklist
 
-- Status: done | blocked | needs-human
-- What changed:
-- Commands run, with exit codes (or "not run here; CI verifies"):
-- CI run URL:
-- Open questions:
-- Risk: low | high, and why. High: a workflow or release change, anything that changes what adopters' scans run,
-  block or report, secrets or settings, an irreversible step such as a tag or release, or low confidence.
+- [ ] The PR title is a [Conventional Commit](https://www.conventionalcommits.org/en/v1.0.0/) (it becomes the squash commit and the changelog entry).
+- [ ] Documentation is updated, or this change has no docs impact.
+- [ ] `python -m pytest tests/python/` and the Pester tests pass locally (see [CONTRIBUTING](../CONTRIBUTING.md)).

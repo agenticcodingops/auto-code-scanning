@@ -24,7 +24,7 @@ credentials in test data. A skipped hook does not prove a scanner ran.
 
 For deliberate finding tests, use the platform's maintained integration fixtures
 and assert the selected scanner actually detects them. A familiar example access
-key is not guaranteed to match every detector: see [the secret scanner evaluation](SECRET-SCANNER-EVALUATION.md).
+key is not guaranteed to match every detector: see [the secret scanner evaluation](../archive/SECRET-SCANNER-EVALUATION.md).
 Missing tools and incomplete security reports block by default. The local
 `SCAN_ALLOW_TOOL_ERRORS=1` compatibility setting has limited scope and cannot bypass
 unsafe paths, required snapshots, invalid policy or malformed selected reports.
@@ -94,7 +94,7 @@ python -m pytest tests/python/test_hook_integrity.py -q
 bash tests/integration/test-app-code-hooks.sh
 ```
 
-These complement the full [contributor suite](CONTRIBUTING.md); they do not replace it.
+These complement the full [contributor suite](../CONTRIBUTING.md); they do not replace it.
 
 ## Hosted acceptance
 

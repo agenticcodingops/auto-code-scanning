@@ -2,13 +2,12 @@
 
 How to integrate automated agents with the security scanning solution.
 
-> **v2.0.0 — two layers.** This repo is now a reusable **scan→fix platform**, not
-> just a scanner. **Layer A** is scanning (Terraform *plus* app-code: C#/.NET,
+> **Two layers.** The platform scans and, optionally, fixes. **Layer A** is scanning (Terraform *plus* app-code: C#/.NET,
 > TypeScript/JS, SQL). **Layer B** is an optional **agentic fix-loop**. For agents,
-> the two most important additions are the **in-session Claude Code bundle**
+> the two most important parts are the **in-session Claude Code bundle**
 > (`templates/claude/`, which self-corrects edits *inside the session*) and the
 > **CI fix-loop** (`.github/workflows/autonomous-fix.yml`). The `scan.py` interface
-> below is unchanged. Everything is configured in one file, `scan-config.yaml`.
+> is described below. Everything is configured in one file, `scan-config.yaml`.
 > **Pin consumers to a release tag or a SHA — never `@main`.** The current release is in [VERSION-PINNING.md](VERSION-PINNING.md).
 
 ## Overview
@@ -16,7 +15,7 @@ How to integrate automated agents with the security scanning solution.
 The scanning solution provides several integration paths:
 
 1. **Pre-commit / Lefthook hooks**: Run automatically on `git commit` / `git push`
-   (developer workflow). Lefthook is the default local runner in v2.0.0; pre-commit
+   (developer workflow). Lefthook is the default local runner; pre-commit
    remains a supported alternative. Both call the same `hooks/dispatcher.sh` scripts.
 2. **scan.py**: Programmatic scanning interface for automated agents (agent workflow)
 3. **In-session Claude Code bundle** (`templates/claude/`): hooks that scan an agent's
@@ -78,6 +77,8 @@ When `--auto-fix` is specified:
 | `--tools` | `trivy,checkov` | Comma-separated list of tools to run |
 | `--skip-baseline` | off | Ignore baseline filtering |
 | `--skip-suppressions` | off | Ignore suppression filtering |
+| `--allow-legacy-exceptions` | off | Accept schema 1.0 suppressions and baselines during a reviewed migration only (see [suppression governance](SUPPRESSION-GOVERNANCE.md#scan-policy-and-occurrence-approval-migration)) |
+| `--policy-root` | none | Path to a separate checkout of the trusted base, used for exceptions and inline-skip approval; CI supplies the protected base |
 
 ### Exit Codes
 

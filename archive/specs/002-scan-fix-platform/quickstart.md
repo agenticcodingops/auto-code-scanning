@@ -2,11 +2,11 @@
 
 > Historical design/presentation material. Its Python version floor, pinned action version,
 > fix-loop job count and test count are not current operating instructions. Use
-> [Getting started](../../docs/SETUP-GUIDE.md), [the hook contract](../../docs/HOOK-REFERENCE.md)
-> and [the v3 audit](../../docs/V3-BEHAVIOUR-AUDIT.md) for released behaviour.
+> [Getting started](../../../docs/SETUP-GUIDE.md), [the hook contract](../../../docs/HOOK-REFERENCE.md)
+> and [the v3 audit](../../V3-BEHAVIOUR-AUDIT.md) for released behaviour.
 
 The shortest path from zero to a working scan (+ optional fix) in a consumer repo. Full guide:
-[Getting started](../../docs/SETUP-GUIDE.md).
+[Getting started](../../../docs/SETUP-GUIDE.md).
 
 ## Prerequisites
 
@@ -54,7 +54,7 @@ chosen, `terraform-scan.yml` + `autonomous-fix.yml`. Confirm each `uses:` is pin
 2. `fix_loop.enabled: true` in `scan-config.yaml`; tune `allowlist_paths` + `build_verify_cmd`.
 3. Add the **`ai-autofix`** label to a PR; a trusted review triggers the two-job loop.
 
-See [`docs/FIX-LOOP.md`](../../docs/FIX-LOOP.md) and [`docs/SECURITY-MODEL.md`](../../docs/SECURITY-MODEL.md).
+See [`docs/FIX-LOOP.md`](../../../docs/FIX-LOOP.md) and [`docs/SECURITY-MODEL.md`](../../../docs/SECURITY-MODEL.md).
 
 ## 5. Verify the platform itself
 

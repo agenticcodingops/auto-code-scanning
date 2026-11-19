@@ -1,138 +1,144 @@
 # Performance Optimization Guide
 
-This guide covers strategies for optimizing pre-commit hook performance to maintain developer experience while ensuring security scanning effectiveness.
+Slow hooks get skipped. This guide shows how to measure hook times and keep local
+scanning fast without weakening what CI enforces.
 
 ## Performance Targets
 
-Based on research and developer experience studies:
+These are the platform's own targets. `scripts/profile-hook-performance.ps1` flags hooks
+against them, and the `performance-check.yml` workflow enforces the same limits on this
+repository's test fixtures.
 
 | Metric | Target | Rationale |
 |--------|--------|-----------|
-| Individual hook | < 5 seconds | Hooks over 5s see increased bypass rates |
+| Individual hook | < 5 seconds | Keeps each commit responsive |
 | Total pre-commit | < 10 seconds | Total time for all pre-commit stage hooks |
-| Total pre-push | < 60 seconds | Acceptable for less frequent operation |
+| Total pre-push | < 60 seconds | Acceptable for a less frequent operation |
 | Full scan (--all-files) | < 3 minutes | For periodic complete scans |
 
 ## Profiling Hook Performance
 
-Before optimizing, measure current performance:
+Before optimizing, measure. The profiler (PowerShell 7) runs each security hook through
+`pre-commit run <hook-id> --all-files` in the current directory, so run it from the
+root of the repository you want to measure. It needs pre-commit and the scanners on
+PATH. `-FixtureDir` is only recorded in the JSON output; it does not choose what is
+scanned.
 
 ```powershell
-# Profile all hooks
-.\scripts\profile-hook-performance.ps1
+# Profile the security hooks (3 iterations each)
+./scripts/profile-hook-performance.ps1
 
-# With more iterations for accuracy
-.\scripts\profile-hook-performance.ps1 -Iterations 5
-
-# Verbose output
-.\scripts\profile-hook-performance.ps1 -ShowVerbose
+# More iterations for accuracy, with per-iteration output
+./scripts/profile-hook-performance.ps1 -Iterations 5 -ShowVerbose
 ```
 
-### Sample Output
+It profiles these hooks: `trivy-iac-critical`, `trivy-secrets`,
+`validate-suppressions` and `gitleaks` at pre-commit, and `trivy-iac-full`,
+`checkov`, `checkov-strict` and `tflint` at pre-push. It prints the average time per
+hook, marks each `[OK]` or `[SLOW]` against the 5-second target, and adds
+recommendations. The labels reflect elapsed time only: the profiler does not check
+whether a hook succeeded, so a hook that fails fast (a missing scanner, an unknown
+hook ID) can still show `[OK]`. Run a hook on its own to confirm it works.
 
-```
-Hook Times (averaged over 3 iterations):
------------------------------------------
-terraform_checkov              15.23s [SLOW] ====================================
-terraform_trivy                 8.45s [SLOW] ===================
-terraform_validate              4.12s [OK]   =========
-terraform_tflint                3.87s [OK]   ========
-terraform_fmt                   1.23s [OK]   ===
-trivy-secrets                   2.45s [OK]   =====
-trailing-whitespace             0.15s [OK]   =
------------------------------------------
-TOTAL                          35.50s
+- `MIGRATE:` a pre-commit hook averaging over 10 seconds should move to pre-push.
+- `OPTIMIZE:` a hook over the 5-second target needs attention.
+- `TOTAL TIME:` a stage exceeds its total target.
 
-Recommendations:
-  - MIGRATE: Move 'terraform_checkov' to pre-push stage (avg: 15.23s)
-  - OPTIMIZE: Consider caching for 'terraform_trivy' (avg: 8.45s)
-```
+Results are written to `.scan-results/performance/performance-YYYY-MM-DD.json` and
+`performance-latest.json`, so you can compare runs.
 
 ## Optimization Strategies
 
 ### 1. Stage Migration
 
-Move slow hooks from pre-commit to pre-push:
+Run fast checks at commit time and slow, thorough checks at push time. The hooks
+shipped by this repository already have default stages
+(see [HOOK-REFERENCE](HOOK-REFERENCE.md)):
+
+| Hook | Default stage | Notes |
+|------|---------------|-------|
+| `trivy-secrets` | pre-commit | Secret scan of staged content |
+| `gitleaks` | pre-commit | Second secret scanner |
+| `trivy-iac-critical` | pre-commit | Quick CRITICAL-only IaC scan |
+| `validate-suppressions` | pre-commit | Validates the exception registry |
+| `trivy-iac-full` | pre-push | Full-severity IaC scan |
+| `checkov` / `checkov-strict` | pre-push | Policy scan |
+| `tflint` | pre-push | Terraform linting |
+| `snyk-iac` | pre-push | Optional |
+
+The tier templates also use hooks from other repositories, such as `terraform_fmt` and
+`terraform_validate` from pre-commit-terraform, at pre-commit.
+
+With **pre-commit**, override a hook's stage in your `.pre-commit-config.yaml`:
 
 ```yaml
-# .pre-commit-config.yaml
-
-# FAST - Keep at pre-commit stage
-- id: terraform_fmt
-  stages: [pre-commit]
-
-- id: trivy-terraform-critical
-  stages: [pre-commit]  # Quick CRITICAL-only scan
-
-# SLOW - Move to pre-push stage
-- id: terraform_checkov
-  stages: [pre-push]    # Full policy scan at push time
-
-- id: terraform_trivy
-  stages: [pre-push]    # Full severity scan at push time
+  - repo: https://github.com/agenticcodingops/auto-code-scanning
+    rev: <release commit SHA>   # see VERSION-PINNING.md
+    hooks:
+      - id: trivy-iac-critical
+        stages: [pre-commit]    # quick CRITICAL-only scan
+      - id: trivy-iac-full
+        stages: [pre-push]      # full severity scan at push time
+      - id: checkov
+        stages: [pre-push]
 ```
 
-**Recommended Staging:**
+With **Lefthook** (the default runner), pre-commit commands sit under `pre-commit:`
+in `lefthook.yml`, and push-time scanners are listed in the `--hooks` argument of the
+`scan-push-objects` command under `pre-push:`. Move a check by editing those lists.
+Lefthook already runs pre-commit commands in parallel (`parallel: true`).
 
-| Hook | Typical Time | Recommended Stage |
-|------|--------------|-------------------|
-| trailing-whitespace | < 1s | pre-commit |
-| end-of-file-fixer | < 1s | pre-commit |
-| check-yaml | < 1s | pre-commit |
-| terraform_fmt | 1-2s | pre-commit |
-| trivy-secrets | 2-3s | pre-commit |
-| trivy-terraform-critical | 3-5s | pre-commit |
-| terraform_tflint | 3-5s | pre-commit |
-| terraform_validate | 3-5s | pre-commit |
-| terraform_trivy (full) | 8-15s | pre-push |
-| terraform_checkov | 15-30s | pre-push |
-| validate-terraform-modules | 30-60s | pre-push |
+Do not move `gitleaks` or `trivy-secrets` to pre-push. Both scan the staged index; after
+a normal commit nothing is staged, so at push time they pass without scanning the
+pushed commits. Keep secret scanning at commit time; CI scans the pull request again.
 
 ### 2. Caching
 
-Enable caching for tools that support it:
+Enable caching for tools that support it.
 
-#### Trivy Database Caching
+#### Trivy
+
+Trivy keeps its database and checks in a cache directory. Set a stable location so
+it is reused between runs:
 
 ```powershell
-# Set cache directory (add to profile)
-$env:TRIVY_CACHE_DIR = "$env:USERPROFILE\.trivy-cache"
-
-# Update database periodically (not on every run)
-trivy image --download-db-only
+# PowerShell (add to your profile)
+$env:TRIVY_CACHE_DIR = "$HOME/.trivy-cache"
 ```
 
-#### Pre-commit Caching
+```bash
+# Bash
+export TRIVY_CACHE_DIR="$HOME/.trivy-cache"
+```
 
-Pre-commit caches hook installations automatically. Clear if needed:
+The first run after clearing the cache downloads data and is slower.
+
+#### pre-commit
+
+pre-commit caches hook installations automatically. Clear the cache if hooks behave
+unexpectedly:
 
 ```bash
-# Clear cache
 pre-commit clean
-
-# Reinstall hooks
 pre-commit install
 ```
 
-#### tflint Plugin Caching
+#### TFLint plugins
 
 ```bash
-# Initialize plugins once
+# Initialize plugins once; they are cached under ~/.tflint.d/plugins/
 tflint --init
-
-# Plugins cached at ~/.tflint.d/plugins/
 ```
 
 ### 3. Parallel Execution
 
-Some hooks can run in parallel. Pre-commit runs hooks sequentially by default, but you can:
-
-#### Run Independent Hooks in Parallel
-
-Create a wrapper script that runs multiple tools concurrently:
+Lefthook runs pre-commit commands in parallel by default. pre-commit runs hooks one
+after another. If you want to run several scanners concurrently in an ad hoc script,
+PowerShell 7 can do it. This is an example to adapt; the repository does not ship such
+a script:
 
 ```powershell
-# scripts/parallel-scan.ps1
+# Example only: your own script, for example parallel-scan.ps1
 $jobs = @(
     { trivy config . --severity CRITICAL,HIGH },
     { tflint --config=.tflint.hcl }
@@ -141,29 +147,23 @@ $jobs = @(
 $jobs | ForEach-Object -Parallel { & $_ } -ThrottleLimit 3
 ```
 
-#### Use Trivy's Built-in Parallelism
-
-```yaml
-# In hook args
-- id: terraform_trivy
-  args:
-    - --args=--parallel=4
-```
-
 ### 4. Scope Limiting
 
-Reduce what's scanned:
+#### Scan only what changed
 
-#### Scan Only Changed Files
-
-Pre-commit does this by default for staged files. For manual runs:
+Commit hooks already scan staged content, and push hooks scan only the files changed by
+each pushed ref. For a manual run on specific files with pre-commit:
 
 ```bash
-# Run on specific files only
 pre-commit run --files terraform/modules/s3/main.tf
 ```
 
-#### Skip Directories
+`gitleaks` and `trivy-secrets` ignore `--files`: they scan the staged index, and pass
+without scanning when nothing is staged. Stage the file first to scan it for secrets.
+
+#### Skip directories
+
+Exclude generated or example code from pre-commit:
 
 ```yaml
 # .pre-commit-config.yaml
@@ -175,122 +175,64 @@ exclude: |
   )$
 ```
 
-#### Use Lightweight Checks for Pre-commit
+Excluded paths are still scanned in CI unless CI is configured to skip them.
 
-```yaml
-# Quick CRITICAL-only scan at pre-commit
-- id: trivy-terraform-critical
-  entry: trivy config . --severity CRITICAL --exit-code 1 --quiet
-  stages: [pre-commit]
-
-# Full scan at pre-push
-- id: terraform_trivy
-  args:
-    - --args=--severity=CRITICAL,HIGH,MEDIUM
-  stages: [pre-push]
-```
+`gitleaks` does not apply these exclusions: it scans the whole staged index. When any
+non-excluded file is staged, staged content under an excluded path is scanned too, and
+a secret there can block the commit.
 
 ### 5. Skip Slow Hooks When Needed
 
-For urgent commits (use sparingly):
+For an urgent commit (use sparingly):
 
 ```bash
-# Skip specific slow hooks
-SKIP=terraform_checkov,terraform_trivy git commit -m "message"
+# pre-commit: skip specific hooks
+SKIP=checkov,trivy-iac-full git commit -m "message"
 
-# Skip all hooks (NOT recommended)
+# Lefthook: skip all local hooks for one command
+LEFTHOOK=0 git commit -m "message"
+
+# Skip all hooks (not recommended)
 git commit --no-verify -m "urgent: message"
 ```
 
-Track skip usage in metrics to identify friction points.
-
-## Tool-Specific Optimizations
-
-### Trivy
-
-```yaml
-args:
-  - --args=--skip-dirs=.terraform,examples,tests  # Skip non-production code
-  - --args=--cache-dir=$HOME/.trivy-cache         # Use cache
-  - --args=--timeout=5m                            # Set reasonable timeout
-  - --args=--quiet                                 # Reduce output
-```
-
-### Checkov
-
-```yaml
-# .checkov.yaml
-quiet: true                    # Reduce output
-compact: true                  # Compact output
-download-external-modules: false  # Don't download modules
-deep-analysis: false           # Disable for speed (enable in CI)
-
-skip-path:
-  - examples
-  - tests
-  - .terraform
-```
-
-### tflint
-
-```hcl
-# .tflint.hcl
-config {
-  # Disable slow rules if not needed
-  disabled_by_default = false
-}
-
-# Focus on critical rules only
-rule "terraform_deprecated_interpolation" {
-  enabled = true
-}
-```
+Skipping a local hook never skips CI: the pull request is still scanned. See
+[LOCAL-HOOKS-TOGGLE](LOCAL-HOOKS-TOGGLE.md) for the supported switches.
 
 ## Measuring Improvement
 
-After optimization:
+After a change, profile again and compare with the earlier result in
+`.scan-results/performance/`:
 
 ```powershell
-# Re-profile
-.\scripts\profile-hook-performance.ps1
-
-# Compare with baseline
-# Check .scan-results/performance/ for history
+./scripts/profile-hook-performance.ps1
 ```
 
-### Success Criteria
-
-| Metric | Before | After | Target |
-|--------|--------|-------|--------|
-| Pre-commit total | 35s | 8s | < 10s |
-| Slowest hook | 15s | 4s | < 5s |
-| Hooks over target | 3 | 0 | 0 |
+You are done when every pre-commit hook is under 5 seconds, the pre-commit total is
+under 10 seconds and the pre-push total is under 60 seconds.
 
 ## Troubleshooting Slow Hooks
 
 ### Common Causes
 
-1. **Network calls** - Database updates, external module downloads
-2. **Large file scans** - Scanning generated files, binaries
-3. **Deep analysis** - Recursive scanning, cross-file analysis
-4. **Missing cache** - Cold start after cache clear
+1. **Network calls**: database updates, external module downloads
+2. **Large file scans**: generated files, binaries
+3. **Deep analysis**: recursive scanning, cross-file analysis
+4. **Missing cache**: cold start after a cache clear
 
 ### Diagnostics
 
 ```powershell
-# Time individual command
+# Time one command
 Measure-Command { trivy config . --severity CRITICAL }
 
-# Check what's being scanned
-trivy config . --list-all-pkgs --format json | Select-String "Target"
-
-# Verify cache is being used
+# See Trivy's cache and download activity
 $env:TRIVY_DEBUG = "true"
 trivy config .
 ```
 
 ## Related Documentation
 
-- [HOOK-REFERENCE.md](./HOOK-REFERENCE.md) - Hook configuration
-- [METRICS-DASHBOARD.md](./METRICS-DASHBOARD.md) - Performance metrics
-- [SETUP-GUIDE.md](./SETUP-GUIDE.md) - Initial setup
+- [HOOK-REFERENCE.md](./HOOK-REFERENCE.md): hook IDs, stages and configuration
+- [ADOPTION-PLAYBOOK.md](./ADOPTION-PLAYBOOK.md#collecting-metrics): adoption metrics
+- [SETUP-GUIDE.md](./SETUP-GUIDE.md): initial setup

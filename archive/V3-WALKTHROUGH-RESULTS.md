@@ -1,6 +1,6 @@
 # Local walkthrough evidence — 7 November 2026
 
-Historical test evidence for [Getting started](SETUP-GUIDE.md), not a second installation guide.
+Historical test evidence for [Getting started](../docs/SETUP-GUIDE.md), not a second installation guide.
 The fresh Windows Terraform consumer had no remote and was never pushed. Its final working tree was clean.
 The platform checkout was `8321adf7020025a5a7a6c7cd8d1780015b18a07a`, the post-release setup-output fix.
 The test used standard tier, Lefthook and the three-file Terraform example now in the guide.
