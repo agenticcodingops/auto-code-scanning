@@ -3,8 +3,9 @@
 This page is for maintainers of this repository. Adopters only need
 [version pinning](../VERSION-PINNING.md). It moved here from `VERSION-PINNING.md`.
 
-The inventory below is a **dated snapshot**. Versions have moved since it was taken
-(for example, release v3.1.2 installs Trivy 0.76.2 and TFLint 0.66.0). The current
+The inventory below is a **dated snapshot**: any row may have drifted since it was
+taken. Trivy, TFLint, Checkov, Semgrep and Snyk rows were refreshed on 2026-11-19;
+treat the rest as historical. The current
 values live in the workflows, `scripts/scanner-downloads.json` and the configs; the
 weekly [pin freshness](../PIN-FRESHNESS.md) report lists what is outdated.
 
@@ -154,13 +155,13 @@ plugins, not Terraform providers.
 
 | Scanner / plugin | Snapshot value | Every installing/config file | Hand update / existing precondition |
 |---|---|---|---|
-| Trivy | `0.75.0` | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../../scripts/scanner-downloads.json) | Workflow env/version+SHA pair; release download lock; P4. |
+| Trivy | `0.76.2` | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../../scripts/scanner-downloads.json) | Workflow env/version+SHA pair; release download lock; P4. |
 | Checkov | `3.4.5` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan-self-test.yml`](../../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1), [`scripts/setup-scanning.py`](../../scripts/setup-scanning.py), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) | pip install strings plus the Checkov action above; `copilot-setup-steps.yml` installs it into its own virtual environment under `$RUNNER_TEMP` and puts a launcher symlink on `PATH`; P3, P7. |
-| TFLint | `0.64.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../../scripts/scanner-downloads.json) | Workflow with/input plus release download lock; P5. |
+| TFLint | `0.66.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/scanner-downloads.json`](../../scripts/scanner-downloads.json) | Workflow with/input plus release download lock; P5. |
 | Gitleaks | `8.30.1` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`scripts/scanner-downloads.json`](../../scripts/scanner-downloads.json) | Release download lock and ci.yml shell version/expected checksum; P4. Local hooks execute the trusted installed binary. |
-| Semgrep reusable app scan | `1.100.0` | [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml) | workflow_call semgrep-version default, installed through SEMGREP_VERSION; no checksum stated. |
+| Semgrep reusable app scan | `1.184.0` | [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml) | workflow_call semgrep-version default, installed through SEMGREP_VERSION; no checksum stated. |
 | Semgrep container scan | `1.178.0` | [`.github/workflows/semgrep.yml`](../../.github/workflows/semgrep.yml) | Container digest and version/date comment; P6. `sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b`. |
-| Snyk CLI | `1.1307.4` | [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1), [`scripts/setup-scanning.py`](../../scripts/setup-scanning.py) | npm install strings; optional job/setup; no npm lockfile; P8. |
+| Snyk CLI | `1.1308.4` | [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1), [`scripts/setup-scanning.py`](../../scripts/setup-scanning.py) | npm install strings; optional job/setup; no npm lockfile; P8. |
 | TFLint terraform ruleset | `0.15.0` | [`configs/aws/.tflint.hcl`](../../configs/aws/.tflint.hcl), [`configs/azure/.tflint.hcl`](../../configs/azure/.tflint.hcl), [`configs/gcp/.tflint.hcl`](../../configs/gcp/.tflint.hcl) | HCL plugin version in all three cloud configs; P5. |
 | TFLint azurerm ruleset | `0.32.0` | [`configs/azure/.tflint.hcl`](../../configs/azure/.tflint.hcl) | HCL plugin version; P5. |
 | TFLint aws ruleset | `0.49.0` | [`configs/aws/.tflint.hcl`](../../configs/aws/.tflint.hcl) | HCL plugin version; P5. |
@@ -465,8 +466,8 @@ CIS benchmark labels and TLS minima are not software freshness pins.
 - The fix action/config mirrors use `v1.0.148`; review/mention workflows use
   `v1.0.233`. These are distinct roles, not proof of a defect; P1 prevents an
   automatic blanket bump of the review workflow.
-- Semgrep's reusable app scan defaults to `1.100.0`, while the standalone CI image
-  records `1.178.0`. Local hooks have no exact Semgrep install selection.
+- Semgrep's reusable app scan defaults to `1.184.0`, and the standalone CI image
+  records the same version. Local hooks have no exact Semgrep install selection.
 - [Reusable workflows](../REUSABLE-WORKFLOWS.md) describes the app secret scan as
   Trivy `0.71.0`; its workflow installs `0.75.0`. Its `scanning_repo_ref` table also
   says default `v2.0.0`, while the actual default is release-managed.
