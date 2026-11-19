@@ -108,6 +108,8 @@ def test_versions_agree(package, manifest_version):
 def _template_pins():
     """Find platform references regardless of their value, including unmarked SHAs."""
     paths = sorted((REPO_ROOT / "templates").rglob("*"))
+    # The example repositories are copied by adopters, so their pins must move with each release too.
+    paths += sorted((REPO_ROOT / "examples").rglob("*"))
     paths.append(REPO_ROOT / "scripts" / ".pre-commit-config.yaml")
     for path in paths:
         if path.suffix not in (".yml", ".yaml"):
@@ -177,7 +179,8 @@ def test_every_template_pin_of_this_repository_is_a_marked_line_in_extra_files(p
         assert rel in listed, f"{rel} has a marked pin but is not under extra-files"
     # The other direction guards the search itself: a listed template in which no pin is found means the
     # patterns no longer match its shape, and the check above would pass without looking at it.
-    listed_templates = {f for f in listed if f.startswith("templates/") or f == "scripts/.pre-commit-config.yaml"}
+    listed_templates = {f for f in listed
+                        if f.startswith(("templates/", "examples/")) or f == "scripts/.pre-commit-config.yaml"}
     assert listed_templates, "no template is listed under extra-files"
     assert listed_templates == pinned, f"listed but no pin found: {sorted(listed_templates - pinned)}"
 
