@@ -211,11 +211,11 @@ Checkov remain scanner entries above.
 |---|---|---|---|
 | pytest | `9.2.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
 | pytest-cov | `7.1.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
-| PyYAML | `6.0.3` | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/reusable-scan-self-test.yml`](../../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md`, [`tests/python/test_autonomous_fix_trust_boundary.py`](../../tests/python/test_autonomous_fix_trust_boundary.py) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
-| jsonschema | `4.26.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
+| PyYAML | `6.0.3` | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/reusable-scan-self-test.yml`](../../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived), [`tests/python/test_autonomous_fix_trust_boundary.py`](../../tests/python/test_autonomous_fix_trust_boundary.py) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
+| jsonschema | `4.26.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
 | pre-commit | `4.7.0` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1), [`scripts/setup-scanning.py`](../../scripts/setup-scanning.py) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
 | pip | `26.3` | [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
-| Prettier | `3.6.2` | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
+| Prettier | `3.6.2` | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived) | Maintainer; P7 for pre-commit/Checkov environments, otherwise none stated. |
 
 The hook rows retain their snapshot classification below. Current `pre-commit`
 support covers the external revs in `scripts/.pre-commit-config.yaml`; template
@@ -246,10 +246,10 @@ labels are not `github-actions` dependency refs.
 |---|---|---|---|
 | Bun | `1.3.14` | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml) | BUN_VERSION and BUN_SHA256 env pair; Maintainer; P10. SHA-256 `951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f` for `bun-linux-x64.zip`. |
 | Hosted runner image | `ubuntu-latest` (floating) | [`.github/workflows/autonomous-fix.yml`](../../.github/workflows/autonomous-fix.yml), [`.github/workflows/bypass-detection.yml`](../../.github/workflows/bypass-detection.yml), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/claude-code-review.yml`](../../.github/workflows/claude-code-review.yml), [`.github/workflows/claude.yml`](../../.github/workflows/claude.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/gemini-code-review.yml`](../../.github/workflows/gemini-code-review.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`.github/workflows/reusable-scan-self-test.yml`](../../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`.github/workflows/semgrep.yml`](../../.github/workflows/semgrep.yml) | Workflow runs-on labels; Maintainer; image supplies unpinned tools; none stated. |
-| Python | `3.11` CI; `3.11+` local | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`README.md`](../../README.md), [`docs/CONSUMER-MIGRATION.md`](../CONSUMER-MIGRATION.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/HOOK-REFERENCE.md`](../HOOK-REFERENCE.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`docs/TROUBLESHOOTING.md`](../TROUBLESHOOTING.md), `docs/V3-BEHAVIOUR-AUDIT.md`, `docs/agent-team-implementation-guide.md`, [`hooks/lib/common.ps1`](../../hooks/lib/common.ps1), [`hooks/lib/common.sh`](../../hooks/lib/common.sh), [`scripts/create-baseline.ps1`](../../scripts/create-baseline.ps1), `specs/001-security-scanning-spec/tasks.md` (archived) | Workflow inputs; interpreter probes and docs; P9. |
+| Python | `3.11` CI; `3.11+` local | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`README.md`](../../README.md), [`docs/CONSUMER-MIGRATION.md`](../CONSUMER-MIGRATION.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/HOOK-REFERENCE.md`](../HOOK-REFERENCE.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`docs/TROUBLESHOOTING.md`](../TROUBLESHOOTING.md), `docs/V3-BEHAVIOUR-AUDIT.md` (archived), `docs/agent-team-implementation-guide.md` (archived), [`hooks/lib/common.ps1`](../../hooks/lib/common.ps1), [`hooks/lib/common.sh`](../../hooks/lib/common.sh), [`scripts/create-baseline.ps1`](../../scripts/create-baseline.ps1), `specs/001-security-scanning-spec/tasks.md` (archived) | Workflow inputs; interpreter probes and docs; P9. |
 | Bash | `4.4+` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/HOOK-REFERENCE.md`](../HOOK-REFERENCE.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`hooks/lib/common.sh`](../../hooks/lib/common.sh) | Shared library floor and docs; P9. |
 | PowerShell | `7+`; hosted `pwsh` is image supplied | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`scripts/setup-scanning-no-admin.ps1`](../../scripts/setup-scanning-no-admin.ps1), [`scripts/setup-scanning.ps1`](../../scripts/setup-scanning.ps1) | Script prerequisite and docs; not an exact runtime pin. |
-| Pester | CI `-MinimumVersion 5.0`; setup install `5.0.0`–`5.99.99` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), `docs/agent-team-implementation-guide.md`, `specs/001-security-scanning-spec/plan.md` (archived) | Import/install command; setup skips installation if any installed major is >=5; none stated. |
+| Pester | CI `-MinimumVersion 5.0`; setup install `5.0.0`–`5.99.99` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), `docs/agent-team-implementation-guide.md` (archived), `specs/001-security-scanning-spec/plan.md` (archived) | Import/install command; setup skips installation if any installed major is >=5; none stated. |
 | Node.js | CI `20`; docs supported LTS | [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) | setup-node input / docs sentence; none stated. |
 | .NET SDK | `8+` or project SDK | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) | Docs floor; no global.json or SDK setup pin here; none stated. |
 | Git | `2.0+` | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) | Docs floor; none stated. |
@@ -319,7 +319,7 @@ inputs even when Dependabot can read a workflow `uses:` beside them.
 The setup guide also offers the fixed post-release workaround commit
 `8321adf7020025a5a7a6c7cd8d1780015b18a07a`; it is repeated as historical evidence
 in the walkthrough (archived) and
-behaviour audit (archived). This Hand docs example is an Maintainer
+behaviour audit (archived). This Hand docs example is a maintainer
 platform-upgrade decision, counted separately from the release family.
 The audit also records `45a4248ad8d7522e6462255c94b3d228f43e1fb2`, while
 [Bump the scan](../BUMP-THE-SCAN.md), [Consumer migration](../CONSUMER-MIGRATION.md) and
@@ -385,9 +385,9 @@ captured evidence stay historical rather than being automatically bumped.
 | Quoted version (with or without v prefix) | Every Markdown file at the snapshot |
 |---|---|
 | `0.15.0` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
-| `0.26.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` |
+| `0.26.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` (archived) |
 | `0.3.177` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
-| `0.31.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` |
+| `0.31.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` (archived) |
 | `0.32.0` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `0.40.0` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `0.47.0` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
@@ -397,41 +397,41 @@ captured evidence stay historical rather than being automatically bumped.
 | `0.57.0` | `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived) |
 | `0.59.1` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
 | `0.64.0` | [`README.md`](../../README.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
-| `0.65.0` | `docs/SECRET-SCANNER-EVALUATION.md`, [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
+| `0.65.0` | `docs/SECRET-SCANNER-EVALUATION.md` (archived), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `0.67.2` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
-| `0.69.3` | `docs/SECRET-SCANNER-EVALUATION.md` |
-| `0.71.0` | [`docs/REUSABLE-WORKFLOWS.md`](../REUSABLE-WORKFLOWS.md), `docs/SECRET-SCANNER-EVALUATION.md` |
-| `0.75.0` | [`README.md`](../../README.md), `docs/SECRET-SCANNER-EVALUATION.md`, [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-BEHAVIOUR-AUDIT.md`, [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
-| `1.0.93` | [`README.md`](../../README.md), [`docs/AI-AGENT-GUIDE.md`](../AI-AGENT-GUIDE.md), [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`docs/FIX-LOOP.md`](../FIX-LOOP.md), `docs/MIGRATION-ANALYSIS.md`, [`docs/ROADMAP.md`](../ROADMAP.md), [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md), `specs/002-scan-fix-platform/spec.md` (archived) |
-| `1.0.148` | [`docs/AI-AGENT-GUIDE.md`](../AI-AGENT-GUIDE.md), [`docs/FIX-LOOP.md`](../FIX-LOOP.md), `docs/MIGRATION-ANALYSIS.md`, [`docs/ROADMAP.md`](../ROADMAP.md), [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
+| `0.69.3` | `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
+| `0.71.0` | [`docs/REUSABLE-WORKFLOWS.md`](../REUSABLE-WORKFLOWS.md), `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
+| `0.75.0` | [`README.md`](../../README.md), `docs/SECRET-SCANNER-EVALUATION.md` (archived), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-BEHAVIOUR-AUDIT.md` (archived), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
+| `1.0.93` | [`README.md`](../../README.md), [`docs/AI-AGENT-GUIDE.md`](../AI-AGENT-GUIDE.md), [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`docs/FIX-LOOP.md`](../FIX-LOOP.md), `docs/MIGRATION-ANALYSIS.md` (archived), [`docs/ROADMAP.md`](../ROADMAP.md), [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md), `specs/002-scan-fix-platform/spec.md` (archived) |
+| `1.0.148` | [`docs/AI-AGENT-GUIDE.md`](../AI-AGENT-GUIDE.md), [`docs/FIX-LOOP.md`](../FIX-LOOP.md), `docs/MIGRATION-ANALYSIS.md` (archived), [`docs/ROADMAP.md`](../ROADMAP.md), [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `1.100.0` | [`docs/REUSABLE-WORKFLOWS.md`](../REUSABLE-WORKFLOWS.md) |
 | `1.105.0` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
 | `1.1307.4` | [`docs/REUSABLE-WORKFLOWS.md`](../REUSABLE-WORKFLOWS.md), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `1.178.0` | [`README.md`](../../README.md) |
 | `1.19.9` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
-| `1.28.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` |
-| `1.9.0` | `docs/SECRET-SCANNER-EVALUATION.md` |
-| `2.0.0-rc.6` | `docs/SECRET-SCANNER-EVALUATION.md` |
+| `1.28.0` | `docs/ai-research/2-Generic-Scanning-Framework-Design.md` (archived) |
+| `1.9.0` | `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
+| `2.0.0-rc.6` | `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
 | `2.0.930` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `2.1.177` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
-| `3.0.0` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`docs/TROUBLESHOOTING.md`](../TROUBLESHOOTING.md), `docs/V3-BEHAVIOUR-AUDIT.md`, `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived), `specs/001-security-scanning-spec/plan.md` (archived), `specs/001-security-scanning-spec/research.md` (archived), `specs/001-security-scanning-spec/spec.md` (archived), `specs/001-security-scanning-spec/tasks.md` (archived) |
+| `3.0.0` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), [`docs/TROUBLESHOOTING.md`](../TROUBLESHOOTING.md), `docs/V3-BEHAVIOUR-AUDIT.md` (archived), `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived), `specs/001-security-scanning-spec/plan.md` (archived), `specs/001-security-scanning-spec/research.md` (archived), `specs/001-security-scanning-spec/spec.md` (archived), `specs/001-security-scanning-spec/tasks.md` (archived) |
 | `3.2.1` | `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived) |
 | `3.2.437` | `specs/001-security-scanning-spec/build-vs-buy-analysis.md` (archived) |
-| `3.3.19` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md`, [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md), [`tests/fixtures/checkov-module-records/README.md`](../../tests/fixtures/checkov-module-records/README.md) |
+| `3.3.19` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived), [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md), [`tests/fixtures/checkov-module-records/README.md`](../../tests/fixtures/checkov-module-records/README.md) |
 | `3.6.0` | `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived) |
-| `3.6.2` | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` |
+| `3.6.2` | [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived) |
 | `3.29.1` | [`docs/TIER-UPGRADE-GUIDE.md`](../TIER-UPGRADE-GUIDE.md) |
-| `4.25.1` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` |
+| `4.25.1` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived) |
 | `4.3.0` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) |
 | `4.1.1` | [`README.md`](../../README.md) |
 | `4.2.2` | [`docs/VERSION-PINNING.md`](../VERSION-PINNING.md) |
 | `5.6.0` | [`README.md`](../../README.md) |
-| `6.0.3` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` |
-| `7.6.9` | `docs/SECRET-SCANNER-EVALUATION.md` |
+| `6.0.3` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md), `docs/V3-WALKTHROUGH-RESULTS.md` (archived) |
+| `7.6.9` | `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
 | `7.0.0` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) |
 | `8.18.0` | `specs/001-security-scanning-spec/contracts/cli-interface.md` (archived) |
-| `8.19.0` | `docs/SECRET-SCANNER-EVALUATION.md` |
-| `8.30.1` | `docs/SECRET-SCANNER-EVALUATION.md`, [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) |
+| `8.19.0` | `docs/SECRET-SCANNER-EVALUATION.md` (archived) |
+| `8.30.1` | `docs/SECRET-SCANNER-EVALUATION.md` (archived), [`docs/SETUP-GUIDE.md`](../SETUP-GUIDE.md) |
 | `8.4.2` | [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) |
 
 Additional evidence-only repeats outside Markdown: Checkov `3.3.19` appears in
@@ -449,9 +449,8 @@ Gitleaks' deprecated-command boundary `8.19.0` is repeated in
 [the Bash hook](../../hooks/gitleaks.sh) and [PowerShell hook](../../hooks/gitleaks.ps1).
 These are report/behaviour evidence, not installer drift.
 
-The two `.doc` files under `docs/` are archived MIME/HTML documents, not dependency
-manifests. `CHANGELOG.md`, `MIGRATION-ANALYSIS.md`, `ROADMAP.md`, the two `specs/`
-projects and `docs/ai-research/` retain historical or proposed versions. In particular,
+`CHANGELOG.md`, `ROADMAP.md` and the material under `archive/` (migration analysis,
+the two `specs/` projects and the AI research reports) retain historical or proposed versions. In particular,
 the research design's Kubernetes `v1.28.0` and TFLint plugin examples `0.31.0` /
 `0.26.0` are not active configuration. Old Python `3.8+` in both spec quickstarts
 and the first spec's plan is historical; the review styleguide still says Python
