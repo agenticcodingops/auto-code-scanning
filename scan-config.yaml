@@ -258,7 +258,7 @@ languages:
 
   # --------------------------------------------------------------------------
   # C# / .NET (Application code)  — LAYER A: app-code scanning
-  # Plugin per docs/ai-research/2-Generic-Scanning-Framework-Design.md
+  # Plugin per archive/ai-research/2-Generic-Scanning-Framework-Design.md
   # --------------------------------------------------------------------------
   csharp:
     enabled: false  # Enable for .NET repos (setup --languages csharp)

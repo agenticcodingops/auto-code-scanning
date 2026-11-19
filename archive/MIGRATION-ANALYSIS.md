@@ -1,8 +1,8 @@
 # Migration Analysis — From Terraform Scan‑Only POC to Reusable Scan→Fix Platform
 
 > Historical design/presentation material. Its fail-open examples and early job/setup
-> descriptions are not current operating instructions. Use [Getting started](SETUP-GUIDE.md),
-> [the hook contract](HOOK-REFERENCE.md) and [the v3 audit](V3-BEHAVIOUR-AUDIT.md)
+> descriptions are not current operating instructions. Use [Getting started](../docs/SETUP-GUIDE.md),
+> [the hook contract](../docs/HOOK-REFERENCE.md) and [the v3 audit](V3-BEHAVIOUR-AUDIT.md)
 > for released behaviour.
 
 **Status:** Analysis for `specs/002-scan-fix-platform`
