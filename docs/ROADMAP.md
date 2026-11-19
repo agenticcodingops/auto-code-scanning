@@ -14,8 +14,10 @@ v3.0.0 was a breaking release that made local and CI scans stricter and harder t
 bypass by accident. Later v3 releases fixed bugs and added pin maintenance. Highlights,
 from the [changelog](../CHANGELOG.md):
 
-- **Incomplete scans block.** A scanner that fails, writes no report or writes an
-  invalid one blocks the commit, push or CI run instead of passing (v3.0.0).
+- **Incomplete scans block by default.** A scanner that fails, writes no report or
+  writes an invalid one blocks the commit, push or CI run instead of passing (v3.0.0).
+  Locally, `SCAN_ALLOW_TOOL_ERRORS=1` turns scanner tool errors into warnings where a
+  wrapper supports it.
 - **Push hooks scan what is pushed.** Pre-push hooks read Git's ref update and scan the
   exact commits being pushed, and only the files each pushed ref changes (v3.0.0, v3.0.1).
 - **Trusted policy and exact approvals.** Pull-request scans read exceptions and

@@ -149,13 +149,13 @@ Never move, delete or re-create a published tag: consumers pin the commit it poi
   was skipped): run **Actions → Release → Run workflow** on `main`. release-please finds
   the merged PR, still labelled `autorelease: pending`, and creates the tag and the
   release. Until then it opens no new release PR.
-- **Back to manual releases (rollback):** delete `release.yml`, `release-verify.yml`,
+- **Back to manual releases (rollback):** first save the `extra-files` list from
+  `release-please-config.json`; the manual steps below need it. Then delete `release.yml`, `release-verify.yml`,
   `release-please-config.json`, `.release-please-manifest.json` and
   `tests/python/test_release_config.py` (it reads those files), and remove the
   `workflow_call` trigger from `reusable-scan-self-test.yml`. Then cut releases by hand
   again, as up to `v2.1.0`: add the `CHANGELOG.md` entry, set the new version in
-  `version.txt` and on the `x-release-please-version` lines of every file listed under
-  `extra-files` in `release-please-config.json`, create an annotated tag on the release commit with
+  `version.txt` and on the `x-release-please-version` lines of every file in the saved `extra-files` list, create an annotated tag on the release commit with
   `git tag -a vX.Y.Z -m "<summary>"`, and push it. Tags and releases created in the
   meantime stay valid.
 
@@ -177,7 +177,9 @@ request. See [Getting started upgrades](SETUP-GUIDE.md#10-upgrade-between-releas
 [consumer migration](CONSUMER-MIGRATION.md).
 
 Keep this in mind when a change alters vendored files, schemas or workflow inputs:
-call out the consumer action in the PR description so it reaches the release notes.
+record the consumer action as a Conventional Commit entry in the `BEGIN_COMMIT_OVERRIDE`
+block (see above). Release-please does not read other PR description text, so plain
+prose there does not reach the release notes.
 
 ## Pin inventory
 

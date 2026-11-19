@@ -19,8 +19,10 @@ repository's test fixtures.
 ## Profiling Hook Performance
 
 Before optimizing, measure. The profiler (PowerShell 7) runs each security hook through
-`pre-commit run <hook-id> --all-files` against `tests/fixtures/terraform-valid` by
-default, so it needs pre-commit and the scanners on PATH:
+`pre-commit run <hook-id> --all-files` in the current directory, so run it from the
+root of the repository you want to measure. It needs pre-commit and the scanners on
+PATH. `-FixtureDir` is only recorded in the JSON output; it does not choose what is
+scanned.
 
 ```powershell
 # Profile the security hooks (3 iterations each)
@@ -28,16 +30,15 @@ default, so it needs pre-commit and the scanners on PATH:
 
 # More iterations for accuracy, with per-iteration output
 ./scripts/profile-hook-performance.ps1 -Iterations 5 -ShowVerbose
-
-# Profile your own Terraform instead of the fixture
-./scripts/profile-hook-performance.ps1 -FixtureDir ./terraform
 ```
 
 It profiles these hooks: `trivy-iac-critical`, `trivy-secrets`,
 `validate-suppressions` and `gitleaks` at pre-commit, and `trivy-iac-full`,
 `checkov`, `checkov-strict` and `tflint` at pre-push. It prints the average time per
 hook, marks each `[OK]` or `[SLOW]` against the 5-second target, and adds
-recommendations:
+recommendations. The labels reflect elapsed time only: the profiler does not check
+whether a hook succeeded, so a hook that fails fast (a missing scanner, an unknown
+hook ID) can still show `[OK]`. Run a hook on its own to confirm it works.
 
 - `MIGRATE:` a pre-commit hook averaging over 10 seconds should move to pre-push.
 - `OPTIMIZE:` a hook over the 5-second target needs attention.
@@ -86,6 +87,10 @@ With **Lefthook** (the default runner), pre-commit commands sit under `pre-commi
 in `lefthook.yml`, and push-time scanners are listed in the `--hooks` argument of the
 `scan-push-objects` command under `pre-push:`. Move a check by editing those lists.
 Lefthook already runs pre-commit commands in parallel (`parallel: true`).
+
+Do not move `gitleaks` or `trivy-secrets` to pre-push. Both scan the staged index; after
+a normal commit nothing is staged, so at push time they pass without scanning the
+pushed commits. Keep secret scanning at commit time; CI scans the pull request again.
 
 ### 2. Caching
 
@@ -153,6 +158,9 @@ each pushed ref. For a manual run on specific files with pre-commit:
 pre-commit run --files terraform/modules/s3/main.tf
 ```
 
+`gitleaks` and `trivy-secrets` ignore `--files`: they scan the staged index, and pass
+without scanning when nothing is staged. Stage the file first to scan it for secrets.
+
 #### Skip directories
 
 Exclude generated or example code from pre-commit:
@@ -168,6 +176,10 @@ exclude: |
 ```
 
 Excluded paths are still scanned in CI unless CI is configured to skip them.
+
+`gitleaks` does not apply these exclusions: it scans the whole staged index. When any
+non-excluded file is staged, staged content under an excluded path is scanned too, and
+a secret there can block the commit.
 
 ### 5. Skip Slow Hooks When Needed
 

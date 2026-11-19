@@ -36,7 +36,7 @@ Trivy provides native 4-level severity that maps directly. `UNKNOWN` (rare) is t
 | HIGH | HIGH |
 | MEDIUM | MEDIUM |
 | LOW | LOW |
-| (missing or empty) | HIGH in CI and `scan.py`; MEDIUM in the PowerShell aggregator |
+| (missing or empty) | HIGH in CI and `scan.py`; in the PowerShell aggregator, MEDIUM when missing and LOW when empty ([#158](https://github.com/agenticcodingops/auto-code-scanning/issues/158)) |
 
 Checkov 3.0+ provides native severity levels that map directly. Many Checkov checks carry no severity unless a Prisma Cloud API key is configured. The CI aggregator and `scan.py` treat a missing severity as HIGH, so missing metadata cannot weaken the gate. `scan.py` maps any other unrecognized value to MEDIUM. The local `checkov` and `checkov-strict` hooks block on any failed check whatever its severity; their summary line counts a missing severity as LOW.
 
