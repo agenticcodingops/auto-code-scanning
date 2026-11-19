@@ -110,7 +110,8 @@ git commit -m "chore: record reviewed occurrence exceptions"
 
 For the alternative pre-commit runner, `SKIP` bypasses named hooks for one command.
 Use only under your team's reviewed exception process; CI still enforces scanning.
-These commands use Bash syntax; Lefthook has separate runner settings.
+These commands use Bash syntax. With Lefthook, `LEFTHOOK=0 git commit ...` skips all
+its hooks for one command (see the header of `lefthook.yml`).
 
 ```bash
 # Skip one hook
@@ -130,7 +131,7 @@ SKIP=trivy-iac-critical,trivy-secrets,gitleaks git commit -m "wip: will fix find
 For urgent production fixes, skip ALL hooks:
 
 ```bash
-git commit --no-verify -m "hotfix: production issue BDCD-999"
+git commit --no-verify -m "hotfix: production issue"
 ```
 
 **Use sparingly.** Bypasses are visible in CI and may be flagged by the bypass detection workflow.
@@ -149,7 +150,7 @@ See [baselines](SETUP-GUIDE.md#9-suppressions-and-baselines).
 | I want to... | Command |
 | ------------ | ------- |
 | See what hooks are installed | Inspect `lefthook.yml` or `.pre-commit-config.yaml` |
-| Run hooks manually | `pre-commit run --all-files` |
+| Run hooks manually | `lefthook run pre-commit --all-files` or `pre-commit run --all-files` |
 | Run a specific hook | `pre-commit run trivy-iac-critical --all-files` |
 | Run with verbose output | `SCAN_VERBOSE=1 pre-commit run --all-files` |
 | Skip a specific hook | `SKIP=hook-id git commit -m "message"` |
@@ -230,10 +231,10 @@ Edit `.pre-commit-config.yaml` and uncomment the `snyk-iac` block:
 | Behaviour | Detail |
 | --------- | ------ |
 | Stage | **pre-push** (runs on `git push`, not `git commit`) |
-| Scope | Scans module directories containing staged `.tf` files |
-| Auth check | If `SNYK_TOKEN` env var is not set, runs `snyk whoami` -- exits 0 if not authenticated |
+| Scope | Scans the Terraform directories changed by the commits being pushed |
+| Tool missing | **Blocks the push**: `snyk not found; scan incomplete`. Install the Snyk CLI, or leave the hook commented out. `SCAN_ALLOW_TOOL_ERRORS=1` turns this into a warning for a local experiment only |
+| Auth check | If `SNYK_TOKEN` is not set, runs `snyk whoami`. If that fails, the hook warns and **allows the push** without scanning |
 | Policy file | Automatically uses `.snyk` in your repo root if present |
-| Fail-open | Tool not installed or auth fails = allow push with a warning |
 
 ### Snyk-specific suppression
 
@@ -261,7 +262,7 @@ jobs:
       actions: read
       security-events: write
       pull-requests: write
-    uses: OWNER/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.2 # x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.2 # x-release-please-version
     with:
       terraform-directory: "."
       cloud-provider: "aws"
@@ -271,18 +272,15 @@ jobs:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
 
-In the release-managed caller example above, `OWNER` means the platform owner:
-use `agenticcodingops` by default, or an explicitly reviewed mirror's owner with
-`scanning-repository` set to that mirror. It does not mean the consumer owner.
-
-`reusable-scan.yml` reads configuration from the reviewed platform repository,
-`agenticcodingops/auto-code-scanning`, by default. No same-owner copy is required.
-Set `scanning-repo-ref` to the same full commit SHA as the workflow pin. A reviewed
-mirror needs an explicit `scanning-repository` input and must contain that commit.
+In your repository, replace both `v3.1.2` values with the release's full commit SHA
+([how](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to)).
+`reusable-scan.yml` reads configuration from `agenticcodingops/auto-code-scanning`
+by default; for a fork or mirror, see
+[Calling a fork or mirror](VERSION-PINNING.md#calling-a-fork-or-mirror).
 Require setup and scanner jobs as well as aggregation; incomplete scans block.
-See [workflow configuration sources](REUSABLE-WORKFLOWS.md#configs-come-from-the-reviewed-platform-revision).
 
-The job installs an exact `snyk` CLI version from npm (`reusable-scan.yml:508`); bump it deliberately. Up to and including v2.3.2 it installed the latest on each run.
+The `scan-snyk` job installs an exact `snyk` CLI version from npm (its `Install Snyk
+CLI` step). Up to and including v2.3.2 it installed the latest on each run.
 See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md) for every input.
 
 ## Switching Cloud Providers

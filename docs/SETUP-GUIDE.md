@@ -9,6 +9,11 @@ Start with scanning; enable the optional automatic fix workflow only after scans
 
 ## 1. Prerequisites
 
+[Prerequisites](PREREQUISITES.md) shows which tools each repository type, hook
+manager and operating system needs, and why. The table below lists every tool. For CI
+minutes, local hook time and fix-loop model cost, see
+[cost and run time](PREREQUISITES.md#cost-and-run-time).
+
 Install tools outside the consumer checkout, including Python virtual environments
 (isolated Python package directories). Verified tools inside the checkout, or links
 into it, are refused even with `SCAN_ALLOW_TOOL_ERRORS=1`. Keep the platform clone
@@ -42,9 +47,13 @@ For those pre-commit templates, install `terraform-docs` from your managed packa
 and check `terraform-docs --version` before staging Terraform. Lefthook does not
 require it merely because its configuration tier is strict.
 
-The setup verifier currently checks Terraform tools even in an application-only
-consumer. Provision them when using that verifier. Local tool versions come from
-PATH; they are not set by `scan-config.yaml`.
+**Application-only repositories still need the Terraform tools.** The setup verifier
+(`scripts/verify-scanning.ps1`, which setup runs at the end) always checks Trivy,
+Checkov, TFLint and Terraform, requires `SCAN_TFLINT_CONFIG`, and runs `tflint --init`.
+It ignores the languages you chose. So for an app-only repository, install Terraform,
+TFLint and Checkov and provision the trusted TFLint config in step 5 too; otherwise
+setup reports failed verification checks. Local tool versions come from PATH; they
+are not set by `scan-config.yaml`.
 
 On Windows, install Git for Windows (including Git Bash), Python and PowerShell 7
 from your managed package source. Open a new PowerShell 7 terminal after installation.
@@ -156,10 +165,12 @@ and therefore need `actions: read`. Scanning alone needs no repository secrets.
 
 Run from a directory **outside** your consumer. A release tag names a release;
 a full commit SHA identifies its exact contents. Resolve the tag, then keep this
-clone at that SHA. The commands below use PowerShell:
+clone at that SHA. Keep the clone itself too: step 7 runs the verifier from it, and
+later upgrades start from it. Put it somewhere durable, not in a temporary folder
+that the system cleans. The commands below use PowerShell:
 
 ```powershell
-$Platform = Join-Path $env:TEMP 'acs-platform'
+$Platform = Join-Path $HOME 'tools/auto-code-scanning'
 git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git $Platform
 $Release = (Get-Content "$Platform/version.txt").Trim()
 git -C $Platform fetch origin --tags
@@ -187,7 +198,7 @@ the binary. Do not substitute an unverified download script.
 macOS/Linux:
 
 ```bash
-PLATFORM="$(mktemp -d)/auto-code-scanning"
+PLATFORM="$HOME/tools/auto-code-scanning"
 git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git "$PLATFORM"
 RELEASE="$(cat "$PLATFORM/version.txt" | tr -d '\r\n')"
 git -C "$PLATFORM" fetch origin --tags
@@ -200,27 +211,9 @@ python "$PLATFORM/scripts/install-scanner.py" gitleaks
 export PATH="$HOME/.local-scanning-tools/bin:$PATH"
 ```
 
-Keep the resulting SHA for the caller workflows in step 6. Persist the scanner PATH
-and trusted environment variables below in your developer environment.
-
-### Windows setup output fix
-
-Release `v3.0.6`'s Python setup can fail while reading or forwarding tool output
-on Windows with a non-UTF-8 console code page. The fix in
-[PR 104](https://github.com/agenticcodingops/auto-code-scanning/pull/104) is newer
-than that release tag. If your selected release does not include the fix, choose
-a newer release that includes it or use this exact reviewed commit for Windows
-setup and all consumer pins. For the latter, after the clone commands above run:
-
-```powershell
-$ScanSha = '8321adf7020025a5a7a6c7cd8d1780015b18a07a'
-git -C $Platform checkout --detach $ScanSha
-```
-
-Continue with step 5 from that clone. Keep `$ScanSha` for every pin in step 6;
-do not copy the affected setup script from the older release into the consumer.
-The scanner lock is unchanged by this fix. Other platforms and releases that
-include this commit can use the release pin above without this override.
+Keep the resulting SHA for the caller workflows in step 6. `$Platform`, `PLATFORM`
+and the `PATH` change above last only for this terminal. Set them again in a new
+terminal, and make the `PATH` change permanent as shown at the end of step 5.
 
 ## 5. Install local hooks
 
@@ -288,6 +281,80 @@ and set `languages.csharp.build.working_dir` to the solution directory and `solu
 relative to that directory (for example `api` and `App.slnx`). Local .NET build and
 format hooks execute project logic; enable them only for repositories you trust.
 
+### Keep the settings for new terminals, IDEs and Git clients
+
+The `PATH` changes and `SCAN_*` variables above last only for the terminal you set them
+in. A hook that cannot find them exits 1, so a commit from a new terminal, an IDE or a
+GUI Git client is blocked with an error such as `Set SCAN_PRETTIER_BIN and
+SCAN_PRETTIER_CONFIG to external trusted paths` or `SCAN_TFLINT_CONFIG must name a
+trusted external config`. Save them for your user account. Use the paths you actually
+created. Leave out the Prettier lines if you use the pre-commit runner, and add the
+ESLint lines if you set those variables for TypeScript.
+
+Windows, from PowerShell 7, in the same terminal where you set the variables (so
+`$env:...` still holds the values). This writes user-level variables and needs no
+administrator rights:
+
+```powershell
+$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$Add = "$HOME\.venvs\auto-code-scanning\Scripts;$HOME\.local-scanning-tools\bin"
+# With pre-commit, also add its environment:
+# $Add += ";$HOME\.venvs\acs-pre-commit\Scripts"
+[Environment]::SetEnvironmentVariable('Path', "$Add;$UserPath", 'User')
+foreach ($Name in 'SCAN_TFLINT_CONFIG', 'SCAN_TFLINT_PLUGIN_DIR',
+                  'SCAN_PRETTIER_BIN', 'SCAN_PRETTIER_CONFIG') {
+    [Environment]::SetEnvironmentVariable($Name, [Environment]::GetEnvironmentVariable($Name), 'User')
+}
+# TypeScript: repeat the loop with 'SCAN_ESLINT_BIN', 'SCAN_ESLINT_CONFIG'.
+```
+
+`setx NAME "value"` also sets a user variable, but do not use it for `Path`: `setx`
+cuts values longer than 1,024 characters. Windows puts system `PATH` entries before
+user entries. If `Get-Command python` in a new terminal shows a system-wide Python
+instead of the scanner environment, install `PyYAML==6.0.3 jsonschema==4.26.0` into
+that interpreter too, because the hooks use the first `python` they find.
+
+macOS, where zsh is the default shell. Append to `~/.zprofile` (replace `aws` with
+your provider; on an Intel Mac, Homebrew is `/usr/local/bin/brew`):
+
+```bash
+cat >> ~/.zprofile <<'PROFILE'
+export PATH="$(/opt/homebrew/bin/brew --prefix bash)/bin:$PATH"
+export PATH="$HOME/.venvs/auto-code-scanning/bin:$HOME/.local-scanning-tools/bin:$PATH"
+# With pre-commit: export PATH="$PATH:$HOME/.venvs/acs-pre-commit/bin"
+export SCAN_TFLINT_CONFIG="$HOME/.config/auto-code-scanning/aws/tflint.hcl"
+export SCAN_TFLINT_PLUGIN_DIR="$HOME/.config/auto-code-scanning/aws/plugins"
+export SCAN_PRETTIER_BIN="$HOME/.config/auto-code-scanning/formatters/node_modules/.bin/prettier"
+export SCAN_PRETTIER_CONFIG="$HOME/.config/auto-code-scanning/formatters/prettier.json"
+PROFILE
+```
+
+Linux, with bash. Append the same lines, without the Homebrew line, to `~/.profile`.
+A terminal opened from an existing desktop session does not read `~/.profile` until you
+log out and back in; until then, run `. ~/.profile` in it:
+
+```bash
+cat >> ~/.profile <<'PROFILE'
+export PATH="$HOME/.venvs/auto-code-scanning/bin:$HOME/.local-scanning-tools/bin:$PATH"
+# With pre-commit: export PATH="$PATH:$HOME/.venvs/acs-pre-commit/bin"
+export SCAN_TFLINT_CONFIG="$HOME/.config/auto-code-scanning/aws/tflint.hcl"
+export SCAN_TFLINT_PLUGIN_DIR="$HOME/.config/auto-code-scanning/aws/plugins"
+export SCAN_PRETTIER_BIN="$HOME/.config/auto-code-scanning/formatters/node_modules/.bin/prettier"
+export SCAN_PRETTIER_CONFIG="$HOME/.config/auto-code-scanning/formatters/prettier.json"
+PROFILE
+```
+
+Then:
+
+- Open a new terminal and check `python --version`, `trivy --version` and
+  `echo $SCAN_TFLINT_CONFIG` (in PowerShell, `$env:SCAN_TFLINT_CONFIG`).
+- **Restart IDEs and GUI Git clients.** They read environment variables only when they
+  start. On Windows, close every window of the program and start it again. On Linux,
+  log out and back in: most desktop sessions read `~/.profile` only at login. On
+  macOS, apps started from the Dock or Finder do not read `~/.zprofile`; start the
+  IDE or Git client from a terminal (for example `code .`), or set the variables in
+  the client's own settings.
+
 Now enter the consumer repository root (it must already be a Git repository).
 Before running setup, save copies of any existing `lefthook.yml` and other files
 setup can replace (see the list below): setup replaces them without a prompt on
@@ -313,7 +380,10 @@ Use `--force` only after reviewing what replacing the entire config would change
 With hosted automatic language detection, merge reviewed language enablement into
 the base before adding code in that language. A PR that enables a language and
 adds its code still uses the base's earlier language selection. For the alternative runner use
-`--hooks-runner pre-commit`; setup installs its push transaction adapter too.
+`--hooks-runner pre-commit`; setup installs its **push transaction adapter** too. The
+adapter is the `.git/hooks/pre-push` script that `hooks/pre-push.py --install-pre-commit`
+writes. It scans every ref Git is about to push, then passes the same input to
+pre-commit's own push hook, which it keeps as `.git/hooks/pre-push.pre-commit`.
 Do not replace that adapter with a plain `pre-commit install --hook-type pre-push`.
 The setup script copies hooks, schemas, shared scripts, provider policy, an optional
 editor integration bundle under `.claude/`, and caller workflows. It overwrites
@@ -367,16 +437,22 @@ that policy first, then rebase the adoption branch and add the callers and remai
 integration files. Enable the new required checks after their first successful run.
 This keeps policy approval separate from the changes it authorizes.
 
-These are the release-managed tag examples; use their resolved full SHA in consumers:
-
-Use **two separate caller files** with distinct workflow names, as setup copies
-them. Combining these jobs under one caller can make their reusable concurrency
-groups cancel each other. Retain/adapt the copied triggers in each file.
+Setup copies **two separate caller files**, each with its own workflow name. Keep
+them separate: combining both jobs in one caller can make their reusable concurrency
+groups cancel each other. Below are the shipped templates
+(`templates/workflows/`), trimmed of comments. They show the release tag; in your
+repository replace it with the full SHA from step 4, keeping the tag as a comment:
+`...code-security-scan.yml@<full-sha> # v3.1.2`.
 
 ```yaml
 # .github/workflows/code-security-scan.yml
-name: App Code Security Scan
-on: [pull_request, push, workflow_dispatch]
+name: Code Security Scan
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
@@ -386,6 +462,7 @@ jobs:
   code-scan:
     uses: agenticcodingops/auto-code-scanning/.github/workflows/code-security-scan.yml@v3.1.2 # x-release-please-version
     with:
+      category-prefix: "scan-"
       fail-on-findings: true
       # upload-sarif: false  # private repository without code scanning
 ```
@@ -393,7 +470,12 @@ jobs:
 ```yaml
 # .github/workflows/terraform-scan.yml
 name: Terraform Security Scan
-on: [pull_request, push, workflow_dispatch]
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
@@ -405,17 +487,27 @@ jobs:
     with:
       terraform-directory: "."
       cloud-provider: "aws"          # aws | azure | gcp
+      severity: "CRITICAL,HIGH"
       scanning-repo-ref: "v3.1.2" # x-release-please-version
       # upload-sarif: false  # private repository without code scanning
 ```
 
-Keep the copied `pull_request`, `push` and `workflow_dispatch` triggers and adapt
-branch names. IaC helpers default to the published platform repository; a reviewed
-mirror requires explicit `scanning-repository`. There is no requirement to create
-a same-owner platform copy. A Terraform-only consumer may keep the app-code caller
-for its independent secret scan. Do not disable `run-secret-scan` to work around
-an upload problem. For the pre-commit runner, replace the platform repository's
-`rev:` tag with the same full SHA as well.
+Adapt the branch names in the triggers to yours. Each check appears on a pull request
+as `<caller job> / <job name>`, for example `code-scan / Detect languages` or
+`terraform-scan / Aggregate Results`. Branch protection matches those names, so if
+you rename the caller job (`code-scan`, `terraform-scan`), update the required checks
+too. The workflow `name:` groups the checks in the Checks tab and the Actions list.
+
+Call `agenticcodingops/auto-code-scanning` directly, as above. You do not need your
+own copy. If you do call a fork or mirror, set `scanning-repository` on the Terraform
+caller to that repository as well: otherwise the scan still downloads its configs and
+helper scripts from the upstream repository, at `scanning-repo-ref`. See
+[version pinning](VERSION-PINNING.md#calling-a-fork-or-mirror).
+
+A Terraform-only consumer may keep the app-code caller for its independent secret
+scan. Do not disable `run-secret-scan` to work around an upload problem. For the
+pre-commit runner, replace the platform repository's `rev:` tag with the same full
+SHA as well.
 
 The optional fix-loop is a separate adoption step:
 [FIX-LOOP.md](FIX-LOOP.md) covers its base policy, label, named secrets and caller
@@ -536,8 +628,10 @@ python scripts/scan.py . --skip-baseline --skip-suppressions --format json
 ```
 
 Use schema `2.0` in `.scan-suppressions.yaml` and `.scan-baseline/baseline.json`.
-A `v1:` fingerprint identifies tool, rule, repository path, resource, line range and
-source-content hash; each entry approves one occurrence. Source edits invalidate it.
+Each entry carries an **occurrence fingerprint**: a `v1:` string that identifies one
+finding by tool, rule, repository path, resource, line range and a hash of the source
+file. Copy it from the `fingerprint` field of a scan report. Each entry approves one
+occurrence, and any edit to that source file invalidates it.
 HIGH/CRITICAL suppression approval is mandatory and expiry is capped at 180 days.
 Follow [suppression governance](SUPPRESSION-GOVERNANCE.md) for the complete entry format.
 
@@ -553,16 +647,18 @@ tools actually ran, the occurrence entries and the resulting diff before committ
 `-MonorepoScope` can restrict modules; default output remains at the repository root
 when invoked from a subdirectory. A separate `-PolicyRoot` checkout must be external.
 
-Pull-request policy comes from the exact base commit; an exception added in the PR
-becomes effective after merging into that base. Unchanged Checkov inline skips can
+Pull-request policy comes from the **trusted base**: the exact base commit of the
+pull request, which has already been reviewed and merged. CI reads configuration,
+suppressions and baselines from it, never from the pull request's own changes. So an
+exception added in the PR becomes effective only after merging into that base. Unchanged Checkov inline skips can
 be honoured on the same base-approved resource or module with the same justification
 and literal module source. New, changed, ambiguous or unsupported skips remain
 findings. See [inline skip migration](CONSUMER-MIGRATION.md#trusted-base-inline-skip-migration).
 
 ## 10. Upgrade between releases
 
-Read the release notes and [v3 behaviour audit](V3-BEHAVIOUR-AUDIT.md), especially
-breaking changes. Resolve the new tag's full SHA into a clean external clone.
+Read the release notes and [CHANGELOG.md](../CHANGELOG.md), especially breaking
+changes. Resolve the new tag's full SHA into a clean external clone.
 Re-vendor hooks, their complete library, scripts and schemas **byte for byte** from
 that revision. For pre-commit, save the current runner config externally, then
 prepare the new tier template with its tag-based `rev:` before setup: an existing
@@ -593,6 +689,7 @@ commit and hosted checks before merging; customized manifests need separate revi
 | SARIF permission error | Grant `actions: read` through every caller ceiling; if private code scanning is unavailable set `upload-sarif: false` |
 | Commit fails without a finding | Read snapshot/report/tool diagnostics; incomplete security scans block by default |
 | Setup rerun changed callers | Review generated files and restore your full SHA pins after setup |
+| Commit works in one terminal but fails in a new terminal, IDE or GUI client | Make `PATH` and `SCAN_*` permanent and restart the program: [keep the settings](#keep-the-settings-for-new-terminals-ides-and-git-clients) |
 
 More cases: [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Local errors never justify
 assuming the scan was clean; CI scanner/report health remains mandatory.

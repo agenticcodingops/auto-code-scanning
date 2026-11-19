@@ -189,11 +189,14 @@ Plus a hard **`max_iterations`** cap (`.fix-attempts`, default 3) → `needs-hum
 - **`claude-code-action` is SHA-pinned to `v1.0.148`**. CVE-2025-66032 is a Claude Code
   CLI flaw (fixed in CLI 1.0.93), unrelated to the action's own version; see
   [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b). The pin is **centralized**: it lives in
-  `autonomous-fix.yml` and is mirrored in `fix_loop.claude_code_action_ref`, so every
-  consumer inherits the safe version. The config schema rejects a non-SHA ref when the
-  validator runs with its schema (see VERSION-PINNING.md).
+  `autonomous-fix.yml`, so every consumer that pins a release inherits that version.
+  `fix_loop.claude_code_action_ref` in `scan-config.yaml` mirrors it for reference only:
+  the workflow does not read it, so editing it does not change the action that runs.
+  The config schema rejects a non-SHA value when the validator runs with its schema
+  (see VERSION-PINNING.md).
 - **Every workflow in this repo SHA-pins the third-party actions it uses** (not
-  `@v4`/`@master`), except `claude.yml` and `semgrep.yml`; see
+  `@v4`/`@master`), and `semgrep.yml` runs its container image by digest.
+  `tests/python/test_workflow_pins.py` fails on an unpinned action; see
   [VERSION-PINNING.md](VERSION-PINNING.md#third-party-action-pinning-this-repo).
 - **Consumers must pin `uses:` to `@vX.Y.Z` (or a SHA) — never `@main`.** All templates
   and docs ship pinned; `VERSION-PINNING.md` explains how to bump deliberately.
@@ -216,8 +219,12 @@ as **semi-trusted**:
 - Keep it a simple, repo-controlled command (e.g. `cd api && dotnet build App.slnx --nologo`).
 - **Best practice:** point it at a **checked-in script under a gated path**, e.g.
   `build_verify_cmd: "bash scripts/ci-build-verify.sh"`. Because `scripts/` is in `gated_paths`,
-  a PR cannot modify that script without tripping the gate — so the executed logic is doubly
-  protected (base-sourced *and* gated against in-PR edits).
+  the fix loop's own patch cannot change that script. The gate checks only the agent's
+  patch, though: the pull request's own commits **can** change the script, and `verify`
+  runs it from the pull request's head. So a pull request author can make the build
+  step do anything, or nothing. That is why `verify` holds no secret and passes only a
+  pass/fail result to the push job. Review changes to the script in the pull request
+  itself, as with any other code.
 - It runs with **no secrets** in its job, and the job's workspace never reaches the push job.
 
 ## 8. What a prompt-injected consumer PR still cannot do
@@ -252,5 +259,5 @@ workflow regardless of what any prompt says.
 
 ## 9. Reporting
 
-Found a gap in this model? Open a private security advisory on the repo (do not file a
-public issue with exploit details). See `docs/CONTRIBUTING.md`.
+Found a gap in this model? Report it privately as described in
+[SECURITY.md](../SECURITY.md). Do not file a public issue with exploit details.

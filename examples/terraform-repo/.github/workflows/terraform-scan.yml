@@ -1,0 +1,34 @@
+# Example copy of templates/workflows/terraform-scan.yml at the release on the uses: line.
+# In your repository, replace the tag on the uses: line and in scanning-repo-ref with the
+# full commit SHA it points to, keeping the tag as a comment (see docs/VERSION-PINNING.md,
+# "Pin the commit a release tag points to").
+# ============================================================================
+# terraform-scan.yml — CALLER (drop into a consumer repo: .github/workflows/)
+# Thin caller for the reusable TERRAFORM/IaC scanner. Pin the tag — never @main.
+# ============================================================================
+name: Terraform Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  terraform-scan:
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/reusable-scan.yml@v3.1.2  # x-release-please-version
+    with:
+      terraform-directory: "."
+      cloud-provider: "aws"        # aws | azure | gcp
+      severity: "CRITICAL,HIGH"
+      scanning-repo-ref: "v3.1.2"  # x-release-please-version
+    # Optional Snyk IaC (needs SNYK_TOKEN secret):
+    # secrets:
+    #   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

@@ -37,6 +37,19 @@ fix_loop:
 The schema **requires** `allowlist_paths` and a SHA-pinned `claude_code_action_ref` whenever
 `enabled: true`, so you can't ship an under-specified loop.
 
+What the workflow actually reads in release v3.1.2 (the `config` job's `Parse fix_loop`
+step): `enabled`, `max_turns`, `max_iterations`, `build_verify_cmd` and
+`human_review_label`; the path gate reads `allowlist_paths` and `gated_paths`. Three
+keys have **no effect** on a run:
+
+- `claude_code_action_ref` is only checked for format by the schema. The action version
+  the loop runs is hard-coded in the `analyze` job's `Run Claude Code (FIX-ONLY)` step
+  of the reusable workflow, so it changes only when you pin a newer platform release.
+- `required_secrets` is not read by the workflow or by setup; setup checks for
+  `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` by name.
+- `label` is not read either: the opt-in label `ai-autofix` is written into the caller
+  template's `if:`. To use another label, change it there.
+
 ---
 
 ## 2. In-session loop (the friction-free core)
@@ -148,12 +161,17 @@ if build verification is required.
 
 ## 4. Enable it (checklist)
 
-1. `setup-scan-fix … -EnableFixLoop` (creates labels, verifies secrets, copies the caller).
-2. Create the two secrets in the consumer repo:
-   - `AUTOFIX_TOKEN` — a **fine-grained PAT**: *Contents: RW, Pull requests: RW, that repo only*.
-   - `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`).
-   The platform **verifies** these via `gh secret list` — it never stores them.
+1. Run setup from the platform clone with the fix loop on, from your repository root:
+   `python <platform-clone>/scripts/setup-scan-fix.py --languages <yours> --enable-fix-loop`
+   (plus your usual `--tier`, `--cloud-provider` and `--hooks-runner`). It copies the
+   caller to `.github/workflows/autonomous-fix.yml`, sets `fix_loop.enabled: true` in a
+   newly written `scan-config.yaml`, and, if `gh` is installed and signed in, creates the
+   `ai-autofix` and `needs-human-review` labels and checks that the secrets exist. It
+   does not change an existing `scan-config.yaml` unless you add `--force`.
+2. Create the secrets in your repository (see [Secrets](#secrets)). Setup only
+   **checks** that they exist with `gh secret list`; it never reads or stores them.
 3. Set `fix_loop.enabled: true` and tune `allowlist_paths` / `build_verify_cmd` for your repo.
+   The loop reads this from the base branch, so merge it before you expect a run.
 4. Pin the caller's `uses:` and its `scanning_repo_ref` input to the current release. If
    you call your own copy of the platform, set `scanning_repo` to it as well. The template
    grants `contents: read`, `actions: read`, `pull-requests: write` and `issues: write`
@@ -162,10 +180,43 @@ if build verification is required.
    Callers copied from v2.3.6 or earlier grant only `contents: read` by default;
    add all four grants under `jobs.fix.permissions` when using those releases.
    See [REUSABLE-WORKFLOWS.md](REUSABLE-WORKFLOWS.md#autonomous-fixyml).
-5. Add the **`ai-autofix`** label to a PR. After a trusted review (CodeRabbit/SonarCloud or an
-   OWNER/MEMBER/COLLABORATOR), the loop runs. A review or dispatch made with a workflow's
-   `GITHUB_TOKEN` (the `github-actions[bot]` login) never starts it: give a review workflow its
-   own GitHub App and list that App's `<app>[bot]` login in the caller's `if:` instead.
+5. **Review the trusted reviewers** in the caller (see below), then add the **`ai-autofix`**
+   label to a PR. After a review from a trusted bot or from an OWNER/MEMBER/COLLABORATOR,
+   the loop runs. A review or dispatch made with a workflow's `GITHUB_TOKEN` (the
+   `github-actions[bot]` login) never starts it: give a review workflow its own GitHub App
+   and list that App's `<app>[bot]` login in the caller's `if:` instead.
+
+> **Review these defaults before you enable the loop.** The caller template
+> (`templates/fix-loop/autonomous-fix.yml`) lets a review or review comment from any of
+> these GitHub App accounts start the loop on a labelled pull request:
+> `coderabbitai[bot]`, `sonarqubecloud[bot]` and `sonarcloud[bot]`. It also trusts any
+> user whose association with the repository is `OWNER`, `MEMBER` or `COLLABORATOR`.
+> Each start can push a commit to the pull request's branch and spends model tokens on
+> your account. To narrow it, edit the two `fromJSON('[...]')` bot lists in the `fix`
+> job's `if:`: remove the Apps you do not use (both lists must match), or replace them
+> with `[]` so that only people can start the loop. To trust fewer people, remove
+> `MEMBER` or `COLLABORATOR` from the two association lists. Keep the
+> `head.repo.full_name == github.repository` and `ai-autofix` label conditions.
+
+## Secrets
+
+Create these in your repository (Settings > Secrets and variables > Actions, or
+`gh secret set NAME`, which prompts for the value):
+
+| Secret | What to create |
+|---|---|
+| `AUTOFIX_TOKEN` (required) | A **fine-grained personal access token** with access to **only this repository** and **Contents: Read and write**. The reusable workflow uses it in exactly one step, a `git push` of the vetted commit to the pull request's branch; Contents write is what that push needs. The workflow's secret description and setup also ask for **Pull requests: Read and write**; no step in v3.1.2 uses the token for anything but the push, so add it only if your policy follows that description. Set a short expiry and rotate it. A push made with the built-in `GITHUB_TOKEN` would not start your other workflows, which is why a separate token is used. |
+| `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | A model credential for the agent step. Only the `Run Claude Code (FIX-ONLY)` step receives it. Without one, the agent produces no patch and the run ends with no change. |
+
+Setup's check looks for `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` only, so it warns about
+a missing `ANTHROPIC_API_KEY` even when you use `CLAUDE_CODE_OAUTH_TOKEN` instead.
+
+**Cost.** Every run of the agent step uses the model credential you supply, so model
+usage is billed to your Anthropic account (API key) or counts against your Claude
+plan (OAuth token). `fix_loop.max_turns` caps the turns per run and
+`fix_loop.max_iterations` caps the fix commits per pull request. The jobs also use
+your GitHub Actions minutes. This project publishes no cost estimate; watch your
+first runs.
 
 ## 5. Operating the loop
 
@@ -174,10 +225,14 @@ if build verification is required.
   `.fix-attempts` to `0`.
 - **Tighten/loosen scope** by editing `allowlist_paths` / `gated_paths` (config is gated, so the
   loop can't widen its own scope).
-- **Bump the agent version** deliberately: change `fix_loop.claude_code_action_ref` *and* the pin
-  in `autonomous-fix.yml` together, and check that the release bundles Claude Code 1.0.93 or
-  later (CVE-2025-66032 is a CLI flaw; the action's own version number does not tell you).
-  See [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b) for every file to change.
+- **The agent version comes with the platform release.** The `claude-code-action` commit
+  is fixed inside the reusable `autonomous-fix.yml`; your `scan-config.yaml` cannot change
+  it. To get a newer agent, move your caller's `uses:` and `scanning_repo_ref` to a newer
+  platform release. Editing `fix_loop.claude_code_action_ref` changes nothing at run time.
+  Maintainers bumping the pin in this repository follow
+  [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b).
+- **Commit authorship.** Fix commits are authored and committed as
+  `auto-code-scanning-autofix[bot] <autofix@users.noreply.github.com>`.
 
 ## 6. Limits & non-goals
 
