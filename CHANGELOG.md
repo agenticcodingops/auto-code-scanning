@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.2...v3.1.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* **deps:** update Checkov to 3.4.5 ([#143](https://github.com/agenticcodingops/auto-code-scanning/issues/143)) ([565512a](https://github.com/agenticcodingops/auto-code-scanning/commit/565512aa0aaed75777b4f435360438e4747b9030))
+
 ## [3.1.2](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.1...v3.1.2) (2026-11-09)
 
 

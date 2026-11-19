@@ -4,7 +4,7 @@ Some repositories copied the scan or fix-loop logic into their own workflow and 
 files. This runbook replaces those copies with pinned calls to this platform, and moves
 the project-specific values into one file, `scan-config.yaml`.
 
-The current release is `v3.1.2`. <!-- x-release-please-version -->
+The current release is `v3.1.3`. <!-- x-release-please-version -->
 
 Code is referred to by function, job and step names, which do not move between
 releases. Workflow files are under `.github/workflows/`. If you are upgrading an
@@ -182,11 +182,11 @@ jobs:
       pull-requests: write
       issues: write
       actions: read
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.1.2 x-release-please-version
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/autonomous-fix.yml@<commit-sha> # v3.1.3 x-release-please-version
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
       config_path: scan-config.yaml
-      scanning_repo_ref: <commit-sha> # v3.1.2 x-release-please-version
+      scanning_repo_ref: <commit-sha> # v3.1.3 x-release-please-version
     secrets:
       AUTOFIX_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
