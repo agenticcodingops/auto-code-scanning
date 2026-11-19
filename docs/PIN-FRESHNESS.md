@@ -1,9 +1,10 @@
 # Pin freshness
 
-The [freshness workflow](../.github/workflows/pin-freshness.yml) runs every Monday
-at **08:23 UTC** and supports manual dispatch. It pilots the org-wide plan here.
-The operator performs the first real run after merge. A reusable caller supplies
-its own manifest and schedule; defining `workflow_call` does not schedule callers.
+The [freshness workflow](../.github/workflows/pin-freshness.yml) finds hand-kept
+versions that are out of date and reports them in one rolling GitHub issue. In this
+repository it runs every Monday at **08:23 UTC** and supports manual dispatch. Other
+repositories can call it with `workflow_call`; a caller supplies its own manifest and
+its own schedule, because defining `workflow_call` does not schedule callers.
 
 ```mermaid
 flowchart LR
@@ -80,8 +81,8 @@ For a script checkout separate from the caller, invoke its script by path and pa
 `--root` for the caller checkout. `--manifest` is relative to that root. The script
 uses only the standard library and the reviewed `safe_io.py` helper beside it.
 `--dry-run` prints the complete issue body, with no file or API writes. Omitting
-it creates or updates the rolling issue, so preview before the operator's first
-dispatch. Never print a token or include it in a command argument.
+it creates or updates the rolling issue, so preview before the first real run.
+Never print a token or include it in a command argument.
 
 ## Add a pin
 
@@ -174,9 +175,10 @@ network access. The dry run verifies real upstreams. Keep failures in the eviden
 ## Call from another repository
 
 The implementation is hosted publicly so both public and private callers can use
-it. Give the caller a manifest and a workflow like this. This initial example pins
-the implementation commit carrying the workflow; after a release, resolve its
-reviewed commit and replace **both** SHAs together. Never use `main`.
+it. Give the caller a manifest and a workflow like this. The example pins the
+commit of release `v3.1.2`; to use another release, resolve its tag to a commit
+([how](VERSION-PINNING.md#pin-the-commit-a-release-tag-points-to)) and replace
+**both** SHAs together. Never use `main`.
 
 ```yaml
 name: Pin freshness
@@ -187,7 +189,7 @@ on:
 permissions: {}
 jobs:
   freshness:
-    uses: agenticcodingops/auto-code-scanning/.github/workflows/pin-freshness.yml@802dccfd345272083a934b14a09b6cde850eb10a # initial implementation
+    uses: agenticcodingops/auto-code-scanning/.github/workflows/pin-freshness.yml@179f7e83fb8845aac3fc0f7c01ac0d129e4dfa00 # v3.1.2
     permissions:
       contents: read
       issues: write
@@ -195,7 +197,7 @@ jobs:
     with:
       manifest-path: .github/pin-freshness.json
       issue-title: Weekly pin freshness
-      scanning-repo-ref: 802dccfd345272083a934b14a09b6cde850eb10a
+      scanning-repo-ref: 179f7e83fb8845aac3fc0f7c01ac0d129e4dfa00
 ```
 
 The workflow checks out caller data in `caller` and this repository's `scripts` at
@@ -204,27 +206,24 @@ isolated mode; caller code and modules are not executed. Inputs pass through
 environment variables. Both checkouts disable persisted credentials. Only
 `GITHUB_TOKEN` is used, and the issue belongs to the caller's `github.repository`.
 The ref default is release-managed, like `reusable-scan.yml`; pass the same SHA as
-`uses:` explicitly when pinning a caller. Scheduled/manual pilot runs here use
-their own revision. The new file is listed in release-please's `extra-files`.
+`uses:` explicitly when pinning a caller. Scheduled and manual runs in this
+repository use their own revision.
 
 ## Act on updates
 
-The issue is a queue for deliberate updates under the org-wide plan. Read upstream
-release notes, assess transitive scanner changes and follow all quoted
-preconditions. Patch/minor Actions and scanner updates require a clean review of
-the current head, green checks and at least 15 minutes since the push. Majors,
-Terraform CLI/providers, runtimes, production-facing workflows and re-measure
-preconditions wait for the operator. Other package/runner changes also belong to
-the operator unless explicitly delegated. Never infer merge permission from an
-empty precondition field.
+Treat the issue as a queue of deliberate updates, not as changes to apply blindly.
+For each entry, read the upstream release notes, check what changes for the scanners
+that depend on it, and follow every precondition the issue quotes. An empty
+precondition field does not mean the update is safe to merge without review. Update
+repeated pins together, in one change.
 
-Use `chore(deps)` for routine update PRs. A scanner-engine or scan-behavior change
-uses `fix(deps)` with a release note so consumers receive a release. An update PR
-is complete only when merged or deliberately declined; the seven-day section
-keeps pending work visible. No automated updater may bypass a precondition.
+In this repository, routine update PRs use `chore(deps)`. A change to a scanner
+engine or to scan behaviour uses `fix(deps)` with a release note, so consumers get a
+release. An update is complete when it is merged or deliberately declined; the
+seven-day section keeps pending work visible.
 
-See the [pin inventory and bump procedures](VERSION-PINNING.md#repository-pin-inventory)
-and [contributor checks](CONTRIBUTING.md#run-checks-before-opening-a-pull-request).
+See the [pin inventory and bump procedures](maintainers/PIN-INVENTORY.md)
+and [contributor checks](../CONTRIBUTING.md#run-checks-before-opening-a-pull-request).
 API contracts: [releases](https://docs.github.com/en/rest/releases/releases),
 [issues](https://docs.github.com/en/rest/issues/issues),
 [reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
