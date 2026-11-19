@@ -395,7 +395,8 @@ def test_baseline_help_describes_content_bound_identity():
     assert 'Line numbers are intentionally excluded' not in help_text
 
 
-@pytest.mark.parametrize('name', ['README.md', 'docs/APP-CODE-SCANNING.md',
+# The README no longer shows a scan-config example; the guides below carry the C# solution example.
+@pytest.mark.parametrize('name', ['docs/APP-CODE-SCANNING.md',
                                   'docs/consumer-repo-setup-guide.md', 'docs/CONSUMER-MIGRATION.md',
                                   'templates/scan-config/starter.yaml', 'templates/scan-config/standard.yaml',
                                   'templates/scan-config/strict.yaml'])
