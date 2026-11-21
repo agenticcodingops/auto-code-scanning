@@ -110,7 +110,7 @@ production-facing workflow. Preconditions below are quotations from existing fil
 
 ### Actions and reusable workflows
 
-All 17 distinct active external action refs are full commit SHAs, with the tag in a
+All 16 distinct active external action refs are full commit SHAs, with the tag in a
 comment. There are no floating external `uses:` refs in `.github/workflows/`.
 Dependabot ecosystem `github-actions`, directory `/`, can read these action refs;
 it cannot coordinate their config mirrors or the engines selected in `with:`.
