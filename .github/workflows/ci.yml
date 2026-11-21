@@ -243,7 +243,8 @@ jobs:
   test-scripts:
     name: Test Scripts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The Python suite alone takes 10 to 14.5 minutes; 15 cancelled healthy runs (#160).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
