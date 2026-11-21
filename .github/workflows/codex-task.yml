@@ -53,7 +53,16 @@ jobs:
       # Codex runs without network access (the :workspace profile), so install what the tests need first.
       - name: Install test dependencies
         run: |
-          pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0 checkov==3.4.5
+          pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+
+      # Keep Checkov separate from the test runner's packaging dependencies, as copilot-setup-steps.yml does.
+      - name: Install Checkov
+        run: |
+          python -m venv "$RUNNER_TEMP/checkov"
+          "$RUNNER_TEMP/checkov/bin/python" -m pip install checkov==3.4.5
+          mkdir -p "$RUNNER_TEMP/checkov-launcher"
+          ln -s "$RUNNER_TEMP/checkov/bin/checkov" "$RUNNER_TEMP/checkov-launcher/checkov"
+          echo "$RUNNER_TEMP/checkov-launcher" >> "$GITHUB_PATH"
 
       - name: Write the prompt
         env:
@@ -82,7 +91,9 @@ jobs:
           output-file: ${{ runner.temp }}/codex-final-message.md
           effort: high
 
+      # Collect and upload even when Codex fails or times out, so partial work isn't lost.
       - name: Collect the patch
+        if: always() && steps.codex.conclusion != 'skipped'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codex-result"
@@ -98,6 +109,7 @@ jobs:
           cat "$RUNNER_TEMP/codex-result/stat.txt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the result
+        if: always() && steps.codex.conclusion != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: codex-result-${{ inputs.request_id }}

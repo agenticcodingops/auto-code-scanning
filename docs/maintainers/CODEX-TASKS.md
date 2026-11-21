@@ -20,8 +20,15 @@ and reviews run on it. A PR opened with the workflow's `GITHUB_TOKEN` would star
 id="$(date -u +%Y%m%d%H%M%S)-issue-155"
 gh workflow run codex-task.yml --ref main \
   -f base=main -f request_id="$id" -f task="Fix #155: <what to change and how to check it>"
-run=$(gh run list --workflow codex-task.yml --limit 20 --json databaseId,displayTitle \
-  -q ".[] | select(.displayTitle == \"codex-$id\") | .databaseId" | head -1)
+# The new run can take a few seconds to appear in the list.
+run=""
+for _ in $(seq 1 30); do
+  run=$(gh run list --workflow codex-task.yml --limit 20 --json databaseId,displayTitle \
+    -q ".[] | select(.displayTitle == \"codex-$id\") | .databaseId" | head -1)
+  [ -n "$run" ] && break
+  sleep 5
+done
+[ -n "$run" ] || { echo "No run named codex-$id appeared within 150 seconds" >&2; exit 1; }
 gh run watch "$run" --exit-status
 gh run download "$run" -n "codex-result-$id" -D "<a folder outside the checkout>"
 ```
@@ -37,7 +44,7 @@ the PR. Then review it like any other change.
 ## What Codex can do in the run
 
 - It runs with the `:workspace` permission profile: it can edit the checkout but has no network access, so the
-  workflow installs the Python test dependencies and Checkov before it starts. PowerShell and Pester come with
+  workflow installs the Python test dependencies, and Checkov in its own virtual environment, before it starts. PowerShell and Pester come with
   the runner. Trivy, TFLint and Gitleaks aren't installed; tests that need them are skipped or fail, and Codex
   is told to report what it couldn't run.
 - The action's default `drop-sudo` safety strategy removes `sudo` before Codex starts. The API key stays behind

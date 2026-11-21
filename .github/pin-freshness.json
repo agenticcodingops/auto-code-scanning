@@ -287,6 +287,10 @@
         {
           "file": "CONTRIBUTING.md",
           "pattern": "(?<![\\w-])Checkov (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "(?i:(?<![\\w-])checkov==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -309,6 +313,10 @@
         {
           "file": "CONTRIBUTING.md",
           "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "(?i:(?<![\\w-])pytest==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -330,6 +338,10 @@
         },
         {
           "file": "CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
           "pattern": "(?i:(?<![\\w-])pytest\\-cov==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
@@ -381,6 +393,10 @@
         {
           "file": "CONTRIBUTING.md",
           "pattern": "(?<![\\w-])PyYAML (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "(?i:(?<![\\w-])PyYAML==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -406,6 +422,10 @@
         },
         {
           "file": "docs/SETUP-GUIDE.md",
+          "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
           "pattern": "(?i:(?<![\\w-])jsonschema==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
@@ -449,6 +469,10 @@
         {
           "file": "CONTRIBUTING.md",
           "pattern": "(?<![\\w-])pre-commit (?P<value>\\d+\\.\\d+(?:\\.\\d+)?)(?![\\d.+])"
+        },
+        {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "(?i:(?<![\\w-])pre\\-commit==)(?P<value>\\d+(?:\\.\\d+)*)"
         }
       ],
       "source": {
@@ -821,6 +845,21 @@
         "tag_pattern": "bun-v(?P<version>\\d+(?:\\.\\d+)*)"
       },
       "precondition": "Download the release the action pins and check it against a recorded SHA-256 instead."
+    },
+    {
+      "id": "codex-cli",
+      "locations": [
+        {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "codex-version:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        }
+      ],
+      "source": {
+        "type": "github_releases",
+        "repo": "openai/codex",
+        "tag_pattern": "rust-v(?P<version>\\d+(?:\\.\\d+)*)"
+      },
+      "precondition": "Check that the pinned openai/codex-action release supports the new CLI version and that the workflow's permission-profile input still applies."
     },
     {
       "id": "release-schema",

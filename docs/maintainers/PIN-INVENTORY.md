@@ -110,7 +110,7 @@ production-facing workflow. Preconditions below are quotations from existing fil
 
 ### Actions and reusable workflows
 
-All 16 distinct active external action refs are full commit SHAs, with the tag in a
+All 17 distinct active external action refs are full commit SHAs, with the tag in a
 comment. There are no floating external `uses:` refs in `.github/workflows/`.
 Dependabot ecosystem `github-actions`, directory `/`, can read these action refs;
 it cannot coordinate their config mirrors or the engines selected in `with:`.
@@ -130,6 +130,7 @@ it cannot coordinate their config mirrors or the engines selected in `with:`.
 | `aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25` | `v0.36.0` | [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml) | Routine; majors Maintainer; P4; action version differs from engine. |
 | `bridgecrewio/checkov-action@3f0caf0c3aa9f56ade6b49f6e60b63aaeafb75a3` | `v12.3141.0 = Checkov 3.4.5` | [`.github/workflows/reusable-scan-self-test.yml`](../../.github/workflows/reusable-scan-self-test.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml) | Routine; majors Maintainer; P3 (engine selected inside action). |
 | `github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066` | `v4.39.3` | [`.github/workflows/code-security-scan.yml`](../../.github/workflows/code-security-scan.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml) | Routine; majors Maintainer; None stated. |
+| `openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec` | `v1.14` | [`.github/workflows/codex-task.yml`](../../.github/workflows/codex-task.yml) | Maintainer; spends the OpenAI API key. Its `codex-version` input is a separate hand-kept pin (`codex-cli` in the freshness manifest). |
 | `googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7` | `v5.0.0` | [`.github/workflows/release.yml`](../../.github/workflows/release.yml) | Routine; majors Maintainer; None stated. |
 | `terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337` | `v6.3.2` | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/copilot-setup-steps.yml`](../../.github/workflows/copilot-setup-steps.yml), [`.github/workflows/performance-check.yml`](../../.github/workflows/performance-check.yml), [`.github/workflows/reusable-scan.yml`](../../.github/workflows/reusable-scan.yml) | Routine; majors Maintainer; None stated. |
 
