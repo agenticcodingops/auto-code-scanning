@@ -1,0 +1,105 @@
+name: Codex task
+
+# Runs one maintainer-dispatched coding task with Codex on a GitHub-hosted runner and uploads the result as a
+# patch. It pushes nothing and opens nothing: the dispatcher applies the patch to a branch and opens the PR
+# under its own account, so the normal CI and reviews run on it (a PR opened with GITHUB_TOKEN would start no
+# workflows). See docs/maintainers/CODEX-TASKS.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: The task for Codex (plain text)
+        required: true
+        type: string
+      base:
+        description: Branch to start from
+        required: true
+        default: main
+        type: string
+      request_id:
+        description: Caller-chosen ID; names the run and the artifact
+        required: true
+        type: string
+
+run-name: codex-${{ inputs.request_id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-task-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    # Only the maintainer accounts may spend the API key. workflow_dispatch already needs write access;
+    # this names the accounts rather than trusting every writer.
+    if: contains(fromJSON('["vibecoddingops","agenticcodingops-orchestrator"]'), github.actor)
+    runs-on: ubuntu-latest
+    # Bounds the API spend of one run; a task that needs longer should be split.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.base }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.11"
+
+      # Codex runs without network access (the :workspace profile), so install what the tests need first.
+      - name: Install test dependencies
+        run: |
+          pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0 checkov==3.4.5
+
+      - name: Write the prompt
+        env:
+          TASK: ${{ inputs.task }}
+        run: |
+          {
+            printf '%s\n\n' "$TASK"
+            cat <<'EOF'
+          Rules:
+          - Follow CONTRIBUTING.md. Make the smallest complete change; add or update tests for behaviour changes.
+          - Run the affected tests (python -m pytest <files>; Pester with Invoke-Pester for tests/unit/) and report
+            the exact commands and results. You have no network access; say which checks you could not run.
+          - Do not edit anything under .github/workflows/. Do not commit; leave the changes in the working tree.
+          - Finish with a short summary: files changed, why, and test results.
+          EOF
+          } > "$RUNNER_TEMP/codex-prompt.md"
+
+      - name: Run Codex
+        id: codex
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec  # v1.14
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.171.0"
+          permission-profile: ":workspace"
+          prompt-file: ${{ runner.temp }}/codex-prompt.md
+          output-file: ${{ runner.temp }}/codex-final-message.md
+          effort: high
+
+      - name: Collect the patch
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codex-result"
+          git add -A
+          git diff --cached --binary > "$RUNNER_TEMP/codex-result/codex.patch"
+          git diff --cached --stat > "$RUNNER_TEMP/codex-result/stat.txt"
+          cp "$RUNNER_TEMP/codex-final-message.md" "$RUNNER_TEMP/codex-result/final-message.md" || true
+          git rev-parse HEAD > "$RUNNER_TEMP/codex-result/base-sha.txt"
+          if git diff --cached --name-only | grep -q '^\.github/workflows/'; then
+            echo "::error::The patch edits .github/workflows/; review it by hand before applying."
+            touch "$RUNNER_TEMP/codex-result/TOUCHES-WORKFLOWS"
+          fi
+          cat "$RUNNER_TEMP/codex-result/stat.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the result
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: codex-result-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/codex-result/
+          retention-days: 14
