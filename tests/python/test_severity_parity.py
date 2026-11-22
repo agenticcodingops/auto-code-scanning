@@ -33,6 +33,11 @@ AGENT_SCHEMA = jsonschema.Draft202012Validator(json.loads(
     (ROOT / 'schemas/last-scan.schema.json').read_text(encoding='utf-8')))
 
 
+def error_text(result):
+    """PowerShell colours and wraps error text by console width, so compare without both."""
+    return re.sub(r'\x1b\[[0-9;]*m|[\s|]', '', result.stdout + result.stderr)
+
+
 def report(tool, rows):
     findings = []
     for index, row in enumerate(rows):
@@ -292,6 +297,8 @@ def test_create_baseline_stores_and_counts_normalized_severity(tmp_path, tool):
     consumer = tmp_path / 'consumer'
     consumer.mkdir()
     subprocess.run(['git', 'init', '-q', str(consumer)], check=True)
+    # Numeric and list severities keep their existing failure: see "Compatibility exceptions"
+    # in docs/SEVERITY-MAPPING.md.
     rows = [row for row in TABLE['cases'][tool]
             if not isinstance(row['value'], (int, list)) and
             (tool != 'tflint' or row['value'] is not None) and  # fails: see the next test
@@ -329,7 +336,7 @@ def test_create_baseline_still_fails_without_a_tflint_severity(tmp_path, row):
     result = ps_run(f"& '{ROOT.as_posix()}/scripts/create-baseline.ps1' -Tool tflint -CloudProvider aws -Force",
                     consumer, env)
     assert result.returncode != 0, result.stdout + result.stderr
-    assert 'tflint reported a finding without a severity' in ' '.join((result.stdout + result.stderr).split())
+    assert 'tflintreportedafindingwithoutaseverity' in error_text(result)
 
 
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
@@ -450,7 +457,7 @@ def test_partly_vendored_library_fails_loudly(tmp_path, script):
                  else '-Tool trivy -CloudProvider aws -Force')
     result = ps_run(f"& '{(package / 'scripts' / script).as_posix()}' {arguments}", tmp_path)
     assert result.returncode != 0, 'a partly vendored install must not report a result'
-    assert 're-vendor hooks/lib/common.ps1' in ' '.join((result.stdout + result.stderr).split())
+    assert 're-vendorhooks/lib/common.ps1' in error_text(result)
 
 
 def test_counts_run_no_text_utility_from_the_scanned_checkout(tmp_path):
