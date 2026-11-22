@@ -11,10 +11,13 @@ newline. It reads the value itself, so the console encoding does not matter.
 """
 import os
 from pathlib import Path
+import runpy
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from scan_config import load_scan_config, read_value  # noqa: E402
+# Run the sibling from its source. Putting this directory on sys.path would also let
+# a vendored yaml.py, or a planted bytecode cache, run during the scan.
+_reader = runpy.run_path(str(Path(__file__).resolve().with_name('scan_config.py')))
+load_scan_config, read_value = _reader['load_scan_config'], _reader['read_value']
 
 
 def state(config, names):

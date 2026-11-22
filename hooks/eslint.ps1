@@ -46,7 +46,10 @@ $fixDir = 'Fix languages.typescript.build.working_dir in scan-config.yaml.'
 $dirState = $null
 if ($workingDir -ne '.') {
     $dirState = Get-WorkingDirState -Paths $allTs
-    if (-not $dirState) { Confirm-IncompleteScan $missingDir $fixDir }
+    # PowerShell also accepts spellings that Python does not, as the Bash twin's -d does.
+    if (-not $dirState -and -not (Test-Path -LiteralPath $workingDir -PathType Container)) {
+        Confirm-IncompleteScan $missingDir $fixDir
+    }
 }
 
 $files = @()

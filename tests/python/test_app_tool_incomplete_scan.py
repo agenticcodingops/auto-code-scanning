@@ -326,3 +326,20 @@ def test_existing_working_dir_works_through_a_launcher_that_takes_one_line_argum
                             cwd=repo, env=env, capture_output=True, timeout=300)
     # The directory exists and only a file outside it is staged: a normal pass.
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_working_dir_check_imports_nothing_from_the_vendored_library_directory(tmp_path):
+    library = tmp_path / 'hooks/lib'
+    library.mkdir(parents=True)
+    for name in ('working_dir.py', 'scan_config.py'):
+        shutil.copyfile(HOOKS / 'lib' / name, library / name)
+    marker = tmp_path / 'consumer-code-executed'
+    (library / 'yaml.py').write_text(f'open({str(marker)!r}, "w").close()\n', encoding='utf-8')
+    (tmp_path / 'mobile').mkdir()
+    config = tmp_path / 'scan-config.yaml'
+    config.write_text('languages: {typescript: {build: {working_dir: mobile}}}\n', encoding='utf-8')
+    result = subprocess.run([sys.executable, '-B', '-E', '-P', str(library / 'working_dir.py'), str(config)],
+                            cwd=tmp_path, input=b'other/other.ts\0', capture_output=True, timeout=120)
+    assert not marker.exists(), 'the check imported yaml.py from the scanned repository'
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == b'outside'
