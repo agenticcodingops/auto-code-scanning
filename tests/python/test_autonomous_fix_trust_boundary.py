@@ -467,6 +467,13 @@ def test_pushed_commit_is_exactly_the_scanned_tree(wf, push_job_sandbox):
               {**base_env, "GITHUB_OUTPUT": _posix(out), "PATCH_TREE": patch_tree,
                "ATTEMPTS": "0", "PR": "7"}, sb["bash"])
     commit_out = _outputs(out)
+    identity = _git("show", "-s", "--format=%an%n%ae%n%cn%n%ce", commit_out["commit"], cwd=sb["repo"])
+    assert identity.splitlines() == [
+        "auto-code-scanning-autofix[bot]", "autofix@auto-code-scanning.invalid",
+        "auto-code-scanning-autofix[bot]", "autofix@auto-code-scanning.invalid",
+    ]
+    message = _git("cat-file", "commit", commit_out["commit"], cwd=sb["repo"]).partition("\n\n")[2]
+    assert message == "chore(autofix): apply review fixes [autofix]\n\nAutomated minimal fix for PR #7.\n"
 
     remote_url = "file://" + ("" if _posix(sb["remote_root"]).startswith("/") else "/") + _posix(sb["remote_root"]) + "/"
     _run_step(_require_step(job, "Push"), sb["ws"], {

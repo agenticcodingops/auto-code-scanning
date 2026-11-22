@@ -429,8 +429,10 @@ The header comment beginning `claude-code-action is SHA-pinned` names the versio
 It is mirrored as
 `fix_loop.claude_code_action_ref` in `scan-config.yaml` and in
 `templates/scan-config/starter.yaml`, `standard.yaml` and `strict.yaml`, which
-`setup-scan-fix` copies into a new adopter's `scan-config.yaml`. Nothing checks that
-these agree, and nothing reads the mirror at run time; the schema checks only its format.
+`setup-scan-fix` copies into a new adopter's `scan-config.yaml`, and in both example configs
+and `FIX-LOOP.md`. Regression tests check all of these mirrors against the workflow
+`uses:` pin. Nothing reads the mirror at run time; the schema requires it when the
+loop is enabled and checks its format.
 
 The config **schema enforces a SHA pin**: `schemas/scan-config.schema.json`
 constrains `claude_code_action_ref` to the pattern
@@ -456,7 +458,8 @@ place listed above together, in the same commit, then re-pin consumers to the ne
 1. Update the `uses:` SHA, the trailing `# vX.Y.Z` comment and the header comment in
    `.github/workflows/autonomous-fix.yml`.
 2. Update `fix_loop.claude_code_action_ref` to the **same** 40-char SHA in
-   `scan-config.yaml` and in the three files under `templates/scan-config/`.
+   `scan-config.yaml`, the three files under `templates/scan-config/`, both example
+   configs and `FIX-LOOP.md`.
 3. Run `git grep -n -e <old-sha> -e <old-version>` and update every hit except history
    (`CHANGELOG.md`, `MIGRATION-ANALYSIS.md`, `ROADMAP.md`). Today that also covers this
    page, `FIX-LOOP.md`, `consumer-repo-setup-guide.md`, `ADOPTION-PLAYBOOK.md`,

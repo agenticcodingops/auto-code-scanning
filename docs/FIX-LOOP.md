@@ -22,7 +22,6 @@ Everything is driven by the `fix_loop:` block in `scan-config.yaml`:
 ```yaml
 fix_loop:
   enabled: false                 # master switch (Layer B is off by default)
-  label: "ai-autofix"            # PR opt-in label
   human_review_label: "needs-human-review"
   max_turns: 8                   # claude-code-action --max-turns per analyze run
   max_iterations: 3              # hard cap on autofix commits per PR (.fix-attempts)
@@ -31,7 +30,6 @@ fix_loop:
                 ".github/",".claude/","hooks","lefthook.yml","scan-and-fix.ps1","scripts/",".env","LICENSE"]
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
   build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in the verify job (no secrets)
-  required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]
 ```
 
 The schema **requires** `allowlist_paths` and a SHA-pinned `claude_code_action_ref` whenever
@@ -39,15 +37,15 @@ The schema **requires** `allowlist_paths` and a SHA-pinned `claude_code_action_r
 
 What the workflow actually reads in release v3.1.2 (the `config` job's `Parse fix_loop`
 step): `enabled`, `max_turns`, `max_iterations`, `build_verify_cmd` and
-`human_review_label`; the path gate reads `allowlist_paths` and `gated_paths`. Three
-keys have **no effect** on a run:
+`human_review_label`; the path gate reads `allowlist_paths` and `gated_paths`.
+The action reference is a required mirror; two retired keys remain accepted for compatibility:
 
 - `claude_code_action_ref` is only checked for format by the schema. The action version
   the loop runs is hard-coded in the `analyze` job's `Run Claude Code (FIX-ONLY)` step
   of the reusable workflow, so it changes only when you pin a newer platform release.
-- `required_secrets` is not read by the workflow or by setup; setup checks for
-  `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` by name.
-- `label` is not read either: the opt-in label `ai-autofix` is written into the caller
+- `required_secrets` is deprecated and ignored; setup checks supported secret names directly.
+- `label` is deprecated and has no effect (the workflow copies it to an output that no job
+  consumes): the opt-in label `ai-autofix` is written into the caller
   template's `if:`. To use another label, change it there.
 
 ---
@@ -208,8 +206,10 @@ Create these in your repository (Settings > Secrets and variables > Actions, or
 | `AUTOFIX_TOKEN` (required) | A **fine-grained personal access token** with access to **only this repository** and **Contents: Read and write**. The reusable workflow uses it in exactly one step, a `git push` of the vetted commit to the pull request's branch; Contents write is what that push needs. Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail. This narrow scope has not been tested on github.com. Set a short expiry and rotate it. A push made with the built-in `GITHUB_TOKEN` would not start your other workflows, which is why a separate token is used. |
 | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | A model credential for the agent step. Only the `Run Claude Code (FIX-ONLY)` step receives it. Without one, the agent produces no patch and the run ends with no change. |
 
-Setup's check looks for `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` only, so it warns about
-a missing `ANTHROPIC_API_KEY` even when you use `CLAUDE_CODE_OAUTH_TOKEN` instead.
+Setup checks `AUTOFIX_TOKEN` independently and accepts either `ANTHROPIC_API_KEY` or
+`CLAUDE_CODE_OAUTH_TOKEN` for the model credential. It reports which names were found.
+Organisation secrets are not listed; check their repository access separately. If
+listing fails, setup says it could not verify secrets rather than reporting them missing.
 
 **Cost.** Every run of the agent step uses the model credential you supply, so model
 usage is billed to your Anthropic account (API key) or counts against your Claude
@@ -232,7 +232,10 @@ first runs.
   Maintainers bumping the pin in this repository follow
   [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b).
 - **Commit authorship.** Fix commits are authored and committed as
-  `auto-code-scanning-autofix[bot] <autofix@users.noreply.github.com>`.
+  `auto-code-scanning-autofix[bot] <autofix@auto-code-scanning.invalid>`.
+  The address is non-routable, so it links to no account. Consumers whose rules require
+  a linked author, a CLA or a co-author line may need an exception. A squash merge
+  can add GitHub's own co-author line.
 
 ## 6. Limits & non-goals
 

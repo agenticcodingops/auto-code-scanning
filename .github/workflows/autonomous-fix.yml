@@ -36,8 +36,8 @@
 # isolated (-I) so a module in the checkout is never imported.
 #
 # claude-code-action is SHA-pinned to v1.0.148, whose bundled CLI is past CLI 1.0.93,
-# the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 (a CLI flaw; the action's own version number is unrelated). This pin is the centralized source of truth; it MUST match
-# fix_loop.claude_code_action_ref in scan-config.yaml.
+# the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 (a CLI flaw; the action's own version number is unrelated). The `uses:` pin in this workflow is the source of truth.
+# fix_loop.claude_code_action_ref is a schema-required mirror, not read at run time.
 # ============================================================================
 
 name: Reusable Autonomous Fix
@@ -566,7 +566,7 @@ jobs:
 
       - name: Run Claude Code (FIX-ONLY)
         if: steps.precheck.outputs.capped != 'true'
-        # PIN: its bundled CLI is past 1.0.93, the CVE-2025-66032 fix. Centralized; matches fix_loop.claude_code_action_ref.
+        # PIN: its bundled CLI is past 1.0.93, the CVE-2025-66032 fix. Source of truth; fix_loop.claude_code_action_ref is a schema-required mirror, not read at run time.
         # The ONLY step that holds the model credentials. Its tools read the PR and edit
         # files; none runs a build, test, package or interpreter command, because those
         # execute the PR's own code. Build verification runs later in the verify job,
@@ -1008,12 +1008,11 @@ jobs:
           echo "autofix iteration ${next}"
           # commit-tree runs no hooks and reads neither the index nor the working tree.
           commit="$(
-            GIT_AUTHOR_NAME="auto-code-scanning-autofix[bot]" GIT_AUTHOR_EMAIL="autofix@users.noreply.github.com" \
-            GIT_COMMITTER_NAME="auto-code-scanning-autofix[bot]" GIT_COMMITTER_EMAIL="autofix@users.noreply.github.com" \
+            GIT_AUTHOR_NAME="auto-code-scanning-autofix[bot]" GIT_AUTHOR_EMAIL="autofix@auto-code-scanning.invalid" \
+            GIT_COMMITTER_NAME="auto-code-scanning-autofix[bot]" GIT_COMMITTER_EMAIL="autofix@auto-code-scanning.invalid" \
             git -C pr-head commit-tree "${final_tree}" -p "${HEAD_SHA}" \
               -m "chore(autofix): apply review fixes [autofix]" \
-              -m "Automated minimal fix for PR #${PR}." \
-              -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+              -m "Automated minimal fix for PR #${PR}."
           )"
           {
             echo "commit=${commit}"

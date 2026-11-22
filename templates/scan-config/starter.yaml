@@ -75,7 +75,6 @@ suppressions:
 
 fix_loop:
   enabled: false
-  label: "ai-autofix"
   human_review_label: "needs-human-review"
   max_turns: 8
   max_iterations: 3
@@ -83,4 +82,3 @@ fix_loop:
   gated_paths: ["auth", "payment", "crypto", "security", "identity", "secret", "credential", ".github/", ".claude/", "hooks", "lefthook.yml", "scan-and-fix.ps1", "scripts/", ".env", "LICENSE"]
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"
   build_verify_cmd: ""
-  required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]
