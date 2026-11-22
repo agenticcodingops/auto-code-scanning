@@ -44,7 +44,8 @@ The action reference is a required mirror; two retired keys remain accepted for 
   the loop runs is hard-coded in the `analyze` job's `Run Claude Code (FIX-ONLY)` step
   of the reusable workflow, so it changes only when you pin a newer platform release.
 - `required_secrets` is deprecated and ignored; setup checks supported secret names directly.
-- `label` is deprecated and ignored: the opt-in label `ai-autofix` is written into the caller
+- `label` is deprecated and has no effect (the workflow copies it to an output that no job
+  consumes): the opt-in label `ai-autofix` is written into the caller
   template's `if:`. To use another label, change it there.
 
 ---

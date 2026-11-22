@@ -140,7 +140,7 @@
         "label": {
           "type": "string",
           "deprecated": true,
-          "description": "Ignored: nothing reads it. The caller workflow owns the opt-in label."
+          "description": "Ignored: nothing uses it. The workflow copies it to an output that no job consumes; the caller workflow owns the opt-in label."
         },
         "human_review_label": {
           "type": "string",

@@ -1,6 +1,5 @@
 """Regression coverage for fix-loop configuration reporting and compatibility."""
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,8 @@ def test_render_reports_written_value_without_changing_bytes(tmp_path, capsys, t
     expected = renderer.enable_fix_loop(template) if flag else template
     args = ["render", "--tier", tier, "--templates-dir", str(ROOT / "templates/scan-config"), "--out", str(out)]
     assert renderer.main(args + (["--enable-fix-loop"] if flag else [])) == 0
-    assert out.read_bytes() == expected.replace("\n", os.linesep).encode("utf-8")
+    # Line endings belong to safe_io and its own tests; the content is what must not change.
+    assert out.read_bytes().replace(b"\r\n", b"\n") == expected.encode("utf-8")
     output = capsys.readouterr().out
     enabled = yaml.safe_load(expected)["fix_loop"]["enabled"]
     assert f"fix_loop={str(enabled).lower()}" in output
@@ -105,7 +105,8 @@ def test_retired_keys_remain_valid_and_deprecated():
     loop_schema = schema["$defs"]["fix_loop"]
     for key in ("label", "required_secrets"):
         assert loop_schema["properties"][key]["deprecated"] is True
-        assert "Ignored: nothing reads it" in loop_schema["properties"][key]["description"]
+        verb = {"label": "uses", "required_secrets": "reads"}[key]
+        assert f"Ignored: nothing {verb} it" in loop_schema["properties"][key]["description"]
     assert loop_schema["additionalProperties"] is False
     assert "mirror" in loop_schema["properties"]["claude_code_action_ref"]["description"].lower()
     config = yaml.safe_load((ROOT / "templates/scan-config/starter.yaml").read_text(encoding="utf-8"))
