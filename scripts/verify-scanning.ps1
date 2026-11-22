@@ -85,8 +85,8 @@ function Add-SkippedCheck {
 }
 
 function Test-RepositoryHasTerraform {
-    # Pre-push scans whichever commit is pushed, so look at HEAD and every local branch
-    # as well as the index and worktree. List all paths and filter here: pathspecs change
+    # Pre-push scans whichever commit is pushed, so look at HEAD, every local branch and
+    # every tag as well as the index and worktree. List all paths and filter here: pathspecs change
     # meaning with GIT_LITERAL_PATHSPECS and similar settings.
     $git = Resolve-VerifiedTool -Name git -Label Git
     $top = & $git rev-parse --show-toplevel 2>$null
@@ -94,8 +94,8 @@ function Test-RepositoryHasTerraform {
     # fsmonitor is a command that repository configuration can set: never run it here.
     $listed = @(& $git -C $top -c core.fsmonitor=false ls-files -z --cached --others --exclude-standard 2>$null)
     if ($LASTEXITCODE -ne 0) { throw 'could not list repository files' }
-    $tips = @(& $git for-each-ref '--format=%(objectname)' refs/heads 2>$null)
-    if ($LASTEXITCODE -ne 0) { throw 'could not list local branches' }
+    $tips = @(& $git for-each-ref '--format=%(objectname)' refs/heads refs/tags 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'could not list branches and tags' }
     $head = & $git rev-parse --verify -q HEAD 2>$null
     if ($LASTEXITCODE -eq 0) { $tips += $head }  # detached; an unborn HEAD has no files
     foreach ($tip in ($tips | Select-Object -Unique)) {

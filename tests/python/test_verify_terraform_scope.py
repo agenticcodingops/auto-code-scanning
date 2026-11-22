@@ -35,13 +35,20 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
                             '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + str(tmp_path / 'no-hooks'),
                             *args], check=True, capture_output=True)
         run_git('commit', '-q', '--allow-empty', '-m', 'app only')
-        if history == 'other-branch':
+        separate = history != 'staged-deletion'
+        if separate:
             run_git('checkout', '-q', '-b', 'infra')
         (repo / 'main.tf').write_text('', encoding='utf-8')
         run_git('add', '-f', '--', 'main.tf')
         run_git('commit', '-q', '-m', 'terraform')
-        if history == 'other-branch':
+        if history == 'lightweight-tag':
+            run_git('-c', 'tag.gpgSign=false', 'tag', 'v1')
+        elif history == 'annotated-tag':
+            run_git('-c', 'tag.gpgSign=false', 'tag', '-a', 'v1', '-m', 'release')
+        if separate:
             run_git('checkout', '-q', '-')
+            if history.endswith('-tag'):
+                run_git('branch', '-q', '-D', 'infra')  # only the tag still reaches it
         else:
             run_git('rm', '-q', '--', 'main.tf')  # deleted in the index, still in HEAD
     for selected in configs:
@@ -145,7 +152,7 @@ def test_verifier_finds_terraform_whatever_the_pathspec_environment(tmp_path):
     assert '[SKIP]' not in result.stdout
 
 
-@pytest.mark.parametrize('history', ['staged-deletion', 'other-branch'])
+@pytest.mark.parametrize('history', ['staged-deletion', 'other-branch', 'lightweight-tag', 'annotated-tag'])
 def test_verifier_keeps_terraform_checks_for_commits_that_can_still_be_pushed(tmp_path, history):
     result = verify(tmp_path, APP_ONLY, history=history)
     assert result.returncode == 1, result.stdout + result.stderr

@@ -49,7 +49,7 @@ always checks Trivy, the hook manager, Python and Git. It skips Terraform, TFLin
 Checkov and `SCAN_TFLINT_CONFIG` only when all three are true: `scan-config.yaml` sets
 `languages.terraform.enabled: false`, it enables another language (choose one with
 `--languages` at setup), and no `.tf` or `.tf.json` file exists in the working tree,
-the index or a local branch tip. Otherwise it requires them. The commit and push hooks
+the index, a local branch tip or a tag. Otherwise it requires them. The commit and push hooks
 need those tools when `.tf` or `.tf.json` files change.
 
 **Note 2: Terraform-only repositories that use Lefthook need Prettier.** The Lefthook
@@ -100,7 +100,7 @@ outside the repository.
 | Variable | Needed when | Value set in Getting started |
 |---|---|---|
 | `PATH` | Always | Scanner virtual environment first, then `~/.local-scanning-tools/bin` (and the pre-commit environment if you use pre-commit). |
-| `SCAN_TFLINT_CONFIG` | Terraform push hook, and the setup verifier for every repository | `~/.config/auto-code-scanning/<provider>/tflint.hcl` |
+| `SCAN_TFLINT_CONFIG` | Terraform push hook, and the setup verifier while Terraform is in scope (note 1) | `~/.config/auto-code-scanning/<provider>/tflint.hcl` |
 | `SCAN_TFLINT_PLUGIN_DIR` | Same as above | `~/.config/auto-code-scanning/<provider>/plugins` |
 | `SCAN_PRETTIER_BIN`, `SCAN_PRETTIER_CONFIG` | Lefthook, whenever formatted files are staged | `~/.config/auto-code-scanning/formatters/...` |
 | `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG` | Lefthook with TypeScript or JavaScript | Your external ESLint install and config |
