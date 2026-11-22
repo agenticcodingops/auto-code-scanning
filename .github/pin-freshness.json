@@ -17,6 +17,10 @@
           "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
         },
         {
+          "file": ".github/workflows/codex-task.yml",
+          "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
+        },
+        {
           "file": ".github/workflows/copilot-setup-steps.yml",
           "pattern": "TRIVY_VERSION:\\s*\"(?P<value>\\d+(?:\\.\\d+)*)\""
         },
@@ -76,6 +80,10 @@
             },
             {
               "file": ".github/workflows/code-security-scan.yml",
+              "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
+            },
+            {
+              "file": ".github/workflows/codex-task.yml",
               "pattern": "TRIVY_SHA256:\\s*\"(?P<value>[0-9a-f]{64})\""
             },
             {

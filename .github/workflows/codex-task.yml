@@ -98,6 +98,7 @@ jobs:
 
       # Collect and upload even when Codex fails or times out, so partial work isn't lost.
       - name: Collect the patch
+        id: collect
         if: always() && steps.codex.conclusion != 'skipped'
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
@@ -109,7 +110,20 @@ jobs:
             git reset --soft "$BASE_SHA"
           fi
           git add -A
-          git diff --cached --binary > "$RUNNER_TEMP/codex-result/codex.patch"
+          # Agent configuration is not part of a fix (the same list as autonomous-fix.yml).
+          for p in .claude .claude-pr .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
+            if [ -n "$(git diff --cached --name-only -- "$p")" ]; then
+              echo "::warning::Left out of the patch: $p (agent configuration)."
+              git reset -q -- "$p"
+            fi
+          done
+          # The secret scan below can't read binary hunks, so binary changes are never published.
+          binary="$(git diff --cached --numstat --no-renames | awk -F'\t' '$1 == "-" && $2 == "-" {print $3}')"
+          if [ -n "$binary" ]; then
+            printf '::error::The patch changes binary files, which are never published:\n%s\n' "$binary"
+            exit 1
+          fi
+          git diff --cached --no-ext-diff --no-textconv > "$RUNNER_TEMP/codex-result/codex.patch"
           git diff --cached --stat > "$RUNNER_TEMP/codex-result/stat.txt"
           cp "$RUNNER_TEMP/codex-final-message.md" "$RUNNER_TEMP/codex-result/final-message.md" || true
           echo "$BASE_SHA" > "$RUNNER_TEMP/codex-result/base-sha.txt"
@@ -119,8 +133,42 @@ jobs:
           fi
           cat "$RUNNER_TEMP/codex-result/stat.txt" >> "$GITHUB_STEP_SUMMARY"
 
+      # Installed after Codex has finished, so nothing Codex did can replace the binary.
+      - name: Install Trivy
+        if: always() && steps.collect.outcome == 'success'
+        env:
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/codex-trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/trivy.tar.gz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  $dir/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$dir/trivy.tar.gz" -C "$dir" trivy
+
+      # Artifacts of a public repository can be downloaded by any signed-in GitHub user, so the
+      # whole result (patch and Codex's final message) is secret-scanned before it is published.
+      - name: Secret-scan the result
+        id: scan
+        if: always() && steps.collect.outcome == 'success'
+        run: |
+          set -euo pipefail
+          scan_dir="$(mktemp -d "$RUNNER_TEMP/codex-scan.XXXXXX")"
+          trap 'rm -rf -- "$scan_dir"' EXIT
+          cp -r -- "$RUNNER_TEMP/codex-result" "$scan_dir/payload"
+          # Run outside the checkout, so no trivy.yaml or .trivyignore Codex wrote can change the result.
+          cd "$scan_dir"
+          if ! "$RUNNER_TEMP/codex-trivy/trivy" fs "$scan_dir/payload" \
+            --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet \
+            --cache-dir "$scan_dir/cache" > "$scan_dir/scan.log" 2>&1; then
+            # The log isn't printed: job logs of a public repository are public too.
+            echo "::error::The secret scan failed or found a secret; nothing is uploaded. Re-run the task locally to inspect it."
+            exit 1
+          fi
+
       - name: Upload the result
-        if: always() && steps.codex.conclusion != 'skipped'
+        if: always() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: codex-result-${{ inputs.request_id }}

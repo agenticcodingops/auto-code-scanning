@@ -34,8 +34,10 @@ gh run download "$run" -n "codex-result-$id" -D "<a folder outside the checkout>
 ```
 
 The artifact holds `codex.patch`, `stat.txt`, `final-message.md` (Codex's summary and test results) and
-`base-sha.txt`. If it also holds `TOUCHES-WORKFLOWS`, the patch edits `.github/workflows/`: read it closely before
-applying.
+`base-sha.txt`. Before upload, the workflow leaves agent configuration (`CLAUDE.md`, `.claude/`, `.mcp.json` and
+similar) out of the patch, refuses binary changes, and secret-scans the result with Trivy; if the scan fails or
+finds a secret, nothing is uploaded and the job log doesn't show the match. If the artifact also holds
+`TOUCHES-WORKFLOWS`, the patch edits `.github/workflows/`: read it closely before applying.
 
 To land it, in a clean checkout of the base commit: create a branch, `git apply --check codex.patch`,
 `git apply codex.patch`, read the diff, stage files by name, commit with a Conventional Commit title, push and open
