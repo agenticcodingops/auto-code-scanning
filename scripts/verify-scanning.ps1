@@ -85,16 +85,27 @@ function Add-SkippedCheck {
 }
 
 function Get-TerraformScope {
-    # Only a successfully parsed, explicit YAML boolean false can remove checks.
+    # Remove checks only for an application-only repository: Terraform is an explicit
+    # YAML boolean false, another language is explicitly true (setup without
+    # -Languages leaves all of them false), and there are no Terraform files (the
+    # hooks select those by extension, whatever scan-config.yaml says).
     # Inline trusted code and isolated Python cannot import consumer modules.
     # Keep -c on one line so Windows command launchers preserve the argument.
-    $scopeParser = "import sys, yaml; from pathlib import Path; document = yaml.safe_load(Path(sys.argv[1]).read_text(encoding='utf-8-sig')); enabled = document['languages']['terraform']['enabled']; print('excluded' if enabled is False else 'required')"
+    $scopeParser = "import sys, yaml; from pathlib import Path; document = yaml.safe_load(Path(sys.argv[1]).read_text(encoding='utf-8-sig')); languages = document['languages']; enabled = languages['terraform']['enabled']; chosen = any(isinstance(value, dict) and value.get('enabled') is True for key, value in languages.items() if key != 'terraform'); print('excluded' if enabled is False and chosen else 'required')"
     try {
         $python = Resolve-VerifiedTool -Name python -Label Python
         $scopeResult = & $python -I -c $scopeParser (Join-Path (Get-Location).Path 'scan-config.yaml') 2>&1
         if ($LASTEXITCODE -ne 0) { throw ($scopeResult -join "`n") }
-        if (($scopeResult -join "`n") -ceq 'excluded') { return $false }
-        Write-Info 'Terraform remains in scope: scan-config.yaml does not explicitly disable it'
+        if (($scopeResult -join "`n") -cne 'excluded') {
+            Write-Info 'Terraform remains in scope: scan-config.yaml does not disable it in favour of another language'
+            return $true
+        }
+        $git = Resolve-VerifiedTool -Name git -Label Git
+        # fsmonitor is a command that repository configuration can set: never run it here.
+        $terraformFiles = & $git -c core.fsmonitor=false ls-files --cached --others --exclude-standard -- ':(top,icase,glob)**/*.tf' ':(top,icase,glob)**/*.tf.json' 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'could not list repository files' }
+        if (-not $terraformFiles) { return $false }
+        Write-Info 'Terraform remains in scope: the repository has Terraform files, which the hooks scan'
     }
     catch {
         Write-Warn "Cannot determine Terraform scope; Terraform remains in scope: $_"
@@ -147,7 +158,7 @@ if (-not $PSBoundParameters.ContainsKey('HooksRunner')) {
     }
 }
 $terraformEnabled = Get-TerraformScope
-$terraformSkipReason = 'languages.terraform.enabled is explicitly false in scan-config.yaml'
+$terraformSkipReason = 'languages.terraform.enabled is explicitly false, another language is enabled and there are no Terraform files'
 $runnerConfig = if ($HooksRunner -eq 'lefthook') { 'lefthook.yml' } else { '.pre-commit-config.yaml' }
 $runnerRunArgs = if ($HooksRunner -eq 'lefthook') { @('run', 'pre-commit', '--all-files') } else { @('run', '--all-files') }
 

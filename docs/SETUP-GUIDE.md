@@ -49,9 +49,12 @@ require it merely because its configuration tier is strict.
 
 The setup verifier (`scripts/verify-scanning.ps1`, which setup runs at the end)
 skips Terraform, TFLint and Checkov tools, their configuration checks and TFLint
-initialization only when `scan-config.yaml` parses successfully with
-`languages.terraform.enabled` explicitly set to boolean `false`. Missing or invalid
-configuration, non-boolean values and unavailable parsers keep Terraform in scope.
+initialization only for an application-only repository. That means all three of:
+`scan-config.yaml` sets `languages.terraform.enabled` to boolean `false`, it sets at
+least one other language to `true`, and the repository has no `.tf` or `.tf.json`
+files (tracked, or untracked and not ignored). Setup without `--languages` enables no
+language, so it keeps the Terraform checks. Missing or invalid configuration,
+non-boolean values and unavailable parsers also keep Terraform in scope.
 Skipped checks are labeled with the reason and counted separately from passes.
 Trivy, Python, Git, the selected runner and hook-installation checks remain required.
 Without `-HooksRunner`, the verifier selects the runner whose configuration is the

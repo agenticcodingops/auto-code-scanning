@@ -10,9 +10,11 @@ import pytest
 from .tool_helpers import application
 
 ROOT = Path(__file__).resolve().parents[2]
+APP_ONLY = 'languages: {terraform: {enabled: false}, csharp: {enabled: true}}'
 
 
-def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='normal'):
+def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='normal',
+           files=(), track=False):
     pwsh, git = shutil.which('pwsh'), shutil.which('git')
     if not pwsh:
         pytest.skip('PowerShell unavailable')
@@ -21,6 +23,12 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
     subprocess.run([git, 'init', '-q', str(repo)], check=True, capture_output=True)
     if config is not None:
         (repo / 'scan-config.yaml').write_text(config, encoding='utf-8')
+    for name in files:
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_text('', encoding='utf-8')
+        if track:
+            subprocess.run([git, '-C', str(repo), 'add', '-f', '--', name], check=True, capture_output=True)
+            (repo / name).unlink()  # the index alone must keep Terraform in scope
     for selected in configs:
         source = (ROOT / 'templates/lefthook/lefthook.yml' if selected == 'lefthook'
                   else ROOT / 'templates/standard/pre-commit-config.yaml')
@@ -66,7 +74,7 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
 
 
 def test_app_only_verifier_skips_terraform_checks(tmp_path):
-    result = verify(tmp_path, 'languages:\n  terraform:\n    enabled: false\n')
+    result = verify(tmp_path, APP_ONLY)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'Overall Status: PASSED' in result.stdout
     assert 'lefthook pre-commit hook installed' in result.stdout
@@ -85,6 +93,11 @@ def test_app_only_verifier_skips_terraform_checks(tmp_path):
     'languages: {terraform: {enabled: 0}}',
     'languages: {terraform: {enabled: null}}',
     'languages: {terraform: false}', 'languages: []', '[]', 'invalid: [',
+    # Setup without --languages renders every language false: nothing was chosen.
+    'languages: {terraform: {enabled: false}}',
+    'languages: {terraform: {enabled: false}, csharp: {enabled: false}}',
+    'languages: {terraform: {enabled: false}, csharp: {enabled: "true"}}',
+    'languages: {terraform: {enabled: false}, csharp: true}',
 ])
 def test_verifier_scope_fails_closed(tmp_path, config):
     result = verify(tmp_path, config)
@@ -97,9 +110,20 @@ def test_verifier_scope_fails_closed(tmp_path, config):
     assert '[SKIP]' not in result.stdout
 
 
+@pytest.mark.parametrize('track', [False, True], ids=['untracked', 'index-only'])
+@pytest.mark.parametrize('name', ['main.tf', 'infra/modules/net/main.tf', 'MAIN.TF', 'infra/main.tf.json'])
+def test_verifier_keeps_terraform_checks_when_the_repository_has_terraform(tmp_path, name, track):
+    # The hooks select files by extension, so they still need the tools here.
+    result = verify(tmp_path, APP_ONLY, files=(name,), track=track)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
+    assert 'Terraform remains in scope' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
 @pytest.mark.parametrize('python_mode', ['no-parser', 'failure', 'inside', 'missing'])
 def test_verifier_scope_requires_a_trusted_working_parser(tmp_path, python_mode):
-    result = verify(tmp_path, 'languages: {terraform: {enabled: false}}',
+    result = verify(tmp_path, APP_ONLY,
                     python_mode=python_mode)
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'Terraform NOT FOUND' in result.stdout
@@ -115,7 +139,7 @@ def test_verifier_scope_requires_a_trusted_working_parser(tmp_path, python_mode)
     (('pre-commit',), 'lefthook', 'lefthook'),
 ])
 def test_verifier_runner_detection_and_explicit_override(tmp_path, configs, runner, expected):
-    result = verify(tmp_path, 'languages: {terraform: {enabled: false}}', configs, runner)
+    result = verify(tmp_path, APP_ONLY, configs, runner)
     assert f'3. Checking {expected} Hooks' in result.stdout
     if expected in configs:
         assert result.returncode == 0, result.stdout + result.stderr
