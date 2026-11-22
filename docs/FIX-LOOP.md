@@ -205,8 +205,10 @@ Create these in your repository (Settings > Secrets and variables > Actions, or
 | `AUTOFIX_TOKEN` (required) | A **fine-grained personal access token** with access to **only this repository** and **Contents: Read and write**. The reusable workflow uses it in exactly one step, a `git push` of the vetted commit to the pull request's branch; Contents write is what that push needs. Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail. This narrow scope has not been tested on github.com. Set a short expiry and rotate it. A push made with the built-in `GITHUB_TOKEN` would not start your other workflows, which is why a separate token is used. |
 | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | A model credential for the agent step. Only the `Run Claude Code (FIX-ONLY)` step receives it. Without one, the agent produces no patch and the run ends with no change. |
 
-Setup's check looks for `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` only, so it warns about
-a missing `ANTHROPIC_API_KEY` even when you use `CLAUDE_CODE_OAUTH_TOKEN` instead.
+Setup checks `AUTOFIX_TOKEN` independently and accepts either `ANTHROPIC_API_KEY` or
+`CLAUDE_CODE_OAUTH_TOKEN` for the model credential. It reports which names were found.
+Organisation secrets are not listed; check their repository access separately. If
+listing fails, setup says it could not verify secrets rather than reporting them missing.
 
 **Cost.** Every run of the agent step uses the model credential you supply, so model
 usage is billed to your Anthropic account (API key) or counts against your Claude

@@ -187,23 +187,40 @@ def main(argv) -> int:
                 r = subprocess.run([tools["gh"], "label", "create", name, "--color", color, "--description", desc, "--force"],
                                    cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
                 ok(f"label {name}") if r.returncode == 0 else warn(f"could not create {name}: {r.stderr.strip()}")
-            present = []
-            r = subprocess.run([tools["gh"], "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            if r.returncode == 0:
+            info("Organisation secrets are not listed; check their repository access separately.")
+            present = None
+            try:
+                r = subprocess.run([tools["gh"], "secret", "list", "--json", "name"], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                if r.returncode == 0:
+                    listed = json.loads(r.stdout)
+                    if isinstance(listed, list) and all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in listed):
+                        present = [item["name"] for item in listed]
+            except (OSError, ValueError, TypeError):
+                pass
+            # Older gh versions do not support --json on secret list.
+            if present is None:
                 try:
-                    present = [s["name"] for s in json.loads(r.stdout)]
-                except Exception:
-                    present = []
-            for need in ("AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"):
-                if need in present:
-                    ok(f"secret {need} present")
+                    r = subprocess.run([tools["gh"], "secret", "list"], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                    if r.returncode == 0:
+                        present = [line.split()[0] for line in r.stdout.splitlines() if line.strip()]
+                except OSError:
+                    pass
+            if present is None:
+                warn("could not verify secrets; check AUTOFIX_TOKEN and either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN manually.")
+            else:
+                if "AUTOFIX_TOKEN" in present:
+                    ok("secret AUTOFIX_TOKEN present")
                 else:
-                    warn(f"secret {need} MISSING — create it (this script never stores secrets):")
-                    if need == "AUTOFIX_TOKEN":
-                        print("    Fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.):")
-                        print("      gh secret set AUTOFIX_TOKEN")
-                    else:
-                        print("      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN")
+                    warn("secret AUTOFIX_TOKEN MISSING - create it (this script never stores secrets):")
+                    print("    Fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.):")
+                    print("      gh secret set AUTOFIX_TOKEN")
+                model_credentials = [name for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN") if name in present]
+                if model_credentials:
+                    for name in model_credentials:
+                        ok(f"secret {name} present")
+                else:
+                    warn("model credential MISSING - create either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (this script never stores secrets).")
+                    print("      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN")
         else:
             warn("gh CLI not found — cannot create labels or verify secrets. Install it, then re-run.")
 

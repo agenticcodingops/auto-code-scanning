@@ -256,7 +256,9 @@ names no particular workflow, and the reusable workflow refuses it (the `config`
 - **Operator STOP:** yes. A person creates the secrets; no script does.
 
 The setup creates the `ai-autofix` and `needs-human-review` labels, and only checks that
-`AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` exist. Create any that are missing (see
+`AUTOFIX_TOKEN` and either `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` exist.
+Organisation secrets are not listed; check their repository access separately.
+Create any that are missing (see
 [FIX-LOOP.md](FIX-LOOP.md#secrets) for the token's permissions):
 
 ```bash

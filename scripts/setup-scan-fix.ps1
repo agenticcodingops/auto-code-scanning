@@ -220,18 +220,43 @@ if ($EnableFixLoop) {
             try { & $setupTools['gh'] label create "ai-autofix" --color 1D76DB --description "Opt this PR into the autonomous fix-loop" --force | Out-Null; Ok "label ai-autofix" } catch { Warn "could not create ai-autofix label: $_" }
             try { & $setupTools['gh'] label create "needs-human-review" --color B60205 --description "Autonomous fix loop stopped; needs a human" --force | Out-Null; Ok "label needs-human-review" } catch { Warn "could not create needs-human-review label: $_" }
 
+            Info "Organisation secrets are not listed; check their repository access separately."
             $secrets = @()
-            try { $secrets = (& $setupTools['gh'] secret list --json name 2>$null | ConvertFrom-Json).name } catch { $secrets = (& $setupTools['gh'] secret list 2>$null | ForEach-Object { ($_ -split '\s+')[0] }) }
-            foreach ($need in @("AUTOFIX_TOKEN", "ANTHROPIC_API_KEY")) {
-                if ($secrets -contains $need) { Ok "secret $need present" }
+            $verified = $false
+            try {
+                $listedJson = & $setupTools['gh'] secret list --json name 2>$null
+                if ($LASTEXITCODE -ne 0) { throw 'secret list --json failed' }
+                $entries = ConvertFrom-Json -InputObject ($listedJson -join "`n") -NoEnumerate -ErrorAction Stop
+                if ($entries -isnot [array]) { throw 'secret list did not return an array' }
+                $secrets = @($entries | ForEach-Object {
+                    if ($_.name -isnot [string]) { throw 'secret list entry has no name' }
+                    $_.name
+                })
+                $verified = $true
+            } catch {
+                # Older gh versions do not support --json on secret list.
+                try {
+                    $listedText = & $setupTools['gh'] secret list 2>$null
+                    if ($LASTEXITCODE -ne 0) { throw 'secret list failed' }
+                    $secrets = @($listedText | Where-Object { $_.Trim() } | ForEach-Object { ($_ -split '\s+')[0] })
+                    $verified = $true
+                } catch { $verified = $false }
+            }
+            if (-not $verified) {
+                Warn "could not verify secrets; check AUTOFIX_TOKEN and either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN manually."
+            } else {
+                if ($secrets -contains "AUTOFIX_TOKEN") { Ok "secret AUTOFIX_TOKEN present" }
                 else {
-                    Warn "secret $need MISSING — create it (this script never stores secrets):"
-                    if ($need -eq "AUTOFIX_TOKEN") {
-                        Write-Host "    Create a fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.), then:" -ForegroundColor Yellow
-                        Write-Host "      gh secret set AUTOFIX_TOKEN" -ForegroundColor Yellow
-                    } else {
-                        Write-Host "      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN" -ForegroundColor Yellow
-                    }
+                    Warn "secret AUTOFIX_TOKEN MISSING - create it (this script never stores secrets):"
+                    Write-Host "    Create a fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.), then:" -ForegroundColor Yellow
+                    Write-Host "      gh secret set AUTOFIX_TOKEN" -ForegroundColor Yellow
+                }
+                $modelCredentials = @("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN") | Where-Object { $secrets -contains $_ }
+                if ($modelCredentials) {
+                    foreach ($name in $modelCredentials) { Ok "secret $name present" }
+                } else {
+                    Warn "model credential MISSING - create either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (this script never stores secrets)."
+                    Write-Host "      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN" -ForegroundColor Yellow
                 }
             }
         } finally { Pop-Location }
