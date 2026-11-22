@@ -7,7 +7,8 @@
 .DESCRIPTION
   This is the heavy, shared logic referenced by templates/claude/. The thin
   per-repo .claude hooks call into it. The secrets, semgrep and terraform scans
-  skip a missing trivy or semgrep; the C# and TypeScript scans fail on one.
+  skip a missing trivy or semgrep. A C# scan in use fails without dotnet, and the
+  TypeScript scan keeps its Semgrep hook's default blocking.
   Real findings give a non-zero exit so the Stop hook can block "done".
   C# scans run when languages.csharp.enabled is true or the working tree contains
   .sln, .slnx or .csproj files (excluding .git, bin, obj and node_modules).
