@@ -1,0 +1,176 @@
+name: Codex task
+
+# Runs one maintainer-dispatched coding task with Codex on a GitHub-hosted runner and uploads the result as a
+# patch. It pushes nothing and opens nothing: the dispatcher applies the patch to a branch and opens the PR
+# under its own account, so the normal CI and reviews run on it (a PR opened with GITHUB_TOKEN would start no
+# workflows). See docs/maintainers/CODEX-TASKS.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: The task for Codex (plain text)
+        required: true
+        type: string
+      base:
+        description: Branch to start from
+        required: true
+        default: main
+        type: string
+      request_id:
+        description: Caller-chosen ID; names the run and the artifact
+        required: true
+        type: string
+
+run-name: codex-${{ inputs.request_id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-task-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    # Only the maintainer accounts may spend the API key. workflow_dispatch already needs write access;
+    # this names the accounts rather than trusting every writer.
+    if: contains(fromJSON('["vibecoddingops","agenticcodingops-orchestrator"]'), github.actor)
+    runs-on: ubuntu-latest
+    # Bounds the API spend of one run; a task that needs longer should be split.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.base }}
+          persist-credentials: false
+
+      # Record the base before Codex runs, so a commit it makes anyway is folded back into the patch.
+      - name: Record the base commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.11"
+
+      # Codex runs without network access (the :workspace profile), so install what the tests need first.
+      - name: Install test dependencies
+        run: |
+          pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+
+      # Keep Checkov separate from the test runner's packaging dependencies, as copilot-setup-steps.yml does.
+      - name: Install Checkov
+        run: |
+          python -m venv "$RUNNER_TEMP/checkov"
+          "$RUNNER_TEMP/checkov/bin/python" -m pip install checkov==3.4.5
+          mkdir -p "$RUNNER_TEMP/checkov-launcher"
+          ln -s "$RUNNER_TEMP/checkov/bin/checkov" "$RUNNER_TEMP/checkov-launcher/checkov"
+          echo "$RUNNER_TEMP/checkov-launcher" >> "$GITHUB_PATH"
+
+      - name: Write the prompt
+        env:
+          TASK: ${{ inputs.task }}
+        run: |
+          {
+            printf '%s\n\n' "$TASK"
+            cat <<'EOF'
+          Rules:
+          - Follow CONTRIBUTING.md. Make the smallest complete change; add or update tests for behaviour changes.
+          - Run the affected tests (python -m pytest <files>; Pester with Invoke-Pester for tests/unit/) and report
+            the exact commands and results. You have no network access; say which checks you could not run.
+          - Do not edit anything under .github/workflows/. Do not commit; leave the changes in the working tree.
+          - Finish with a short summary: files changed, why, and test results.
+          EOF
+          } > "$RUNNER_TEMP/codex-prompt.md"
+
+      - name: Run Codex
+        id: codex
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec  # v1.14
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.171.0"
+          permission-profile: ":workspace"
+          prompt-file: ${{ runner.temp }}/codex-prompt.md
+          output-file: ${{ runner.temp }}/codex-final-message.md
+          effort: high
+
+      # Collect and upload even when Codex fails or times out, so partial work isn't lost.
+      - name: Collect the patch
+        id: collect
+        if: always() && steps.codex.conclusion != 'skipped'
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codex-result"
+          if [ "$(git rev-parse HEAD)" != "$BASE_SHA" ]; then
+            echo "::warning::Codex committed despite the prompt; folding its commits back into the patch."
+            git reset --soft "$BASE_SHA"
+          fi
+          git add -A
+          # Agent configuration is not part of a fix (the same list as autonomous-fix.yml).
+          for p in .claude .claude-pr .mcp.json .claude.json CLAUDE.md CLAUDE.local.md .gitmodules .ripgreprc .husky; do
+            if [ -n "$(git diff --cached --name-only -- "$p")" ]; then
+              echo "::warning::Left out of the patch: $p (agent configuration)."
+              git reset -q -- "$p"
+            fi
+          done
+          # The secret scan below can't read binary hunks, so binary changes are never published.
+          binary="$(git diff --cached --numstat --no-renames | awk -F'\t' '$1 == "-" && $2 == "-" {print $3}')"
+          if [ -n "$binary" ]; then
+            printf '::error::The patch changes binary files, which are never published:\n%s\n' "$binary"
+            exit 1
+          fi
+          git diff --cached --no-ext-diff --no-textconv > "$RUNNER_TEMP/codex-result/codex.patch"
+          git diff --cached --stat > "$RUNNER_TEMP/codex-result/stat.txt"
+          cp "$RUNNER_TEMP/codex-final-message.md" "$RUNNER_TEMP/codex-result/final-message.md" || true
+          echo "$BASE_SHA" > "$RUNNER_TEMP/codex-result/base-sha.txt"
+          if git diff --cached --name-only | grep -q '^\.github/workflows/'; then
+            echo "::error::The patch edits .github/workflows/; review it by hand before applying."
+            touch "$RUNNER_TEMP/codex-result/TOUCHES-WORKFLOWS"
+          fi
+          cat "$RUNNER_TEMP/codex-result/stat.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      # Installed after Codex has finished, so nothing Codex did can replace the binary.
+      - name: Install Trivy
+        if: always() && steps.collect.outcome == 'success'
+        env:
+          TRIVY_VERSION: "0.76.2"
+          TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/codex-trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/trivy.tar.gz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  $dir/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$dir/trivy.tar.gz" -C "$dir" trivy
+
+      # Artifacts of a public repository can be downloaded by any signed-in GitHub user, so the
+      # whole result (patch and Codex's final message) is secret-scanned before it is published.
+      - name: Secret-scan the result
+        id: scan
+        if: always() && steps.collect.outcome == 'success'
+        run: |
+          set -euo pipefail
+          scan_dir="$(mktemp -d "$RUNNER_TEMP/codex-scan.XXXXXX")"
+          trap 'rm -rf -- "$scan_dir"' EXIT
+          cp -r -- "$RUNNER_TEMP/codex-result" "$scan_dir/payload"
+          # Run outside the checkout, so no trivy.yaml or .trivyignore Codex wrote can change the result.
+          cd "$scan_dir"
+          if ! "$RUNNER_TEMP/codex-trivy/trivy" fs "$scan_dir/payload" \
+            --scanners secret --severity CRITICAL,HIGH --exit-code 1 --quiet \
+            --cache-dir "$scan_dir/cache" > "$scan_dir/scan.log" 2>&1; then
+            # The log isn't printed: job logs of a public repository are public too.
+            echo "::error::The secret scan failed or found a secret; nothing is uploaded. Re-run the task locally to inspect it."
+            exit 1
+          fi
+
+      - name: Upload the result
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: codex-result-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/codex-result/
+          retention-days: 14

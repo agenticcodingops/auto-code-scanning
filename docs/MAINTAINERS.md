@@ -186,3 +186,8 @@ prose there does not reach the release notes.
 Every version pin in the repository, and how pin updates arrive, is listed in
 [the pin inventory](maintainers/PIN-INVENTORY.md) and
 [pin freshness](PIN-FRESHNESS.md).
+
+## Codex tasks
+
+Maintainers can hand a coding task to OpenAI Codex on a GitHub-hosted runner with the `Codex task`
+workflow; it returns a patch to apply by hand. Setup and use: [Codex tasks](maintainers/CODEX-TASKS.md).
