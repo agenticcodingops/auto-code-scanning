@@ -1,4 +1,5 @@
 """Keep the subprocess-heavy Python suite parallel in the self-test workflow."""
+from importlib.util import cache_from_source
 from pathlib import Path
 import re
 import shlex
@@ -25,3 +26,13 @@ def test_python_ci_uses_pinned_xdist_and_work_stealing():
     assert command[command.index('-n') + 1] == 'auto'
     assert command[command.index('--dist') + 1] == 'worksteal'
     assert job['timeout-minutes'] == 25
+
+
+def test_shared_sources_are_compiled_before_workers_copy_them():
+    # Setup tests copy the live hooks and scripts directories, some of them from
+    # subprocesses. A worker publishing bytecode there mid-copy breaks the copy,
+    # so the controller must leave nothing for a worker to publish.
+    sources = [path for folder in ('hooks', 'scripts') for path in (ROOT / folder).rglob('*.py')
+               if '__pycache__' not in path.parts]
+    assert sources
+    assert [str(path) for path in sources if not Path(cache_from_source(str(path))).is_file()] == []
