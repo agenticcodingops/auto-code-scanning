@@ -379,6 +379,18 @@ them per repo (e.g. `setup-scan-fix.py --languages csharp`).
 - **Runner resolution**: trusted external `SCAN_ESLINT_BIN` and `SCAN_ESLINT_CONFIG`
   by default (ESLint 9+). Missing trusted inputs block. Repository-local/npx
   resolution requires explicit `SCAN_TRUST_REPO_CODE=1` in a trusted repository.
+- **Incomplete scan**: With a TS/JS file staged, a `working_dir` that is not an
+  existing directory -> exit 1. So does finding no runner under
+  `SCAN_TRUST_REPO_CODE=1` (the Bash hook also probes `npx --no-install`; the
+  PowerShell hook accepts any `npx` on PATH). Fix `working_dir` or provision the
+  runner. `SCAN_ALLOW_TOOL_ERRORS=1` turns both into warnings, but it also relaxes
+  other hooks, including the secret scanners.
+- **Path spelling**: `working_dir` is matched as written against Git's paths. For an
+  existing directory written differently (for example `./web`, blank or in another
+  letter case), a warning says when nothing under it was selected, and the exit code
+  stays 0. Write `web`, or `.` for the repository root.
+- **Upgrade note**: Earlier releases exited 0 for a missing `working_dir` and for a
+  missing runner in trusted-repository mode. Check both before upgrading.
 - **Behavior**: Auto-fixes in place. Remaining errors -> exit 1 (re-stage and
   re-commit). Under Lefthook, `stage_fixed: true` re-stages auto-fixed files
 
@@ -391,6 +403,9 @@ them per repo (e.g. `setup-scan-fix.py --languages csharp`).
 - **Working dir**: Reads `languages.typescript.build.working_dir`; trusted external
   `SCAN_PRETTIER_BIN` and `SCAN_PRETTIER_CONFIG` are required by default. The explicit
   trusted-repository opt-in permits local package resolution.
+- **Incomplete scan, path spelling and upgrade note**: As for `eslint`, applied to
+  every file type above. A wrong `working_dir` therefore also blocks a commit that
+  stages only Markdown or JSON.
 - **Behavior**: Reformats in place. Under Lefthook, `stage_fixed: true` re-stages;
   under pre-commit a modified file fails the hook so you re-stage and re-commit.
   A non-zero `prettier` exit (e.g. syntax error) -> exit 1

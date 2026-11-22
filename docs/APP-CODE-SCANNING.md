@@ -69,6 +69,12 @@ not read the external ignore file. Add an equivalent `**/schemas/**` rule to
 `.prettierignore` in that working directory when it includes vendored schemas.
 See [trusted-input migration](CONSUMER-MIGRATION.md#trusted-execution-and-output-migration).
 
+When matching files are staged, both hooks block as an incomplete scan if
+`languages.typescript.build.working_dir` is not an existing directory, or if
+trusted-repository mode finds no runner. Earlier releases passed in both cases, so
+before upgrading, fix the directory or provision the runner. The path-spelling rule
+and the local opt-in are described in the [hook reference](HOOK-REFERENCE.md#eslint).
+
 ## 2. The build path is **config**, never hardcoded
 
 The single most important design point: `dotnet-format` and `dotnet-build` read the solution

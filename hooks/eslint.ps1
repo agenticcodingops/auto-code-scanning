@@ -7,6 +7,48 @@ param([Parameter(ValueFromRemainingArguments)]$ExtraArgs)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\common.ps1"
 
+# An incomplete scan blocks. With the explicit local opt-in it warns and returns.
+function Confirm-IncompleteScan {
+    param([string]$Reason, [string]$Remedy)
+    if ($env:SCAN_ALLOW_TOOL_ERRORS -eq '1') {
+        Write-HookWarn "eslint: $Reason; scan incomplete, explicit local fail-open opt-in (SCAN_ALLOW_TOOL_ERRORS=1)"
+        return
+    }
+    Write-HookError "eslint: $Reason; scan incomplete. $Remedy"
+    exit 1
+}
+
+# Return 'inside' if the configured directory exists and holds one of the staged paths,
+# 'outside' if it exists and holds none, nothing if it does not exist. Blank means the
+# root, and ./, separators and letter case are tolerated. Python reads the value itself,
+# so the check does not depend on the console encoding. This is only a check: selection
+# and execution use the configured value unchanged.
+function Get-WorkingDirState {
+    param([string[]]$Paths)
+    $program = @'
+import os, pathlib, sys
+names = sys.stdin.buffer.read().split(b'\0')
+sys.path.insert(0, sys.argv[1])
+from scan_config import load_scan_config, read_value
+value = read_value(load_scan_config(sys.argv[2]), 'languages.typescript.build.working_dir', '.')
+root = found = pathlib.Path.cwd()
+for part in pathlib.Path(value.strip().replace('\\', '/')).parts:
+    step = found / part
+    if not step.is_dir():
+        step = next((p for p in found.iterdir() if p.name.lower() == part.lower() and p.is_dir()), None)
+        if step is None:
+            sys.exit()
+    found = step
+parents = {p for name in names for p in (root / os.fsdecode(name)).parents}
+print('inside' if any(p.is_dir() and p.samefile(found) for p in parents) else 'outside')
+'@
+    $config = if ($env:SCAN_CONFIG_FILE) { $env:SCAN_CONFIG_FILE } else { 'scan-config.yaml' }
+    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $python = Find-WorkingPython
+    # The leading NUL separates any preamble that Windows PowerShell writes to the pipe.
+    "`0$($Paths -join "`0")`0" | & $python -B -E -P -c $program "$PSScriptRoot/lib" $config
+}
+
 $allTs = Get-StagedFiles -Extensions @('ts', 'tsx', 'js', 'jsx')
 if (@($allTs).Count -eq 0) {
     Write-HookLog "PASS: No TS/JS files staged"
@@ -18,6 +60,15 @@ $workingDir = Read-ScanConfigValue -Key 'languages.typescript.build.working_dir'
 # => false PASS. Coerce back to repo-root before the prefix is built.
 if ([string]::IsNullOrWhiteSpace($workingDir)) { $workingDir = '.' }
 $wdPrefix = ($workingDir.TrimEnd('/', '\') + '/')
+$missingDir = "working_dir '$workingDir' is not an existing directory"
+$fixDir = 'Fix languages.typescript.build.working_dir in scan-config.yaml.'
+
+# Check before the prefix filter, which would report a missing directory as a PASS.
+$dirState = $null
+if ($workingDir -ne '.') {
+    $dirState = Get-WorkingDirState -Paths $allTs
+    if (-not $dirState) { Confirm-IncompleteScan $missingDir $fixDir }
+}
 
 $files = @()
 foreach ($f in $allTs) {
@@ -26,11 +77,15 @@ foreach ($f in $allTs) {
     elseif ($norm.StartsWith($wdPrefix)) { $files += $norm.Substring($wdPrefix.Length) }
 }
 if ($files.Count -eq 0) {
-    Write-HookLog "PASS: No staged TS/JS under '$workingDir'"
+    if ($dirState -eq 'inside') {
+        Write-HookWarn "eslint: nothing under working_dir '$workingDir' was selected, so nothing was linted. Write the value exactly as Git spells the directory, or '.' for the repository root."
+    } else {
+        Write-HookLog "PASS: No staged TS/JS under '$workingDir'"
+    }
     exit 0
 }
 
-# Resolve an eslint runner; fail-open (skip) if no eslint is set up. Resolve the
+# Resolve an eslint runner; finding none is an incomplete scan. Resolve the
 # working dir to an ABSOLUTE path so the local-bin path survives Push-Location below
 # (a relative path would double, e.g. mobile/mobile/node_modules/...), and check the
 # POSIX binary too so macOS/Linux find the local install.
@@ -47,7 +102,8 @@ elseif (Test-Path $localBinPosix) { $runner = $localBinPosix }
 elseif (Get-Command eslint -ErrorAction SilentlyContinue) { $runner = 'eslint' }
 elseif (Get-Command npx -ErrorAction SilentlyContinue) { $runner = 'npx'; $runnerArgs = @('--no-install', 'eslint') }
 else {
-    Write-HookWarn "eslint not found (no node_modules, eslint, or npx) - allowing commit (fail-open)"
+    Confirm-IncompleteScan "no eslint runner found (node_modules/.bin/eslint, eslint on PATH, or npx)" `
+        "Provision the eslint runner: install it in '$workingDir' (node_modules) or put it on PATH."
     exit 0
 }
 
@@ -69,10 +125,10 @@ if ($ExtraArgs) { $eslintArgs += $ExtraArgs }
 $eslintArgs += '--'
 $eslintArgs += $files
 
-# Guard Push-Location: under $ErrorActionPreference='Stop' a missing dir throws.
-# Fail-open (skip) if the working dir is gone.
+# Guard Push-Location: selected files need the directory exactly as configured. With
+# the opt-in, skip here, after the trusted-tool checks above, which still block.
 if (-not (Test-Path -LiteralPath $workingDirPath -PathType Container)) {
-    Write-HookWarn "working dir '$workingDirPath' not found - allowing commit (fail-open)"
+    Confirm-IncompleteScan $missingDir $fixDir
     exit 0
 }
 
