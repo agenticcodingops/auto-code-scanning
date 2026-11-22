@@ -43,7 +43,7 @@ external Python environment. Windows, from PowerShell 7:
 ```powershell
 python -m venv "$HOME/.venvs/acs-contribute"
 & "$HOME/.venvs/acs-contribute/Scripts/Activate.ps1"
-python -m pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+python -m pip install pytest==9.2.0 pytest-cov==7.1.0 pytest-xdist==3.8.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
 ```
 
@@ -52,7 +52,7 @@ macOS/Linux:
 ```bash
 python3 -m venv "$HOME/.venvs/acs-contribute"
 . "$HOME/.venvs/acs-contribute/bin/activate"
-python -m pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+python -m pip install pytest==9.2.0 pytest-cov==7.1.0 pytest-xdist==3.8.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 pwsh -NoProfile -Command 'Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0 -Force'
 ```
 
@@ -102,8 +102,13 @@ hosted dependency versions live in `.github/workflows/ci.yml`.
 From the checkout root, run the complete Python suite:
 
 ```bash
-python -m pytest tests/python/ -v --tb=short
+python -m pytest tests/python/ -n auto --dist worksteal -v --tb=short
 ```
+
+`-n auto` uses the available CPUs; `--dist worksteal` balances individual tests
+across workers, including the slow integration files. To debug serially, replace
+`-n auto` with `-n 0`. Tests must use unique temporary directories and restore
+process state; real pre-commit tests use the `isolated_pre_commit_home` fixture.
 
 Run the PowerShell suite with Pester 5 (a PowerShell test framework):
 
@@ -167,9 +172,9 @@ for f in templates/*/pre-commit-config.yaml configs/*/.checkov.yaml configs/*/po
 for f in schemas/*.json; do python -c "import json; json.load(open('$f'))"; done
 for f in configs/*/.checkov.yaml; do python -c "import yaml,sys; d=yaml.safe_load(open('$f')); sys.exit(1 if d and 'check' in d else 0)"; done
 
-# ci.yml "Run Python tests": Python 3.11 (setup-python v7.1.0), pytest
-python -m pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
-pytest tests/python/ -v --tb=short
+# ci.yml "Run Python tests": Python 3.11 (setup-python v7.1.0), pytest + xdist
+python -m pip install pytest==9.2.0 pytest-cov==7.1.0 pytest-xdist==3.8.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+pytest tests/python/ -n auto --dist worksteal -v --tb=short
 
 # ci.yml "Run Pester tests": Pester 5, shell pwsh
 pwsh -NoProfile -Command 'if (Test-Path "tests/unit/*.Tests.ps1") { Get-Module Pester | Remove-Module -Force; Import-Module Pester -MinimumVersion 5.0 -Force; $c = New-PesterConfiguration; $c.Run.Path = "tests/unit/"; $c.Run.Exit = $true; $c.Output.Verbosity = "Detailed"; Invoke-Pester -Configuration $c } else { Write-Host "No Pester tests found" }'

@@ -42,6 +42,12 @@ def repo_root():
 
 
 @pytest.fixture
+def isolated_pre_commit_home(tmp_path, monkeypatch):
+    """Keep real runner installs/runs out of other workers' and user caches."""
+    monkeypatch.setenv("PRE_COMMIT_HOME", str(tmp_path / "pre-commit-cache"))
+
+
+@pytest.fixture
 def fixtures_dir():
     """Return the test fixtures directory path."""
     return REPO_ROOT / "tests" / "fixtures"

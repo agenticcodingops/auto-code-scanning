@@ -334,6 +334,24 @@
       "precondition": "Install pre-commit in an environment separate from Checkov: its virtualenv dependency can require a newer `packaging` package than Checkov accepts."
     },
     {
+      "id": "pytest-xdist",
+      "locations": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "pattern": "(?i:(?<![\\w-])pytest-xdist==)(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": "CONTRIBUTING.md",
+          "pattern": "(?i:(?<![\\w-])pytest-xdist==)(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "pypi",
+        "package": "pytest-xdist"
+      },
+      "precondition": "Keep the parallel Python test command and contributor environment in sync; execnet is resolved as a transitive dependency."
+    },
+    {
       "id": "pytest-cov",
       "locations": [
         {

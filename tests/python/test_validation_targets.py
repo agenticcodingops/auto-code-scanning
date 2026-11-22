@@ -483,6 +483,7 @@ def test_native_runner_accepts_empty_git_transaction(consumer, package):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.usefixtures('isolated_pre_commit_home')
 def test_adapter_install_and_reinstall_with_real_runner(consumer, package):
     if not shutil.which('pre-commit'):
         pytest.skip('pre-commit unavailable')

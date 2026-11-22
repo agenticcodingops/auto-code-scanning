@@ -33,7 +33,9 @@ def command(folder, shell, body):
 
 
 def wait_for(paths, processes):
-    deadline = time.monotonic() + 20
+    # This bounds shell startup, not publication/retry time. Parallel pytest
+    # also starts other PowerShell processes on the runner's four CPUs.
+    deadline = time.monotonic() + 60
     while not all(path.exists() for path in paths):
         assert time.monotonic() < deadline, 'writers did not reach the publication barrier'
         for process in processes:
