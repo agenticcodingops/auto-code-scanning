@@ -5,7 +5,7 @@ BeforeAll {
     $fixtureScripts = Join-Path $root 'scripts'
     $content = (Get-Content (Join-Path $root 'scripts/verify-scanning.ps1') -Raw).Replace('$PSScriptRoot', '$fixtureScripts')
     $PSScriptRoot = Join-Path $root 'scripts'
-    . ([scriptblock]::Create($content.Substring(0, $content.IndexOf('Write-Header "Terraform'))))
+    . ([scriptblock]::Create($content.Substring(0, $content.IndexOf('Write-Header "Security'))))
     $tokens = $null
     $parseErrors = $null
     $ast = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$tokens, [ref]$parseErrors)

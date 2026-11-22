@@ -47,13 +47,17 @@ For those pre-commit templates, install `terraform-docs` from your managed packa
 and check `terraform-docs --version` before staging Terraform. Lefthook does not
 require it merely because its configuration tier is strict.
 
-**Application-only repositories still need the Terraform tools.** The setup verifier
-(`scripts/verify-scanning.ps1`, which setup runs at the end) always checks Trivy,
-Checkov, TFLint and Terraform, requires `SCAN_TFLINT_CONFIG`, and runs `tflint --init`.
-It ignores the languages you chose. So for an app-only repository, install Terraform,
-TFLint and Checkov and provision the trusted TFLint config in step 5 too; otherwise
-setup reports failed verification checks. Local tool versions come from PATH; they
-are not set by `scan-config.yaml`.
+The setup verifier (`scripts/verify-scanning.ps1`, which setup runs at the end)
+skips Terraform, TFLint and Checkov tools, their configuration checks and TFLint
+initialization only when `scan-config.yaml` parses successfully with
+`languages.terraform.enabled` explicitly set to boolean `false`. Missing or invalid
+configuration, non-boolean values and unavailable parsers keep Terraform in scope.
+Skipped checks are labeled with the reason and counted separately from passes.
+Trivy, Python, Git, the selected runner and hook-installation checks remain required.
+Without `-HooksRunner`, the verifier selects the runner whose configuration is the
+only one present, or defaults to Lefthook if both or neither are present; an explicit
+`-HooksRunner` always wins. Local tool versions come from PATH; they are not set by
+`scan-config.yaml`.
 
 On Windows, install Git for Windows (including Git Bash), Python and PowerShell 7
 from your managed package source. Open a new PowerShell 7 terminal after installation.

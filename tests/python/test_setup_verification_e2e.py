@@ -62,12 +62,14 @@ def test_setup_and_verification_on_fresh_consumer(tmp_path, entrypoint, runner, 
     provider = dict(starter='aws', standard='azure', strict='gcp')[tier]
     if entrypoint == 'py':
         command = [sys.executable, str(ROOT / 'scripts/setup-scan-fix.py'),
-                   '--repo-path', str(repo), '--tier', tier, '--hooks-runner', runner]
+                   '--repo-path', str(repo), '--tier', tier, '--hooks-runner', runner,
+                   '--languages', 'terraform']
         if provider != 'aws':
             command += ['--cloud-provider', provider]
     else:
         command = [pwsh, '-NoProfile', '-File', str(ROOT / 'scripts/setup-scan-fix.ps1'),
-                   '-RepoPath', str(repo), '-Tier', tier, '-HooksRunner', runner]
+                   '-RepoPath', str(repo), '-Tier', tier, '-HooksRunner', runner,
+                   '-Languages', 'terraform']
         if provider != 'aws':
             command += ['-CloudProvider', provider]
     result = run(command, repo, env)
