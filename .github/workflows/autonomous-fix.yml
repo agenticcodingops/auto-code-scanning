@@ -36,7 +36,7 @@
 # isolated (-I) so a module in the checkout is never imported.
 #
 # claude-code-action is SHA-pinned to v1.0.148, whose bundled CLI is past CLI 1.0.93,
-# the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 (a CLI flaw; the action's own version number is unrelated). This uses: pin is the source of truth.
+# the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 (a CLI flaw; the action's own version number is unrelated). The `uses:` pin in this workflow is the source of truth.
 # fix_loop.claude_code_action_ref is a schema-required mirror, not read at run time.
 # ============================================================================
 
