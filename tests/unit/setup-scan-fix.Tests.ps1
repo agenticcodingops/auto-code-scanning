@@ -147,3 +147,24 @@ Describe 'Setup executable identity' -Skip:([Environment]::OSVersion.Platform -n
         Resolve-SetupTool 'lefthook' | Should -Be $toolPath
     }
 }
+
+Describe 'Setup without Python' {
+    It 'Warns when EnableFixLoop cannot be applied to an existing config' {
+        function Step { param($m) }
+        function Warn { param($m) }
+        Mock Step {}
+        Mock Warn {}
+        $RepoPath = $TestDrive
+        $PlatformRoot = $root
+        $Tier = 'standard'
+        $Languages = ''
+        $CloudProvider = ''
+        $py = $null
+        $EnableFixLoop = $true
+        Set-Content -LiteralPath (Join-Path $RepoPath 'scan-config.yaml') -Value 'fix_loop: {enabled: false}'
+        $start = $content.IndexOf('Step "scan-config.yaml')
+        $end = $content.IndexOf('# 2) Vendor', $start)
+        & ([scriptblock]::Create($content.Substring($start, $end - $start)))
+        Should -Invoke Warn -Times 1 -Exactly -ParameterFilter { $m -like '*-EnableFixLoop could not be applied*' }
+    }
+}

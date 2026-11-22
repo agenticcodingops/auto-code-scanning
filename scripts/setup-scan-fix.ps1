@@ -124,6 +124,7 @@ if ($py) {
     & $py @renderArgs
     Ok "scan-config.yaml ready"
 } else {
+    if ($EnableFixLoop) { Warn "-EnableFixLoop could not be applied without Python; review fix_loop.enabled in scan-config.yaml manually." }
     if (-not (Test-Path $cfgOut)) { Copy-IfNewer (Join-Path $PlatformRoot "templates/scan-config/$Tier.yaml") $cfgOut; Warn "Copied $Tier template verbatim (enable languages manually)" }
 }
 
