@@ -14,7 +14,7 @@ APP_ONLY = 'languages: {terraform: {enabled: false}, csharp: {enabled: true}}'
 
 
 def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='normal',
-           files=(), track=False):
+           files=(), track=False, git_env=None, history=None):
     pwsh, git = shutil.which('pwsh'), shutil.which('git')
     if not pwsh:
         pytest.skip('PowerShell unavailable')
@@ -29,6 +29,21 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
         if track:
             subprocess.run([git, '-C', str(repo), 'add', '-f', '--', name], check=True, capture_output=True)
             (repo / name).unlink()  # the index alone must keep Terraform in scope
+    if history:
+        def run_git(*args):
+            subprocess.run([git, '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                            '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + str(tmp_path / 'no-hooks'),
+                            *args], check=True, capture_output=True)
+        run_git('commit', '-q', '--allow-empty', '-m', 'app only')
+        if history == 'other-branch':
+            run_git('checkout', '-q', '-b', 'infra')
+        (repo / 'main.tf').write_text('', encoding='utf-8')
+        run_git('add', '-f', '--', 'main.tf')
+        run_git('commit', '-q', '-m', 'terraform')
+        if history == 'other-branch':
+            run_git('checkout', '-q', '-')
+        else:
+            run_git('rm', '-q', '--', 'main.tf')  # deleted in the index, still in HEAD
     for selected in configs:
         source = (ROOT / 'templates/lefthook/lefthook.yml' if selected == 'lefthook'
                   else ROOT / 'templates/standard/pre-commit-config.yaml')
@@ -64,6 +79,7 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
     if python_mode == 'inside':
         paths.insert(0, str(repo / 'bin'))
     env['PATH'] = os.pathsep.join(paths)
+    env.update(git_env or {})
     command = [pwsh, '-NoProfile', '-File', str(ROOT / 'scripts/verify-scanning.ps1')]
     if runner:
         command += ['-HooksRunner', runner]
@@ -118,6 +134,22 @@ def test_verifier_keeps_terraform_checks_when_the_repository_has_terraform(tmp_p
     assert result.returncode == 1, result.stdout + result.stderr
     assert 'Checkov NOT FOUND' in result.stdout
     assert 'Terraform remains in scope' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+def test_verifier_finds_terraform_whatever_the_pathspec_environment(tmp_path):
+    result = verify(tmp_path, APP_ONLY, files=('infra/main.tf',), track=True,
+                    git_env={'GIT_LITERAL_PATHSPECS': '1'})
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+@pytest.mark.parametrize('history', ['staged-deletion', 'other-branch'])
+def test_verifier_keeps_terraform_checks_for_commits_that_can_still_be_pushed(tmp_path, history):
+    result = verify(tmp_path, APP_ONLY, history=history)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
     assert '[SKIP]' not in result.stdout
 
 

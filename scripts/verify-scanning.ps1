@@ -84,6 +84,30 @@ function Add-SkippedCheck {
     Write-Host "[SKIP] $Message" -ForegroundColor Yellow
 }
 
+function Test-RepositoryHasTerraform {
+    # Pre-push scans whichever commit is pushed, so look at HEAD and every local branch
+    # as well as the index and worktree. List all paths and filter here: pathspecs change
+    # meaning with GIT_LITERAL_PATHSPECS and similar settings.
+    $git = Resolve-VerifiedTool -Name git -Label Git
+    $top = & $git rev-parse --show-toplevel 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $top) { throw 'could not locate the repository root' }
+    # fsmonitor is a command that repository configuration can set: never run it here.
+    $listed = @(& $git -C $top -c core.fsmonitor=false ls-files -z --cached --others --exclude-standard 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'could not list repository files' }
+    $tips = @(& $git for-each-ref '--format=%(objectname)' refs/heads 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'could not list local branches' }
+    $head = & $git rev-parse --verify -q HEAD 2>$null
+    if ($LASTEXITCODE -eq 0) { $tips += $head }  # detached; an unborn HEAD has no files
+    foreach ($tip in ($tips | Select-Object -Unique)) {
+        $listed += @(& $git --no-replace-objects ls-tree -r -z --name-only --full-tree $tip 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw 'could not list committed files' }
+    }
+    foreach ($path in (($listed -join "`0") -split "`0")) {
+        if ($path -match '\.tf(\.json)?$') { return $true }
+    }
+    return $false
+}
+
 function Get-TerraformScope {
     # Remove checks only for an application-only repository: Terraform is an explicit
     # YAML boolean false, another language is explicitly true (setup without
@@ -100,11 +124,7 @@ function Get-TerraformScope {
             Write-Info 'Terraform remains in scope: scan-config.yaml does not disable it in favour of another language'
             return $true
         }
-        $git = Resolve-VerifiedTool -Name git -Label Git
-        # fsmonitor is a command that repository configuration can set: never run it here.
-        $terraformFiles = & $git -c core.fsmonitor=false ls-files --cached --others --exclude-standard -- ':(top,icase,glob)**/*.tf' ':(top,icase,glob)**/*.tf.json' 2>$null
-        if ($LASTEXITCODE -ne 0) { throw 'could not list repository files' }
-        if (-not $terraformFiles) { return $false }
+        if (-not (Test-RepositoryHasTerraform)) { return $false }
         Write-Info 'Terraform remains in scope: the repository has Terraform files, which the hooks scan'
     }
     catch {

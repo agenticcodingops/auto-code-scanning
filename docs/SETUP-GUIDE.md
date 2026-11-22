@@ -52,7 +52,7 @@ skips Terraform, TFLint and Checkov tools, their configuration checks and TFLint
 initialization only for an application-only repository. That means all three of:
 `scan-config.yaml` sets `languages.terraform.enabled` to boolean `false`, it sets at
 least one other language to `true`, and the repository has no `.tf` or `.tf.json`
-files (tracked, or untracked and not ignored). Setup without `--languages` enables no
+files (in the index, in `HEAD` or a local branch tip, or untracked and not ignored). Setup without `--languages` enables no
 language, so it keeps the Terraform checks. Missing or invalid configuration,
 non-boolean values and unavailable parsers also keep Terraform in scope.
 Skipped checks are labeled with the reason and counted separately from passes.

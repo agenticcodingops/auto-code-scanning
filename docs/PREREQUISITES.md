@@ -32,9 +32,9 @@ Getting started and report the difference.
 
 | Tool | Version | Terraform only | App only | Both | Why |
 |---|---|---|---|---|---|
-| Terraform CLI | Your project's `required_version` | Yes | Yes, see note 1 | Yes | Formatting and validation hooks; the setup verifier checks it. |
-| TFLint | 0.66.0 (installed by `scripts/install-scanner.py`; floor 0.50.0) | Yes | Yes, see note 1 | Yes | Push-time lint. Needs a trusted config outside the repository (`SCAN_TFLINT_CONFIG`, `SCAN_TFLINT_PLUGIN_DIR`). |
-| Checkov | 3.4.5 (floor 3.0.0), in the scanner virtual environment | Yes | Yes, see note 1 | Yes | Push-time policy scan; the setup verifier checks it. |
+| Terraform CLI | Your project's `required_version` | Yes | No, see note 1 | Yes | Formatting and validation hooks; the setup verifier checks it. |
+| TFLint | 0.66.0 (installed by `scripts/install-scanner.py`; floor 0.50.0) | Yes | No, see note 1 | Yes | Push-time lint. Needs a trusted config outside the repository (`SCAN_TFLINT_CONFIG`, `SCAN_TFLINT_PLUGIN_DIR`). |
+| Checkov | 3.4.5 (floor 3.0.0), in the scanner virtual environment | Yes | No, see note 1 | Yes | Push-time policy scan; the setup verifier checks it. |
 | terraform-docs | 0.12.0 or later | pre-commit strict, aws, azure and gcp templates only | No | Same as Terraform only | The `terraform_docs` hook in those templates. Lefthook does not use it. |
 | Semgrep | 1.60 or later (CI uses 1.184.0) | No | Yes | Yes | Lefthook runs `semgrep-csharp` on staged `.cs` files and `semgrep-typescript` on staged TS/JS files. |
 | .NET SDK | 8 or later, or your project's SDK | No | C# only | C# only | Lefthook runs `dotnet-format` on staged `.cs`/`.csproj` files and `dotnet-build` at push. |
@@ -44,14 +44,13 @@ Getting started and report the difference.
 | SQLFluff | 3 or later | Only if you commit `.sql` files with Lefthook | Same | Same | Lefthook runs `sqlfluff` on staged `.sql` files. |
 | GitHub CLI (`gh`) | A current release | Optional | Optional | Optional | Only for the optional fix loop: setup uses it to create labels and to check that secrets exist. |
 
-**Note 1: app-only repositories still need the Terraform tools.** The setup verifier
-(`scripts/verify-scanning.ps1`) checks Trivy, Checkov, TFLint, Terraform, the hook
-manager, Python and Git on every run. It also requires `SCAN_TFLINT_CONFIG` and runs
-`tflint --init` with it. It does not look at which languages you chose. Until this
-changes, an app-only repository must install Terraform, TFLint and Checkov and
-provision the trusted TFLint config, or setup ends with failed verification checks.
-The commit and push hooks themselves only need those tools when `.tf` or `.tf.json`
-files change.
+**Note 1: what counts as app-only.** The setup verifier (`scripts/verify-scanning.ps1`)
+always checks Trivy, the hook manager, Python and Git. It skips Terraform, TFLint,
+Checkov and `SCAN_TFLINT_CONFIG` only when all three are true: `scan-config.yaml` sets
+`languages.terraform.enabled: false`, it enables another language (choose one with
+`--languages` at setup), and no `.tf` or `.tf.json` file exists in the working tree,
+the index or a local branch tip. Otherwise it requires them. The commit and push hooks
+need those tools when `.tf` or `.tf.json` files change.
 
 **Note 2: Terraform-only repositories that use Lefthook need Prettier.** The Lefthook
 manifest is the same for every tier and every language choice. Its `prettier` command

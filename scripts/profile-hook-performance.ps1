@@ -122,6 +122,22 @@ $preCommitTime = 0.0
 $prePushTime = 0.0
 $hookResults = @()
 $runner = Get-Command pre-commit -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+# Push hooks scan a ref transaction, which `pre-commit run` cannot supply. Give the push
+# runner one that pushes HEAD as a new branch, so that all its committed files are selected.
+$pushRunner = Join-Path $PSScriptRoot '../hooks/pre-push.py'
+$pushPython = $null
+$pushRecord = $null
+$pushSetupError = $null
+try {
+    $pushPython = Find-WorkingPython
+    if (-not $pushPython) { throw 'Python is required to profile push hooks' }
+    $head = git rev-parse --verify -q HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'profiling push hooks needs at least one commit' }
+    $pushRecord = "refs/heads/profile $head refs/heads/profile $('0' * $head.Length)"
+}
+catch {
+    $pushSetupError = $_.Exception.Message
+}
 # Native nonzero exits are data, even if the caller enables native error handling.
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -141,8 +157,14 @@ foreach ($hook in $hooks) {
         $exitCode = $null
         $iterationError = $null
         try {
-            if (-not $runner) { throw 'pre-commit executable not found on PATH' }
-            $hookOutput = & $runner.Source run $hook.id --all-files --hook-stage $hook.stage 2>&1
+            if ($hook.stage -eq 'pre-push') {
+                if ($pushSetupError) { throw $pushSetupError }
+                $hookOutput = $pushRecord | & $pushPython -E -P $pushRunner --hooks $hook.id 2>&1
+            }
+            else {
+                if (-not $runner) { throw 'pre-commit executable not found on PATH' }
+                $hookOutput = & $runner.Source run $hook.id --all-files --hook-stage $hook.stage 2>&1
+            }
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
                 $iterationError = "Exit ${exitCode}: $($hookOutput -join "`n")"

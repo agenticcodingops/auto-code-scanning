@@ -18,10 +18,12 @@ repository's test fixtures.
 
 ## Profiling Hook Performance
 
-Before optimizing, measure. The profiler (PowerShell 7) runs each security hook through
-`pre-commit run <hook-id> --all-files --hook-stage <stage>` in the current directory, so run it from the
-root of the repository you want to measure. It needs pre-commit and the scanners on
-PATH. The unused `-FixtureDir` parameter has been removed; passing it now fails
+Before optimizing, measure. Run the profiler (PowerShell 7) from the root of the
+repository you want to measure. It runs each pre-commit hook through
+`pre-commit run <hook-id> --all-files --hook-stage pre-commit`. It runs each pre-push
+hook through the platform's push runner as a push of `HEAD` to a new branch, so those
+hooks scan the Terraform files committed in `HEAD`'s history and need at least one
+commit. It needs pre-commit, Python, Git and the scanners on PATH. The unused `-FixtureDir` parameter has been removed; passing it now fails
 parameter validation. To profile fixtures, prepare a separate consumer repository
 containing those fixtures and the runner configuration, then run the profiler there.
 The profiler never stages files or prepares fixtures in your repository. Secret
