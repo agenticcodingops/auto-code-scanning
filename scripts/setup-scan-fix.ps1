@@ -226,7 +226,7 @@ if ($EnableFixLoop) {
                 else {
                     Warn "secret $need MISSING — create it (this script never stores secrets):"
                     if ($need -eq "AUTOFIX_TOKEN") {
-                        Write-Host "    Create a fine-grained PAT (Contents: RW, Pull requests: RW, THIS repo only), then:" -ForegroundColor Yellow
+                        Write-Host "    Create a fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.), then:" -ForegroundColor Yellow
                         Write-Host "      gh secret set AUTOFIX_TOKEN" -ForegroundColor Yellow
                     } else {
                         Write-Host "      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN" -ForegroundColor Yellow

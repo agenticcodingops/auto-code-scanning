@@ -356,7 +356,7 @@ None. The `workflow_call` block declares no outputs.
 
 | Secret | Required | What it is for |
 |---|---|---|
-| `AUTOFIX_TOKEN` | yes | Used only by the `apply-and-push` job's `Push the vetted commit` step, to push to the pull request's branch. Its description asks for a fine-grained token with Contents and Pull requests read and write, on your repository only. See [FIX-LOOP.md](FIX-LOOP.md#secrets) for what the push needs. |
+| `AUTOFIX_TOKEN` | yes | Used only by the `apply-and-push` job's `Push the vetted commit` step, to push to the pull request's branch. Use a fine-grained token with Contents: Read and write, this repository only. Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail. See [FIX-LOOP.md](FIX-LOOP.md#secrets) for what the push needs. |
 | `ANTHROPIC_API_KEY` | no | Key for the `Run Claude Code (FIX-ONLY)` step, the only step that receives it. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | no | Alternative to `ANTHROPIC_API_KEY`. |
 

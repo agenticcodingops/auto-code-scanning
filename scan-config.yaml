@@ -496,7 +496,7 @@ fix_loop:
   # so it can't be altered in-PR without tripping the gate. See docs/SECURITY-MODEL.md §7.1.
   build_verify_cmd: ""
 
-  # Secrets the consumer must provide (verified, never stored, by setup-scanning).
+  # Secrets the consumer must provide (verified, never stored, by setup-scan-fix).
   required_secrets:
-    - "AUTOFIX_TOKEN"      # fine-grained PAT: Contents RW + Pull-requests RW, this repo only
+    - "AUTOFIX_TOKEN"      # Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.
     - "ANTHROPIC_API_KEY"  # or CLAUDE_CODE_OAUTH_TOKEN

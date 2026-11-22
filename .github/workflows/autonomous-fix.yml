@@ -66,7 +66,7 @@ on:
         default: "v3.1.3"  # x-release-please-version
     secrets:
       AUTOFIX_TOKEN:
-        description: "Fine-grained PAT (Contents RW + Pull-requests RW, this repo only). Used ONLY by apply-and-push."
+        description: "Fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.). Used ONLY by apply-and-push."
         required: true
       ANTHROPIC_API_KEY:
         description: "Anthropic API key for claude-code-action (or use CLAUDE_CODE_OAUTH_TOKEN)."

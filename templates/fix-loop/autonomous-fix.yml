@@ -6,8 +6,9 @@
 # workflow it `uses:` at a PINNED tag. See docs/FIX-LOOP.md + docs/SECURITY-MODEL.md.
 #
 # Setup (once):
-#   - add `ai-autofix` + `needs-human-review` labels (setup-scanning does this)
-#   - add secrets AUTOFIX_TOKEN (fine-grained PAT) + ANTHROPIC_API_KEY
+#   - add `ai-autofix` + `needs-human-review` labels (setup-scan-fix does this only with --enable-fix-loop)
+#   - add AUTOFIX_TOKEN (fine-grained PAT: Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.)
+#     and either ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
 #   - set fix_loop.enabled: true in scan-config.yaml
 #
 # Opt a PR in by adding the `ai-autofix` label, then a trusted review triggers a fix.

@@ -205,7 +205,7 @@ Create these in your repository (Settings > Secrets and variables > Actions, or
 
 | Secret | What to create |
 |---|---|
-| `AUTOFIX_TOKEN` (required) | A **fine-grained personal access token** with access to **only this repository** and **Contents: Read and write**. The reusable workflow uses it in exactly one step, a `git push` of the vetted commit to the pull request's branch; Contents write is what that push needs. The workflow's secret description and setup also ask for **Pull requests: Read and write**; no step in v3.1.2 uses the token for anything but the push, so add it only if your policy follows that description. Set a short expiry and rotate it. A push made with the built-in `GITHUB_TOKEN` would not start your other workflows, which is why a separate token is used. |
+| `AUTOFIX_TOKEN` (required) | A **fine-grained personal access token** with access to **only this repository** and **Contents: Read and write**. The reusable workflow uses it in exactly one step, a `git push` of the vetted commit to the pull request's branch; Contents write is what that push needs. Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail. This narrow scope has not been tested on github.com. Set a short expiry and rotate it. A push made with the built-in `GITHUB_TOKEN` would not start your other workflows, which is why a separate token is used. |
 | `ANTHROPIC_API_KEY` **or** `CLAUDE_CODE_OAUTH_TOKEN` | A model credential for the agent step. Only the `Run Claude Code (FIX-ONLY)` step receives it. Without one, the agent produces no patch and the run ends with no change. |
 
 Setup's check looks for `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` only, so it warns about

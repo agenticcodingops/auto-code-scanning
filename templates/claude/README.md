@@ -4,7 +4,7 @@ This is the **friction-free core** of the platform: a thin, per-repo Claude Code
 layer that scans the agent's edits *inside the session* and self-corrects before
 anything is committed.
 
-`setup-scanning` copies these into a consumer repo as:
+`setup-scan-fix` copies these into a consumer repo as:
 
 ```
 .claude/

@@ -203,7 +203,7 @@ Plus a hard **`max_iterations`** cap (`.fix-attempts`, default 3) → `needs-hum
 
 ## 7. Secrets live in the consumer, never here
 
-`AUTOFIX_TOKEN` (fine-grained PAT: *Contents RW + Pull-requests RW, that repo only*) and
+`AUTOFIX_TOKEN` (fine-grained PAT: *Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.*) and
 `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) are created **by the consumer**.
 `setup-scan-fix` **verifies** their presence with `gh secret list` and prints creation
 steps if missing — it **never** reads, stores, or transmits a secret value.
