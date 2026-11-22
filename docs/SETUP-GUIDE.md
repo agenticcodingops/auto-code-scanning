@@ -53,8 +53,9 @@ initialization only for an application-only repository. That means all three of:
 `scan-config.yaml` sets `languages.terraform.enabled` to boolean `false`, it sets at
 least one other language to `true`, and the repository has no `.tf` or `.tf.json`
 files (in the index, in `HEAD`, a local branch tip or a tag, or untracked and not
-ignored). Setup without `--languages` enables no
-language, so it keeps the Terraform checks. Missing or invalid configuration,
+ignored). A configuration that setup creates without `--languages` enables no
+language, so it keeps the Terraform checks; setup leaves an existing configuration
+as it is unless you pass `--force`. Missing or invalid configuration,
 non-boolean values and unavailable parsers also keep Terraform in scope.
 Skipped checks are labeled with the reason and counted separately from passes.
 Trivy, Python, Git, the selected runner and hook-installation checks remain required.
@@ -555,8 +556,12 @@ for Git transaction, application and hosted checks.
 
 ## 8. Make the first scan and commit
 
-Use a real staged Terraform change so the commit scans more than setup files. For
-a fresh local test repository, this minimal file needs no cloud credentials:
+Use a real staged change so the commit scans more than setup files. In an
+application-only repository, stage a change to a file in one of your enabled
+languages, skip the three Terraform files below and go straight to the commit
+commands: creating those files would bring the Terraform tools back into scope. For
+Terraform, in a fresh local test repository, this minimal file needs no cloud
+credentials:
 
 ```hcl
 terraform {

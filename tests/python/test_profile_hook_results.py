@@ -36,8 +36,10 @@ def profile(tmp_path, runner_source=None, extra=(), python_source=None, committe
     output = tmp_path / 'results'
     env = {key: value for key, value in os.environ.items() if not key.startswith(('SCAN_', 'TFLINT_'))}
     if runner_source is None:
-        # Keep PowerShell's built-in commands available, but no external runner.
-        env['PATH'] = str(Path(pwsh).parent)
+        # No external commands at all. pwsh is started by path, and its own directory
+        # cannot be used: on Linux it is /usr/bin, which also holds Python and Git.
+        tools.mkdir()
+        env['PATH'] = str(tools)
     else:
         env['PATH'] = str(tools) + os.pathsep + env['PATH']
     result = subprocess.run(
