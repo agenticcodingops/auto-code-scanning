@@ -6,7 +6,7 @@
 # and configured for local development.
 #
 # USAGE:
-#   .\scripts\verify-local-scanning.ps1
+#   .\scripts\verify-scanning.ps1
 #
 # All tools run LOCALLY - no code is uploaded to external services.
 # ============================================================================
@@ -17,7 +17,7 @@ param(
     [switch]$Full = $false,
 
     [ValidateSet('lefthook', 'pre-commit')]
-    [string]$HooksRunner = 'pre-commit',
+    [string]$HooksRunner = 'lefthook',
 
     [ValidateSet('starter', 'standard', 'strict')]
     [string]$Tier = 'standard',
@@ -75,6 +75,63 @@ $Script:TotalChecks = 0
 $Script:PassedChecks = 0
 $Script:FailedChecks = 0
 $Script:Warnings = 0
+$Script:SkippedChecks = 0
+
+function Add-SkippedCheck {
+    param([string]$Message)
+    $Script:TotalChecks++
+    $Script:SkippedChecks++
+    Write-Host "[SKIP] $Message" -ForegroundColor Yellow
+}
+
+function Test-RepositoryHasTerraform {
+    # Pre-push scans whichever commit is pushed, so look at HEAD, every local branch and
+    # every tag as well as the index and worktree. List all paths and filter here: pathspecs change
+    # meaning with GIT_LITERAL_PATHSPECS and similar settings.
+    $git = Resolve-VerifiedTool -Name git -Label Git
+    $top = & $git rev-parse --show-toplevel 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $top) { throw 'could not locate the repository root' }
+    # fsmonitor is a command that repository configuration can set: never run it here.
+    $listed = @(& $git -C $top -c core.fsmonitor=false ls-files -z --cached --others --exclude-standard 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'could not list repository files' }
+    $tips = @(& $git for-each-ref '--format=%(objectname)' refs/heads refs/tags 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'could not list branches and tags' }
+    $head = & $git rev-parse --verify -q HEAD 2>$null
+    if ($LASTEXITCODE -eq 0) { $tips += $head }  # detached; an unborn HEAD has no files
+    foreach ($tip in ($tips | Select-Object -Unique)) {
+        $listed += @(& $git --no-replace-objects ls-tree -r -z --name-only --full-tree $tip 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw 'could not list committed files' }
+    }
+    foreach ($path in (($listed -join "`0") -split "`0")) {
+        if ($path -match '\.tf(\.json)?$') { return $true }
+    }
+    return $false
+}
+
+function Get-TerraformScope {
+    # Remove checks only for an application-only repository: Terraform is an explicit
+    # YAML boolean false, another language is explicitly true (setup without
+    # -Languages leaves all of them false), and there are no Terraform files (the
+    # hooks select those by extension, whatever scan-config.yaml says).
+    # Inline trusted code and isolated Python cannot import consumer modules.
+    # Keep -c on one line so Windows command launchers preserve the argument.
+    $scopeParser = "import sys, yaml; from pathlib import Path; document = yaml.safe_load(Path(sys.argv[1]).read_text(encoding='utf-8-sig')); languages = document['languages']; enabled = languages['terraform']['enabled']; chosen = any(isinstance(value, dict) and value.get('enabled') is True for key, value in languages.items() if key != 'terraform'); print('excluded' if enabled is False and chosen else 'required')"
+    try {
+        $python = Resolve-VerifiedTool -Name python -Label Python
+        $scopeResult = & $python -I -c $scopeParser (Join-Path (Get-Location).Path 'scan-config.yaml') 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ($scopeResult -join "`n") }
+        if (($scopeResult -join "`n") -cne 'excluded') {
+            Write-Info 'Terraform remains in scope: scan-config.yaml does not disable it in favour of another language'
+            return $true
+        }
+        if (-not (Test-RepositoryHasTerraform)) { return $false }
+        Write-Info 'Terraform remains in scope: the repository has Terraform files, which the hooks scan'
+    }
+    catch {
+        Write-Warn "Cannot determine Terraform scope; Terraform remains in scope: $_"
+    }
+    return $true
+}
 
 function Add-CheckResult {
     param(
@@ -103,7 +160,7 @@ function Add-CheckResult {
 # MAIN VERIFICATION
 # ============================================================================
 
-Write-Header "Terraform Security Scanning - Setup Verification"
+Write-Header "Security Scanning - Setup Verification"
 Write-Host "Verifying all LOCAL security scanning tools are installed and configured..."
 Write-Host ""
 
@@ -113,18 +170,37 @@ Write-Host ""
 
 Write-Header "1. Checking Required Tools"
 
+if (-not $PSBoundParameters.ContainsKey('HooksRunner')) {
+    $hasLefthook = Test-Path -LiteralPath 'lefthook.yml' -PathType Leaf
+    $hasPreCommit = Test-Path -LiteralPath '.pre-commit-config.yaml' -PathType Leaf
+    if ($hasLefthook -xor $hasPreCommit) {
+        $HooksRunner = if ($hasLefthook) { 'lefthook' } else { 'pre-commit' }
+    }
+}
+$terraformEnabled = Get-TerraformScope
+$terraformSkipReason = 'languages.terraform.enabled is explicitly false, another language is enabled and there are no Terraform files'
 $runnerConfig = if ($HooksRunner -eq 'lefthook') { 'lefthook.yml' } else { '.pre-commit-config.yaml' }
 $runnerRunArgs = if ($HooksRunner -eq 'lefthook') { @('run', 'pre-commit', '--all-files') } else { @('run', '--all-files') }
 
 $tools = @(
     @{Name = "Trivy"; Command = "trivy"; Args = "--version"; Description = "IaC security scanner" },
-    @{Name = "Checkov"; Command = "checkov"; Args = "--version"; Description = "Policy-as-code scanner" },
-    @{Name = "tflint"; Command = "tflint"; Args = "--version"; Description = "Terraform linter" },
-    @{Name = "Terraform"; Command = "terraform"; Args = "--version"; Description = "Infrastructure as Code" },
     @{Name = $HooksRunner; Command = $HooksRunner; Args = "--version"; Description = "Git hook framework" },
-    @{Name = "Python"; Command = "python"; Args = "--version"; Description = "Required for Checkov" },
+    @{Name = "Python"; Command = "python"; Args = "--version"; Description = "Configuration and hook verification" },
     @{Name = "Git"; Command = "git"; Args = "--version"; Description = "Version control" }
 )
+
+if ($terraformEnabled) {
+    $tools += @(
+        @{Name = "Checkov"; Command = "checkov"; Args = "--version"; Description = "Policy-as-code scanner" },
+        @{Name = "tflint"; Command = "tflint"; Args = "--version"; Description = "Terraform linter" },
+        @{Name = "Terraform"; Command = "terraform"; Args = "--version"; Description = "Infrastructure as Code" }
+    )
+}
+else {
+    foreach ($name in @('Checkov', 'tflint', 'Terraform')) {
+        Add-SkippedCheck "$name tool - $terraformSkipReason"
+    }
+}
 
 foreach ($tool in $tools) {
     if (Test-CommandExists $tool.Command) {
@@ -134,7 +210,13 @@ foreach ($tool in $tools) {
             continue
         }
         try {
-            $version = & $tool.Command $tool.Args 2>&1 | Select-Object -First 1
+            if ($tool.Command -eq 'python') {
+                $python = Resolve-VerifiedTool -Name python -Label Python
+                $version = & $python -I $tool.Args 2>&1 | Select-Object -First 1
+            }
+            else {
+                $version = & $tool.Command $tool.Args 2>&1 | Select-Object -First 1
+            }
             $version = ($version -replace "^[^0-9]*", "" -replace "\s.*$", "").Trim()
             if ($version.Length -gt 20) { $version = $version.Substring(0, 20) + "..." }
             Add-CheckResult -Passed $true -Message "$($tool.Name) installed: $version"
@@ -156,10 +238,19 @@ Write-Header "2. Checking Configuration Files"
 
 $configFiles = @(
     @{Path = $runnerConfig; Name = "$HooksRunner configuration"; Required = $true },
-    @{Path = $env:SCAN_TFLINT_CONFIG; Name = "Trusted external tflint configuration"; Required = $true },
-    @{Path = (Join-Path $(if ($env:SCAN_CONFIG_DIR) { $env:SCAN_CONFIG_DIR } else { '.scanning/configs' }) '.checkov.yaml'); Name = "Checkov configuration"; Required = $true },
     @{Path = ".trivyignore"; Name = "Trivy ignore file"; Required = $false }
 )
+
+if ($terraformEnabled) {
+    $configFiles += @(
+        @{Path = $env:SCAN_TFLINT_CONFIG; Name = "Trusted external tflint configuration"; Required = $true },
+        @{Path = (Join-Path $(if ($env:SCAN_CONFIG_DIR) { $env:SCAN_CONFIG_DIR } else { '.scanning/configs' }) '.checkov.yaml'); Name = "Checkov configuration"; Required = $true }
+    )
+}
+else {
+    Add-SkippedCheck "Trusted external tflint configuration - $terraformSkipReason"
+    Add-SkippedCheck "Checkov configuration - $terraformSkipReason"
+}
 
 foreach ($config in $configFiles) {
     if ($config.Path -and (Test-Path -LiteralPath $config.Path -PathType Leaf)) {
@@ -262,7 +353,10 @@ else {
 
 Write-Header "6. Testing tflint"
 
-if (Test-CommandExists "tflint") {
+if (-not $terraformEnabled) {
+    Add-SkippedCheck "tflint initialization and verification - $terraformSkipReason"
+}
+elseif (Test-CommandExists "tflint") {
     try {
         if (-not $env:SCAN_TFLINT_CONFIG -or -not (Test-Path -LiteralPath $env:SCAN_TFLINT_CONFIG -PathType Leaf)) {
             throw 'Set SCAN_TFLINT_CONFIG to a trusted external HCL file'
@@ -330,13 +424,14 @@ Write-Host "  Total checks:  $($Script:TotalChecks)" -ForegroundColor White
 Write-Host "  Passed:        $($Script:PassedChecks)" -ForegroundColor Green
 Write-Host "  Failed:        $($Script:FailedChecks)" -ForegroundColor $(if ($Script:FailedChecks -gt 0) { "Red" } else { "White" })
 Write-Host "  Warnings:      $($Script:Warnings)" -ForegroundColor $(if ($Script:Warnings -gt 0) { "Yellow" } else { "White" })
+Write-Host "  Skipped:       $($Script:SkippedChecks)" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Overall Status: $status" -ForegroundColor $statusColor
 Write-Host ""
 
 if ($Script:FailedChecks -gt 0) {
     Write-Host "NEXT STEPS:" -ForegroundColor Yellow
-    Write-Host "  1. Run setup script: .\scripts\setup-local-scanning.ps1" -ForegroundColor White
+    Write-Host "  1. Run setup script: .\scripts\setup-scan-fix.ps1" -ForegroundColor White
     Write-Host "  2. Install hooks: $HooksRunner install" -ForegroundColor White
     Write-Host "  3. Run this script again to verify" -ForegroundColor White
 }
@@ -345,9 +440,11 @@ else {
     Write-Host ""
     Write-Host "QUICK COMMANDS:" -ForegroundColor Cyan
     Write-Host "  $HooksRunner $($runnerRunArgs -join ' ')  - Run all hooks manually" -ForegroundColor White
-    Write-Host "  trivy config .              - Scan Terraform for issues" -ForegroundColor White
-    Write-Host "  checkov -d .                - Run Checkov policies" -ForegroundColor White
-    Write-Host '  tflint --recursive --config="$env:SCAN_TFLINT_CONFIG" - Lint with trusted policy' -ForegroundColor White
+    if ($terraformEnabled) {
+        Write-Host "  trivy config .              - Scan Terraform for issues" -ForegroundColor White
+        Write-Host "  checkov -d .                - Run Checkov policies" -ForegroundColor White
+        Write-Host '  tflint --recursive --config="$env:SCAN_TFLINT_CONFIG" - Lint with trusted policy' -ForegroundColor White
+    }
 }
 
 Write-Host ""

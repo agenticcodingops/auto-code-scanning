@@ -13,8 +13,8 @@ has the PowerShell version of each one.
 
 Install Git, Bash 4.4 or later, Python 3.11 or later, PowerShell 7, Terraform,
 Lefthook, and Node.js with npm (step 3 installs Prettier with npm), as listed in [Prerequisites](PREREQUISITES.md). An application-only
-repository needs Terraform, TFLint and Checkov too, because the setup verifier checks
-them. Then create the scanner environment outside your repository:
+repository does not need Terraform, TFLint or Checkov if you name its languages at
+setup; see [note 1](PREREQUISITES.md#tools-by-repository-type). Then create the scanner environment outside your repository:
 
 ```bash
 python3 -m venv "$HOME/.venvs/auto-code-scanning"

@@ -1,0 +1,204 @@
+"""Run the real verifier with isolated external tool stubs and consumer YAML."""
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+import pytest
+
+from .tool_helpers import application
+
+ROOT = Path(__file__).resolve().parents[2]
+APP_ONLY = 'languages: {terraform: {enabled: false}, csharp: {enabled: true}}'
+
+
+@pytest.fixture(autouse=True)
+def isolated_git_configuration(tmp_path, monkeypatch):
+    """A developer's global ignores, signing or hooks must not decide these tests."""
+    empty = tmp_path / 'git-configuration'
+    empty.mkdir()
+    (empty / 'config').write_text('', encoding='utf-8')
+    for key in [key for key in os.environ if key.startswith('GIT_')]:
+        monkeypatch.delenv(key)  # GIT_DIR and similar would redirect the fixtures
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(empty / 'config'))
+    monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
+    # Git reads $XDG_CONFIG_HOME/git/ignore even without any configuration file.
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(empty))
+
+
+def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='normal',
+           files=(), track=False, git_env=None, history=None):
+    pwsh, git = shutil.which('pwsh'), shutil.which('git')
+    if not pwsh:
+        pytest.skip('PowerShell unavailable')
+    repo = tmp_path / 'consumer'
+    repo.mkdir()
+    subprocess.run([git, 'init', '-q', str(repo)], check=True, capture_output=True)
+    if config is not None:
+        (repo / 'scan-config.yaml').write_text(config, encoding='utf-8')
+    for name in files:
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_text('', encoding='utf-8')
+        if track:
+            subprocess.run([git, '-C', str(repo), 'add', '-f', '--', name], check=True, capture_output=True)
+            (repo / name).unlink()  # the index alone must keep Terraform in scope
+    if history:
+        def run_git(*args):
+            subprocess.run([git, '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                            '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + str(tmp_path / 'no-hooks'),
+                            *args], check=True, capture_output=True)
+        run_git('commit', '-q', '--allow-empty', '-m', 'app only')
+        separate = history != 'staged-deletion'
+        if separate:
+            run_git('checkout', '-q', '-b', 'infra')
+        (repo / 'main.tf').write_text('', encoding='utf-8')
+        run_git('add', '-f', '--', 'main.tf')
+        run_git('commit', '-q', '-m', 'terraform')
+        if history == 'lightweight-tag':
+            run_git('-c', 'tag.gpgSign=false', 'tag', 'v1')
+        elif history == 'annotated-tag':
+            run_git('-c', 'tag.gpgSign=false', 'tag', '-a', 'v1', '-m', 'release')
+        if separate:
+            run_git('checkout', '-q', '-')
+            if history.endswith('-tag'):
+                run_git('branch', '-q', '-D', 'infra')  # only the tag still reaches it
+        else:
+            run_git('rm', '-q', '--', 'main.tf')  # deleted in the index, still in HEAD
+    for selected in configs:
+        source = (ROOT / 'templates/lefthook/lefthook.yml' if selected == 'lefthook'
+                  else ROOT / 'templates/standard/pre-commit-config.yaml')
+        shutil.copyfile(source, repo / ('lefthook.yml' if selected == 'lefthook'
+                                       else '.pre-commit-config.yaml'))
+    selected = runner or (configs[0] if len(configs) == 1 else 'lefthook')
+    for hook in ('pre-commit', 'pre-push'):
+        marker = ('# scan push transaction adapter\n# --pre-commit-runner\n'
+                  if selected == 'pre-commit' and hook == 'pre-push' else '# ' + selected + '\n')
+        (repo / '.git/hooks' / hook).write_text(marker, encoding='utf-8')
+    # Repository modules must never be loaded while deciding scope or checking hooks.
+    for name in ('yaml.py', 'sitecustomize.py'):
+        (repo / name).write_text('raise RuntimeError("CONSUMER_CODE_EXECUTED")', encoding='utf-8')
+    tools = tmp_path / 'tools'
+    for name in ('trivy', 'lefthook', 'pre-commit'):
+        application(tools, name, 'print("1.0.0")\n')
+    application(tools, 'git', 'import subprocess, sys\nsys.exit(subprocess.call(['
+                + repr(git) + ', *sys.argv[1:]]))\n')
+    if python_mode in ('normal', 'no-parser', 'failure'):
+        python_flags = ', "-S"' if python_mode == 'no-parser' else ''
+        source = ('import subprocess, sys\nsys.exit(subprocess.call([' + repr(sys.executable)
+                  + python_flags + ', *sys.argv[1:]]))\n' if python_mode != 'failure'
+                  else 'raise SystemExit(19)\n')
+        application(tools, 'python', source)
+    elif python_mode == 'inside':
+        application(repo / 'bin', 'python',
+                    'from pathlib import Path\nPath("consumer-code-executed").touch()\nprint("false")\n')
+    # Expose only these stubs: Git/Python installation directories can contain
+    # other scanners or another Python, which would invalidate missing-tool cases.
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(('GIT_', 'SCAN_', 'TFLINT_'))}
+    for key in ('GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'):
+        env[key] = os.environ[key]
+    paths = [str(tools)]
+    if python_mode == 'inside':
+        paths.insert(0, str(repo / 'bin'))
+    env['PATH'] = os.pathsep.join(paths)
+    env.update(git_env or {})
+    command = [pwsh, '-NoProfile', '-File', str(ROOT / 'scripts/verify-scanning.ps1')]
+    if runner:
+        command += ['-HooksRunner', runner]
+    result = subprocess.run(command, cwd=repo, env=env, capture_output=True,
+                            text=True, encoding='utf-8', timeout=180)
+    assert not (repo / 'consumer-code-executed').exists()
+    return result
+
+
+def test_app_only_verifier_skips_terraform_checks(tmp_path):
+    result = verify(tmp_path, APP_ONLY)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'Overall Status: PASSED' in result.stdout
+    assert 'lefthook pre-commit hook installed' in result.stdout
+    for name in ('Checkov', 'Terraform', 'tflint'):
+        assert f'[PASS] {name}' not in result.stdout
+        assert f'{name} NOT FOUND' not in result.stdout
+    assert '[SKIP]' in result.stdout
+    assert 'languages.terraform.enabled is explicitly false' in result.stdout
+    assert 'CONSUMER_CODE_EXECUTED' not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('config', [
+    None, '', '{}', 'languages: {}', 'languages: {terraform: {}}',
+    'languages: {terraform: {enabled: true}}',
+    'languages: {terraform: {enabled: "false"}}',
+    'languages: {terraform: {enabled: 0}}',
+    'languages: {terraform: {enabled: null}}',
+    'languages: {terraform: false}', 'languages: []', '[]', 'invalid: [',
+    # Setup without --languages renders every language false: nothing was chosen.
+    'languages: {terraform: {enabled: false}}',
+    'languages: {terraform: {enabled: false}, csharp: {enabled: false}}',
+    'languages: {terraform: {enabled: false}, csharp: {enabled: "true"}}',
+    'languages: {terraform: {enabled: false}, csharp: true}',
+])
+def test_verifier_scope_fails_closed(tmp_path, config):
+    result = verify(tmp_path, config)
+    assert result.returncode == 1, result.stdout + result.stderr
+    for name in ('Checkov', 'Terraform', 'tflint'):
+        assert f'{name} NOT FOUND' in result.stdout
+    assert 'Trusted external tflint configuration NOT FOUND' in result.stdout
+    assert 'Checkov configuration NOT FOUND' in result.stdout
+    assert 'Cannot test tflint - not installed' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+@pytest.mark.parametrize('track', [False, True], ids=['untracked', 'index-only'])
+@pytest.mark.parametrize('name', ['main.tf', 'infra/modules/net/main.tf', 'MAIN.TF', 'infra/main.tf.json'])
+def test_verifier_keeps_terraform_checks_when_the_repository_has_terraform(tmp_path, name, track):
+    # The hooks select files by extension, so they still need the tools here.
+    result = verify(tmp_path, APP_ONLY, files=(name,), track=track)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
+    assert 'Terraform remains in scope' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+def test_verifier_finds_terraform_whatever_the_pathspec_environment(tmp_path):
+    result = verify(tmp_path, APP_ONLY, files=('infra/main.tf',), track=True,
+                    git_env={'GIT_LITERAL_PATHSPECS': '1'})
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+@pytest.mark.parametrize('history', ['staged-deletion', 'other-branch', 'lightweight-tag', 'annotated-tag'])
+def test_verifier_keeps_terraform_checks_for_commits_that_can_still_be_pushed(tmp_path, history):
+    result = verify(tmp_path, APP_ONLY, history=history)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Checkov NOT FOUND' in result.stdout
+    assert '[SKIP]' not in result.stdout
+
+
+@pytest.mark.parametrize('python_mode', ['no-parser', 'failure', 'inside', 'missing'])
+def test_verifier_scope_requires_a_trusted_working_parser(tmp_path, python_mode):
+    result = verify(tmp_path, APP_ONLY,
+                    python_mode=python_mode)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'Terraform NOT FOUND' in result.stdout
+    assert '[SKIP]' not in result.stdout
+    assert 'Terraform remains in scope' in result.stdout
+
+
+@pytest.mark.parametrize(('configs', 'runner', 'expected'), [
+    (('pre-commit',), None, 'pre-commit'),
+    (('lefthook', 'pre-commit'), None, 'lefthook'),
+    ((), None, 'lefthook'),
+    (('lefthook', 'pre-commit'), 'pre-commit', 'pre-commit'),
+    (('pre-commit',), 'lefthook', 'lefthook'),
+])
+def test_verifier_runner_detection_and_explicit_override(tmp_path, configs, runner, expected):
+    result = verify(tmp_path, APP_ONLY, configs, runner)
+    assert f'3. Checking {expected} Hooks' in result.stdout
+    if expected in configs:
+        assert result.returncode == 0, result.stdout + result.stderr
+    else:
+        assert result.returncode == 1, result.stdout + result.stderr
+        filename = 'lefthook.yml' if expected == 'lefthook' else '.pre-commit-config.yaml'
+        assert f'Cannot check hooks - {filename} not found' in result.stdout

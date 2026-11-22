@@ -47,13 +47,23 @@ For those pre-commit templates, install `terraform-docs` from your managed packa
 and check `terraform-docs --version` before staging Terraform. Lefthook does not
 require it merely because its configuration tier is strict.
 
-**Application-only repositories still need the Terraform tools.** The setup verifier
-(`scripts/verify-scanning.ps1`, which setup runs at the end) always checks Trivy,
-Checkov, TFLint and Terraform, requires `SCAN_TFLINT_CONFIG`, and runs `tflint --init`.
-It ignores the languages you chose. So for an app-only repository, install Terraform,
-TFLint and Checkov and provision the trusted TFLint config in step 5 too; otherwise
-setup reports failed verification checks. Local tool versions come from PATH; they
-are not set by `scan-config.yaml`.
+The setup verifier (`scripts/verify-scanning.ps1`, which setup runs at the end)
+skips Terraform, TFLint and Checkov tools, their configuration checks and TFLint
+initialization only for an application-only repository. That means all three of:
+`scan-config.yaml` sets `languages.terraform.enabled` to boolean `false`, it sets at
+least one other language to `true`, and the repository has no `.tf` or `.tf.json`
+files (in the index, in `HEAD`, a local branch tip or a tag, or untracked and not
+ignored). A configuration that setup creates without `--languages` enables no
+language, so it keeps the Terraform checks; setup leaves an existing configuration
+as it is unless you pass `--force`. A missing or unparsable configuration, a missing
+or non-boolean `languages.terraform.enabled` and an unavailable parser also keep
+Terraform in scope.
+Skipped checks are labeled with the reason and counted separately from passes.
+Trivy, Python, Git, the selected runner and hook-installation checks remain required.
+Without `-HooksRunner`, the verifier selects the runner whose configuration is the
+only one present, or defaults to Lefthook if both or neither are present; an explicit
+`-HooksRunner` always wins. Local tool versions come from PATH; they are not set by
+`scan-config.yaml`.
 
 On Windows, install Git for Windows (including Git Bash), Python and PowerShell 7
 from your managed package source. Open a new PowerShell 7 terminal after installation.
@@ -547,8 +557,12 @@ for Git transaction, application and hosted checks.
 
 ## 8. Make the first scan and commit
 
-Use a real staged Terraform change so the commit scans more than setup files. For
-a fresh local test repository, this minimal file needs no cloud credentials:
+Use a real staged change so the commit scans more than setup files. In an
+application-only repository, stage a change to a file in one of your enabled
+languages, skip the three Terraform files below and go straight to the commit
+commands: creating those files would bring the Terraform tools back into scope. For
+Terraform, in a fresh local test repository, this minimal file needs no cloud
+credentials:
 
 ```hcl
 terraform {

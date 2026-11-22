@@ -18,11 +18,17 @@ repository's test fixtures.
 
 ## Profiling Hook Performance
 
-Before optimizing, measure. The profiler (PowerShell 7) runs each security hook through
-`pre-commit run <hook-id> --all-files` in the current directory, so run it from the
-root of the repository you want to measure. It needs pre-commit and the scanners on
-PATH. `-FixtureDir` is only recorded in the JSON output; it does not choose what is
-scanned.
+Before optimizing, measure. Run the profiler (PowerShell 7) from the root of the
+repository you want to measure. It runs each pre-commit hook through
+`pre-commit run <hook-id> --all-files --hook-stage pre-commit`. It runs each pre-push
+hook through the platform's push runner as a push of `HEAD` to a new branch, so those
+hooks scan the Terraform files present in `HEAD` that such a push selects, and need
+at least one commit. It needs pre-commit, Python, Git and the scanners on PATH. The unused `-FixtureDir` parameter has been removed; passing it now fails
+parameter validation. To profile fixtures, prepare a separate consumer repository
+containing those fixtures and the runner configuration, then run the profiler there.
+The profiler never stages files or prepares fixtures in your repository. Secret
+hooks scan the existing staged index, so prepare that index yourself in the separate
+repository if you want meaningful secret-scanner timings.
 
 ```powershell
 # Profile the security hooks (3 iterations each)
@@ -35,10 +41,19 @@ scanned.
 It profiles these hooks: `trivy-iac-critical`, `trivy-secrets`,
 `validate-suppressions` and `gitleaks` at pre-commit, and `trivy-iac-full`,
 `checkov`, `checkov-strict` and `tflint` at pre-push. It prints the average time per
-hook, marks each `[OK]` or `[SLOW]` against the 5-second target, and adds
-recommendations. The labels reflect elapsed time only: the profiler does not check
-whether a hook succeeded, so a hook that fails fast (a missing scanner, an unknown
-hook ID) can still show `[OK]`. Run a hook on its own to confirm it works.
+successful hook, marks each `[OK]` or `[SLOW]` against the 5-second target, and adds
+recommendations. A hook with any unsuccessful iteration is `[FAILED]` and appears
+in the separate failed-hook count. Its aggregate timings are null and it is excluded
+from timing totals, slowest-hook selection and optimization recommendations. Stage
+totals containing failed hooks are successful-hook subtotals marked `[INCOMPLETE]`,
+and cannot meet the stage target. A nonzero exit, including scanner findings, counts
+as a failure for profiling; review it before comparing performance.
+
+JSON retains every iteration's elapsed seconds in `iterations`, with parallel
+`exit_codes` and `errors` arrays. A missing or unlaunchable runner has a null exit
+code and an error message. Hook `status` and `succeeded`, summary `hooks_failed`
+and stage `pre_commit_complete` / `pre_push_complete` distinguish failure from
+slowness. `repository_directory` replaces the misleading `fixture_directory` field.
 
 - `MIGRATE:` a pre-commit hook averaging over 10 seconds should move to pre-push.
 - `OPTIMIZE:` a hook over the 5-second target needs attention.

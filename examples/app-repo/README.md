@@ -24,8 +24,8 @@ editor bundle under `.claude/`. Commit them too.
 Locally, Lefthook runs Semgrep, `dotnet format`, ESLint and Prettier on matching
 staged files, so install those tools outside the repository and set
 `SCAN_ESLINT_BIN`, `SCAN_ESLINT_CONFIG`, `SCAN_PRETTIER_BIN` and
-`SCAN_PRETTIER_CONFIG`. The setup verifier also checks the Terraform tools in an
-application-only repository; see [Prerequisites](../../docs/PREREQUISITES.md).
+`SCAN_PRETTIER_CONFIG`. The setup verifier skips the Terraform tools for this repository
+while it has no Terraform files; see [Prerequisites](../../docs/PREREQUISITES.md).
 
 Before you commit the caller:
 
