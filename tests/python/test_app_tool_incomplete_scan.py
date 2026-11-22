@@ -16,6 +16,8 @@ import sys
 
 import pytest
 
+from .tool_helpers import application
+
 ROOT = Path(__file__).resolve().parents[2]
 HOOKS = ROOT / 'hooks'
 TOOLS = ('eslint', 'prettier')
@@ -275,10 +277,13 @@ def problems(scenario, tool, shell, mode, allowed, result):
 @pytest.mark.parametrize('shell', SHELLS)
 @pytest.mark.parametrize('tool', TOOLS)
 def test_only_approved_incomplete_scans_change_the_exit_code(tmp_path, tool, shell, mode, allowed):
-    cells = [(name, allowed) for name in MODES[mode]]
+    # The opt-in is read only where a scan would be incomplete: elsewhere one cell is enough.
+    names = [name for name in MODES[mode]
+             if not allowed or name == 'default' or incomplete(SCENARIOS[name], tool, shell, mode)]
+    cells = [(name, allowed) for name in names]
     results = run_batch(tmp_path, tool, shell, mode, cells)
     failures = [f'{name}: {problem}\n  {results[name, allowed].output.strip()[:600]}'
-                for name in MODES[mode]
+                for name in names
                 for problem in problems(SCENARIOS[name], tool, shell, mode, allowed, results[name, allowed])]
     assert not failures, '\n'.join(failures)
 
@@ -296,3 +301,28 @@ def test_removed_working_dir_blocks_as_a_process(tmp_path, tool, shell):
     result = subprocess.run([program, *options, (HOOKS / f'{tool}.{shell}').as_posix()],
                             cwd=repo, env=env, capture_output=True, timeout=300)
     assert result.returncode == 1, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('shell', SHELLS)
+@pytest.mark.parametrize('tool', TOOLS)
+def test_existing_working_dir_works_through_a_launcher_that_takes_one_line_arguments(tmp_path, tool, shell):
+    """A Windows .cmd launcher cuts an argument at its first newline and still exits 0."""
+    program = interpreter(shell)
+    repo = make_repo(tmp_path)
+    (repo / 'scan-config.yaml').write_text('languages: {typescript: {build: {working_dir: mobile}}}\n',
+                                          encoding='utf-8')
+    subprocess.run(['git', 'add', 'other/other.ts'], cwd=repo, check=True, timeout=120)
+    env = make_environment(tmp_path, tool, shell, 'trusted')
+    launchers = tmp_path / 'launchers'
+    source = ('import subprocess, sys\n'
+              'if any("\\n" in arg for arg in sys.argv[1:]):\n'
+              '    sys.exit(0)\n'
+              f'sys.exit(subprocess.call([{sys.executable!r}, *sys.argv[1:]]))\n')
+    for name in ('python', 'python3'):
+        application(launchers, name, source)
+    env['PATH'] = str(launchers) + os.pathsep + env['PATH']
+    options = [] if shell == 'sh' else ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']
+    result = subprocess.run([program, *options, (HOOKS / f'{tool}.{shell}').as_posix()],
+                            cwd=repo, env=env, capture_output=True, timeout=300)
+    # The directory exists and only a file outside it is staged: a normal pass.
+    assert result.returncode == 0, result.stdout + result.stderr

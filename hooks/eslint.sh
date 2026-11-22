@@ -18,31 +18,12 @@ scan_incomplete() {
     exit 1
 }
 
-# Read NUL-delimited staged paths. Print 'inside' if the configured directory exists and
-# holds one of them, 'outside' if it exists and holds none, nothing if it does not exist.
-# Blank means the root, and ./, separators and letter case are tolerated. This is only a
-# check: selection and execution use the configured value unchanged.
+# Read NUL-delimited staged paths. Print 'inside', 'outside', or nothing for a missing
+# directory: see lib/working_dir.py.
 inspect_working_dir() {
-    local py program
-    read -r -d '' program <<'PY' || true
-import os, pathlib, sys
-names = sys.stdin.buffer.read().split(b'\0')
-sys.path.insert(0, sys.argv[1])
-from scan_config import load_scan_config, read_value
-value = read_value(load_scan_config(sys.argv[2]), 'languages.typescript.build.working_dir', '.')
-root = found = pathlib.Path.cwd()
-for part in pathlib.Path(value.strip().replace('\\', '/')).parts:
-    step = found / part
-    if not step.is_dir():
-        step = next((p for p in found.iterdir() if p.name.lower() == part.lower() and p.is_dir()), None)
-        if step is None:
-            sys.exit()
-    found = step
-parents = {p for name in names for p in (root / os.fsdecode(name)).parents}
-print('inside' if any(p.is_dir() and p.samefile(found) for p in parents) else 'outside')
-PY
+    local py
     py="$(find_python)" || return 1
-    "$py" -B -E -P -c "$program" "${SCRIPT_DIR}/lib" "${SCAN_CONFIG_FILE:-scan-config.yaml}"
+    "$py" -B -E -P "${SCRIPT_DIR}/lib/working_dir.py" "${SCAN_CONFIG_FILE:-scan-config.yaml}"
 }
 
 read_nul_paths all_ts get_staged_files ts tsx js jsx

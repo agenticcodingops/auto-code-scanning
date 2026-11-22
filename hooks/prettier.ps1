@@ -19,35 +19,14 @@ function Confirm-IncompleteScan {
     exit 1
 }
 
-# Return 'inside' if the configured directory exists and holds one of the staged paths,
-# 'outside' if it exists and holds none, nothing if it does not exist. Blank means the
-# root, and ./, separators and letter case are tolerated. Python reads the value itself,
-# so the check does not depend on the console encoding. This is only a check: selection
-# and execution use the configured value unchanged.
+# Return 'inside', 'outside', or nothing for a missing directory: see lib/working_dir.py.
 function Get-WorkingDirState {
     param([string[]]$Paths)
-    $program = @'
-import os, pathlib, sys
-names = sys.stdin.buffer.read().split(b'\0')
-sys.path.insert(0, sys.argv[1])
-from scan_config import load_scan_config, read_value
-value = read_value(load_scan_config(sys.argv[2]), 'languages.typescript.build.working_dir', '.')
-root = found = pathlib.Path.cwd()
-for part in pathlib.Path(value.strip().replace('\\', '/')).parts:
-    step = found / part
-    if not step.is_dir():
-        step = next((p for p in found.iterdir() if p.name.lower() == part.lower() and p.is_dir()), None)
-        if step is None:
-            sys.exit()
-    found = step
-parents = {p for name in names for p in (root / os.fsdecode(name)).parents}
-print('inside' if any(p.is_dir() and p.samefile(found) for p in parents) else 'outside')
-'@
     $config = if ($env:SCAN_CONFIG_FILE) { $env:SCAN_CONFIG_FILE } else { 'scan-config.yaml' }
     $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
     $python = Find-WorkingPython
     # The leading NUL separates any preamble that Windows PowerShell writes to the pipe.
-    "`0$($Paths -join "`0")`0" | & $python -B -E -P -c $program "$PSScriptRoot/lib" $config
+    "`0$($Paths -join "`0")`0" | & $python -B -E -P "$PSScriptRoot/lib/working_dir.py" $config
 }
 
 $allFiles = Get-StagedFiles -Extensions @('ts', 'tsx', 'js', 'jsx', 'json', 'css', 'scss', 'md')
