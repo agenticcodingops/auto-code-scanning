@@ -37,7 +37,7 @@ repos:
       # ---------------------------------------------------------------
       # OPTIONAL: Snyk IaC - requires Snyk license and SNYK_TOKEN
       # To enable: npm install -g snyk && snyk auth
-      # Uncomment below. Hook exits 0 (fail-open) if not configured.
+      # Uncomment below. A missing CLI blocks; missing authentication warns and skips.
       # ---------------------------------------------------------------
       # - id: snyk-iac
       #   stages: [pre-push]

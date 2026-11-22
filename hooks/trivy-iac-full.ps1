@@ -67,7 +67,7 @@ $trivyArgs += @('--', $dir)
         Show-TrivyIacFindings -JsonOutput $result.Output
         $overallExit = 1
     } elseif ($result.ExitCode -ge 2) {
-        # Infrastructure error — fail-open
+        # Exit 2 or higher is a tool error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
         $null = Get-HookExitCode -ToolExitCode $result.ExitCode
     }
 }

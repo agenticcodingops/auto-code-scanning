@@ -11,8 +11,9 @@ Two facts explain most problems:
   Setup copies hooks, schemas and a set of shared scripts into your repository, but not
   the setup or verification scripts. Run those from the platform clone you kept in
   [step 4](SETUP-GUIDE.md#4-obtain-and-pin-the-release).
-- **Hooks fail closed.** A missing tool, a missing trusted config or a scanner error
-  blocks the commit or push. It is never treated as a clean scan.
+- **Hooks fail closed by default.** A missing tool, a missing trusted config or a scanner
+  error exit blocks the commit or push. Deliberate skips warn: Snyk without authentication, and
+  the .NET hooks when no solution is found (a pushed tree without one can still block).
   `SCAN_ALLOW_TOOL_ERRORS=1` turns tool errors into warnings for a local experiment only.
 
 In the commands below, `$Platform` (PowerShell) or `$PLATFORM` (Bash) is the path of

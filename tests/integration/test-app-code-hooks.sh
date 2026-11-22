@@ -51,7 +51,7 @@ run_case() {
     if [[ ${actual} -eq ${expected} ]]; then
         log_pass "${desc}"
     elif [[ ${expected} -eq 1 && ${actual} -ge 2 ]]; then
-        log_skip "${desc}" "infra error exit ${actual} (fail-open)"
+        log_skip "${desc}" "infra error exit ${actual}"
     else
         log_fail "${desc}" "${expected}" "${actual}"
     fi

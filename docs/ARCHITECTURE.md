@@ -367,7 +367,8 @@ A quick reference for "what happens when X breaks":
 |---|---|---|
 | A selected scan tool is unavailable | block by default | the scan is incomplete; local compatibility is explicit and limited |
 | A tool download 5xx / rate-limits in CI | retry with backoff (e.g. tflint `--init` + `GITHUB_TOKEN`) | transient, not a code problem |
-| A *real* finding ≥ blocking severity | **exit 1 / fail the check** | that's the whole point |
+| A *real* finding at or above that check's threshold | **exit 1 / fail the check** | that's the whole point |
+| `snyk-iac` selected without authentication | warn and skip | Snyk needs a licence; a missing CLI still blocks |
 | `scan-config.yaml` malformed or validation prerequisites missing | staged validation **blocks by default** | validate the exact staged root blob; only prerequisite errors have a limited local compatibility option |
 | Fix-loop fed a malformed/over-broad patch | path gate **fails closed** → `needs-human-review` | never auto-push outside the allowlist |
 | `local_hooks_enabled: false` | scanner hooks skip; staged config validation still runs | push reads the switch from the pushed tree; CI still enforces |

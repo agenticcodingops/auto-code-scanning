@@ -68,8 +68,8 @@ pre-commit:
       glob: "*.sql"
       run: hooks/dispatcher.sh sqlfluff
 
-# Heavier scans at push time. These are best-effort locally (CI's
-# code-security-scan.yml / reusable-scan.yml is the authoritative backstop).
+# Heavier scans at push time. An incomplete scan blocks the push (CI's
+# code-security-scan.yml / reusable-scan.yml is still the authoritative check).
 pre-push:
   commands:
     scan-push-objects:

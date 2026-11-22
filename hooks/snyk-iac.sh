@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # snyk-iac.sh — Snyk IaC scan for Terraform misconfigurations
-# Stage: pre-push | Severity: all | Optional: fail-open if not installed/authenticated
+# Stage: pre-push | Severity: all | Optional: blocks if not installed, skips if not authenticated
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,10 +40,10 @@ print_snyk_iac_findings() {
     fi
 }
 
-# Verify tool availability (fail-open if snyk not installed)
+# Verify tool availability (a missing CLI blocks unless SCAN_ALLOW_TOOL_ERRORS=1)
 require_tool "snyk" || exit 0
 
-# Verify authentication (fail-open if not authenticated)
+# Deliberate skip: no SNYK_TOKEN and no login. An invalid token is not skipped; its scan error blocks.
 if [[ -z "${SNYK_TOKEN:-}" ]]; then
     set +e
     "$SCAN_TOOL" whoami >/dev/null 2>&1
@@ -109,7 +109,7 @@ for dir in "${scan_dirs[@]}"; do
         print_snyk_iac_findings "${output}"
         overall_exit=1
     elif [[ ${exit_code} -ge 2 ]]; then
-        # Infrastructure error — fail-open
+        # Exit 2 or higher is a tool error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
         handle_exit_code ${exit_code}
     fi
 done
