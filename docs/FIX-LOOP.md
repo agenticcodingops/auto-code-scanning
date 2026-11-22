@@ -229,7 +229,10 @@ first runs.
   Maintainers bumping the pin in this repository follow
   [VERSION-PINNING.md](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b).
 - **Commit authorship.** Fix commits are authored and committed as
-  `auto-code-scanning-autofix[bot] <autofix@users.noreply.github.com>`.
+  `auto-code-scanning-autofix[bot] <autofix@auto-code-scanning.invalid>`.
+  The address is non-routable, so it links to no account. Consumers whose rules require
+  a linked author, a CLA or a co-author line may need an exception. A squash merge
+  can add GitHub's own co-author line.
 
 ## 6. Limits & non-goals
 

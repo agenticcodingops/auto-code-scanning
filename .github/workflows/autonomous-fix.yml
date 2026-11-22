@@ -1008,12 +1008,11 @@ jobs:
           echo "autofix iteration ${next}"
           # commit-tree runs no hooks and reads neither the index nor the working tree.
           commit="$(
-            GIT_AUTHOR_NAME="auto-code-scanning-autofix[bot]" GIT_AUTHOR_EMAIL="autofix@users.noreply.github.com" \
-            GIT_COMMITTER_NAME="auto-code-scanning-autofix[bot]" GIT_COMMITTER_EMAIL="autofix@users.noreply.github.com" \
+            GIT_AUTHOR_NAME="auto-code-scanning-autofix[bot]" GIT_AUTHOR_EMAIL="autofix@auto-code-scanning.invalid" \
+            GIT_COMMITTER_NAME="auto-code-scanning-autofix[bot]" GIT_COMMITTER_EMAIL="autofix@auto-code-scanning.invalid" \
             git -C pr-head commit-tree "${final_tree}" -p "${HEAD_SHA}" \
               -m "chore(autofix): apply review fixes [autofix]" \
-              -m "Automated minimal fix for PR #${PR}." \
-              -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+              -m "Automated minimal fix for PR #${PR}."
           )"
           {
             echo "commit=${commit}"
