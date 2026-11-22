@@ -162,7 +162,7 @@ def run_trivy(scan_dir, severity_filter=None):
     rc, stdout, stderr = run_cmd(cmd)
 
     if rc != 0:
-        # Infrastructure error - fail-open
+        # Tool error: the scan is incomplete and scan.py exits 2
         print(f"  [WARN] Trivy scan failed (exit {rc}): {stderr.strip()[:200]}", file=sys.stderr)
         return findings, True  # error flag
 
@@ -290,7 +290,7 @@ def run_checkov(scan_dir, auto_fix=False, config_file=None, trusted_root=None):
 
 
 def run_snyk(scan_dir, severity_filter=None):
-    """Run Snyk IaC scan and return normalized findings. Optional — skips if not installed/authenticated."""
+    """Run Snyk IaC scan and return normalized findings. Optional: when selected, a missing CLI or login makes scan.py exit 2."""
     findings = []
 
     # Check if snyk is available
@@ -582,7 +582,7 @@ def main():
         all_findings.extend(checkov_findings)
         total_fix_count += fix_count
 
-    # Run Snyk (optional — skips if not installed or not authenticated)
+    # Run Snyk (optional: once selected, a missing CLI or login is an incomplete scan)
     if "snyk" in tools_to_run:
         snyk_findings, snyk_error = run_snyk(scan_dir, severity_filter)
         if snyk_error:

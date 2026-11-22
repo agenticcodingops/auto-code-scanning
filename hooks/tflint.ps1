@@ -97,10 +97,10 @@ foreach ($dir in $scanDirs) {
         Show-TflintFindings -JsonOutput ($output -join "`n")
         $overallExit = 1
     } elseif ($exitCode -ge 3) {
-        # Runtime error — fail-open
+        # Exit 3 or higher is a runtime error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
         $null = Get-HookExitCode -ToolExitCode 2
     } elseif ($exitCode -eq 1) {
-        # Config errors — fail-open
+        # Exit 1 is a config error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
         $null = Get-HookExitCode -ToolExitCode 2
     }
 }

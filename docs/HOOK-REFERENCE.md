@@ -300,7 +300,8 @@ This hook is **optional**. It is included as a commented-out entry in standard a
 **Authentication check order**:
 1. Check `SNYK_TOKEN` environment variable (zero subprocess overhead)
 2. Fall back to `snyk whoami` (checks keychain/config)
-3. If neither succeeds: warn and exit 0 (fail-open)
+3. If neither succeeds: warn and exit 0. This is a deliberate credential skip. An invalid
+   `SNYK_TOKEN` passes step 1, so the scan's error blocks instead.
 
 ## App-Code Hooks
 

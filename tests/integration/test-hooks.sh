@@ -80,8 +80,8 @@ run_hook_test() {
     if [ "$actual_exit" -eq "$expected_exit" ]; then
         log_pass "$description"
     elif [ "$expected_exit" -eq 1 ] && [ "$actual_exit" -ge 2 ]; then
-        # Infrastructure error (fail-open) -- tool issue, not a test failure
-        log_skip "$description" "infrastructure error (exit $actual_exit, fail-open)"
+        # Infrastructure error -- tool issue, not a test failure (the test skips; hooks block)
+        log_skip "$description" "infrastructure error (exit $actual_exit)"
     else
         log_fail "$description" "$expected_exit" "$actual_exit"
     fi

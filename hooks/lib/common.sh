@@ -91,7 +91,7 @@ hook_verbose() {
 #   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
 #
 # Usage: handle_exit_code $tool_exit_code
-# Returns: 0 (pass/fail-open) or 1 (findings found)
+# Returns: 0 (pass, or a tool error with the opt-in) or 1 (findings or incomplete scan)
 handle_exit_code() {
     local exit_code="${1:?Exit code required}"
 
@@ -626,7 +626,7 @@ resolve_config() {
 # Run a Trivy command with DB lock retry logic
 # Usage: run_trivy_with_retry arg1 arg2 arg3 ...
 # Pass arguments as separate words (NOT as a single string with eval).
-# Returns: Trivy exit code (0, 1, or 2 for fail-open on persistent lock)
+# Returns: Trivy exit code, or 2 (a tool error, which blocks) on a persistent lock
 run_trivy_with_retry() {
     local output exit_code diagnostics attempt
     diagnostics="$(mktemp)" || return 2
@@ -657,7 +657,7 @@ generate_id() {
 }
 
 # Check if a tool is available on PATH
-# Usage: require_tool "trivy" || return 2
+# Usage: require_tool "trivy" || exit 0  (exits 1 itself; returns 2 only with the opt-in)
 require_tool() {
     local tool="${1:?Tool name required}"
     if ! type -P -- "${tool}" >/dev/null 2>&1; then

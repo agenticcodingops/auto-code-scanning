@@ -1,5 +1,5 @@
 # snyk-iac.ps1 — Snyk IaC scan for Terraform misconfigurations
-# Stage: pre-push | Severity: all | Optional: fail-open if not installed/authenticated
+# Stage: pre-push | Severity: all | Optional: blocks if not installed, skips if not authenticated
 param([Parameter(ValueFromRemainingArguments)]$ExtraArgs)
 
 $ErrorActionPreference = 'Stop'
@@ -7,11 +7,11 @@ $ErrorActionPreference = 'Stop'
 
 Invoke-PushSnapshot -HookPath $PSCommandPath -HookArguments $ExtraArgs
 
-# Verify tool availability (fail-open if snyk not installed)
+# Verify tool availability (a missing CLI blocks unless SCAN_ALLOW_TOOL_ERRORS=1)
 $scanner = Test-ToolAvailable 'snyk'
 if (-not $scanner) { exit 0 }
 
-# Verify authentication (fail-open if not authenticated)
+# Deliberate skip: no SNYK_TOKEN and no login. An invalid token is not skipped; its scan error blocks.
 if (-not $env:SNYK_TOKEN) {
     try {
         $null = & $scanner whoami 2>&1
@@ -105,7 +105,7 @@ foreach ($dir in $scanDirs) {
         }
         $overallExit = 1
     } elseif ($exitCode -ge 2) {
-        # Infrastructure error — fail-open
+        # Exit 2 or higher is a tool error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
         $null = Get-HookExitCode -ToolExitCode $exitCode
     }
 }
