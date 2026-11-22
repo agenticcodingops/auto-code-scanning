@@ -164,10 +164,18 @@ def test_disabled_language_does_not_switch_its_local_hook_off(tmp_path, hook, to
     config = consumer / 'scan-config.yaml'
     config.write_text((ROOT / 'templates/scan-config/starter.yaml').read_text(encoding='utf-8'), encoding='utf-8')
     assert not any(value['enabled'] for value in yaml.safe_load(config.read_text(encoding='utf-8'))['languages'].values())
-    application(tmp_path / 'tools', tool, 'import sys\nsys.exit(1)\n')
-    env = dict(os.environ, SCAN_CONFIG_FILE=config.as_posix(),
+    # Staged, because hooks that scan a snapshot see only what is in the index.
+    subprocess.run(['git', '-C', str(consumer), 'add', 'scan-config.yaml'], check=True)
+    seen = tmp_path / 'seen-config'
+    application(tmp_path / 'tools', tool, 'import pathlib, sys\n'
+                'config = pathlib.Path("scan-config.yaml")\n'
+                f'pathlib.Path({str(seen)!r}).write_bytes(config.read_bytes() if config.exists() else b"")\n'
+                'sys.exit(1)\n')
+    env =dict(os.environ, SCAN_CONFIG_FILE=config.as_posix(),
                PATH=str(tmp_path / 'tools') + os.pathsep + os.environ['PATH'])
     env.pop('SCAN_ALLOW_TOOL_ERRORS', None)
     result = subprocess.run([bash, (ROOT / 'hooks/dispatcher.sh').as_posix(), hook], cwd=consumer, env=env,
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
     assert result.returncode != 0, result.stdout + result.stderr
+    assert seen.exists(), 'the scanner never ran: ' + result.stdout + result.stderr
+    assert not any(value['enabled'] for value in yaml.safe_load(seen.read_bytes())['languages'].values())
