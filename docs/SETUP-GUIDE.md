@@ -55,8 +55,9 @@ least one other language to `true`, and the repository has no `.tf` or `.tf.json
 files (in the index, in `HEAD`, a local branch tip or a tag, or untracked and not
 ignored). A configuration that setup creates without `--languages` enables no
 language, so it keeps the Terraform checks; setup leaves an existing configuration
-as it is unless you pass `--force`. Missing or invalid configuration,
-non-boolean values and unavailable parsers also keep Terraform in scope.
+as it is unless you pass `--force`. A missing or unparsable configuration, a missing
+or non-boolean `languages.terraform.enabled` and an unavailable parser also keep
+Terraform in scope.
 Skipped checks are labeled with the reason and counted separately from passes.
 Trivy, Python, Git, the selected runner and hook-installation checks remain required.
 Without `-HooksRunner`, the verifier selects the runner whose configuration is the

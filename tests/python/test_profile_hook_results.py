@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -18,6 +19,8 @@ def isolated_git_configuration(tmp_path, monkeypatch):
     empty = tmp_path / 'git-configuration'
     empty.mkdir()
     (empty / 'config').write_text('', encoding='utf-8')
+    for key in [key for key in os.environ if key.startswith('GIT_')]:
+        monkeypatch.delenv(key)  # GIT_DIR and similar would redirect the fixtures
     monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(empty / 'config'))
     monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
     # Git reads $XDG_CONFIG_HOME/git/ignore even without any configuration file.
@@ -125,8 +128,11 @@ def test_profiler_missing_runner_never_reports_ok(tmp_path):
 def test_profiler_gives_push_hooks_a_transaction_the_real_runner_accepts(tmp_path):
     for scanner in ('trivy', 'checkov', 'tflint'):
         application(tmp_path / 'tools', scanner, 'raise SystemExit(0)\n')  # no real scans or downloads
+    # The host's first Python on PATH may lack PyYAML, so delegate to this one.
+    interpreter = f'import subprocess, sys\nsys.exit(subprocess.call([{sys.executable!r}, *sys.argv[1:]]))\n'
     # Two iterations of four real push-runner transactions, so allow for slow process startup.
-    result, output = profile(tmp_path, 'raise SystemExit(0)\n', committed='main.tf', timeout=300)
+    result, output = profile(tmp_path, 'raise SystemExit(0)\n', python_source=interpreter,
+                             committed='main.tf', timeout=300)
     assert result.returncode == 0, result.stdout + result.stderr
     data = json.loads((output / 'performance-latest.json').read_text(encoding='utf-8-sig'))
     checkov = next(h for h in data['hooks'] if h['id'] == 'checkov')

@@ -19,6 +19,8 @@ def isolated_git_configuration(tmp_path, monkeypatch):
     empty = tmp_path / 'git-configuration'
     empty.mkdir()
     (empty / 'config').write_text('', encoding='utf-8')
+    for key in [key for key in os.environ if key.startswith('GIT_')]:
+        monkeypatch.delenv(key)  # GIT_DIR and similar would redirect the fixtures
     monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(empty / 'config'))
     monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
     # Git reads $XDG_CONFIG_HOME/git/ignore even without any configuration file.
