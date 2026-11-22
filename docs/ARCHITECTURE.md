@@ -69,7 +69,7 @@ flowchart TD
     cfg --> langs["languages.*<br/>enabled · file_patterns · build · tools"]
     cfg --> ci["ci<br/>sarif.category_prefix · fail_on"]
     cfg --> sup["suppressions<br/>file · max_duration_days"]
-    cfg --> fl["fix_loop<br/>enabled · label · allowlist_paths · gated_paths<br/>build_verify_cmd · claude_code_action_ref"]
+    cfg --> fl["fix_loop<br/>enabled · allowlist_paths · gated_paths<br/>build_verify_cmd · claude_code_action_ref"]
 
     langs -. read by .-> hooks["local hooks<br/>(hooks/dispatcher.sh)"]
     langs -. read by .-> cireuse["reusable CI workflows"]
@@ -264,7 +264,7 @@ sequenceDiagram
 | **Path allowlist** | `scripts/check-fix-allowlist.py` — only `allowlist_paths`, never `gated_paths` (auth/payment/crypto/`.github`/…); fails **closed** on malformed config |
 | **Re-verification** | `verify` builds without secrets; `apply-and-push` gates fix paths and secret-scans changed files from the candidate tree before pushing |
 | **Iteration cap** | `max_iterations` via a `.fix-attempts` counter → then `needs-human-review` |
-| **Pinned action** | `claude_code_action_ref` SHA-pinned; CVE-2025-66032 is a CLI flaw fixed in CLI 1.0.93, unrelated to the action's version ([VERSION-PINNING](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b)) |
+| **Pinned action** | `claude_code_action_ref` is a schema-required mirror, not read at run time; the workflow pins the action; CVE-2025-66032 is a CLI flaw fixed in CLI 1.0.93, unrelated to the action's version ([VERSION-PINNING](VERSION-PINNING.md#the-centralized-claude-code-action-pin-layer-b)) |
 | **Token scope** | `AUTOFIX_TOKEN` is injected **only** into the final push URL, never written to disk in `analyze` |
 
 Full write-up: [FIX-LOOP](FIX-LOOP.md) · [SECURITY-MODEL](SECURITY-MODEL.md).

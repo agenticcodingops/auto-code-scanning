@@ -22,7 +22,6 @@ Everything is driven by the `fix_loop:` block in `scan-config.yaml`:
 ```yaml
 fix_loop:
   enabled: false                 # master switch (Layer B is off by default)
-  label: "ai-autofix"            # PR opt-in label
   human_review_label: "needs-human-review"
   max_turns: 8                   # claude-code-action --max-turns per analyze run
   max_iterations: 3              # hard cap on autofix commits per PR (.fix-attempts)
@@ -31,7 +30,6 @@ fix_loop:
                 ".github/",".claude/","hooks","lefthook.yml","scan-and-fix.ps1","scripts/",".env","LICENSE"]
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
   build_verify_cmd: "cd api && dotnet build App.slnx --nologo"   # authoritative re-verify in the verify job (no secrets)
-  required_secrets: ["AUTOFIX_TOKEN", "ANTHROPIC_API_KEY"]
 ```
 
 The schema **requires** `allowlist_paths` and a SHA-pinned `claude_code_action_ref` whenever
@@ -39,15 +37,14 @@ The schema **requires** `allowlist_paths` and a SHA-pinned `claude_code_action_r
 
 What the workflow actually reads in release v3.1.2 (the `config` job's `Parse fix_loop`
 step): `enabled`, `max_turns`, `max_iterations`, `build_verify_cmd` and
-`human_review_label`; the path gate reads `allowlist_paths` and `gated_paths`. Three
-keys have **no effect** on a run:
+`human_review_label`; the path gate reads `allowlist_paths` and `gated_paths`.
+The action reference is a required mirror; two retired keys remain accepted for compatibility:
 
 - `claude_code_action_ref` is only checked for format by the schema. The action version
   the loop runs is hard-coded in the `analyze` job's `Run Claude Code (FIX-ONLY)` step
   of the reusable workflow, so it changes only when you pin a newer platform release.
-- `required_secrets` is not read by the workflow or by setup; setup checks for
-  `AUTOFIX_TOKEN` and `ANTHROPIC_API_KEY` by name.
-- `label` is not read either: the opt-in label `ai-autofix` is written into the caller
+- `required_secrets` is deprecated and ignored; setup checks supported secret names directly.
+- `label` is deprecated and ignored: the opt-in label `ai-autofix` is written into the caller
   template's `if:`. To use another label, change it there.
 
 ---

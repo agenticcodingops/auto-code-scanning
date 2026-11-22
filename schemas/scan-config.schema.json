@@ -139,7 +139,8 @@
         "enabled": { "type": "boolean" },
         "label": {
           "type": "string",
-          "description": "PR label that opts a PR into auto-fix (default 'ai-autofix')."
+          "deprecated": true,
+          "description": "Ignored: nothing reads it. The caller workflow owns the opt-in label."
         },
         "human_review_label": {
           "type": "string",
@@ -160,7 +161,7 @@
         },
         "claude_code_action_ref": {
           "type": "string",
-          "description": "SHA-pinned claude-code-action ref. Its bundled CLI must be past CLI 1.0.93, the fix for CVE-2025-66032.",
+          "description": "Mirror of the SHA-pinned claude-code-action ref in the reusable workflow. Still required when enabled, but not read at run time.",
           "pattern": "^anthropics/claude-code-action@[0-9a-f]{40}$"
         },
         "build_verify_cmd": {
@@ -169,6 +170,8 @@
         },
         "required_secrets": {
           "type": "array",
+          "deprecated": true,
+          "description": "Ignored: nothing reads it. Setup checks the supported secret names directly.",
           "items": { "type": "string" }
         }
       },

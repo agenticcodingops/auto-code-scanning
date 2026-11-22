@@ -57,7 +57,7 @@ multi-consumer **scan-AND-fix platform**. Terraform scanning is preserved unchan
 
 - [x] **In-session Claude Code bundle** (`templates/claude/`): `PostToolUse` per-file scan (exit 2 → in-session self-correct) + `Stop` final gate via shared `scan-and-fix` (guarded by `stop_hook_active`)
 - [x] **`autonomous-fix.yml`** reusable two-job CI fix-loop: read-only `analyze` (no push creds, no egress, scoped tools, untrusted-text-as-data → patch artifact) + `apply-and-push` (re-checkout exact SHA, re-enforce allowlist gate, re-verify secret scan + `build_verify_cmd`, push with `AUTOFIX_TOKEN`) + `flag-human-review`
-- [x] **`fix_loop:` config block** (`enabled`, `label`, `human_review_label`, `max_turns`, `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`, `build_verify_cmd`, `required_secrets`)
+- [x] **`fix_loop:` config block** (`enabled`, `human_review_label`, `max_turns`, `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`, `build_verify_cmd`)
 - [x] `scripts/check-fix-allowlist.py` shared allowlist gate (allowlist + fail-closed gated paths); opt-in per PR via `ai-autofix` label; hard `max_iterations` cap → `needs-human-review`
 - [x] `claude-code-action` **SHA-pinned v1.0.148** (CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3 is a Claude Code CLI flaw, fixed in CLI 1.0.93; the action's own version is unrelated)
 - [x] `docs/SECURITY-MODEL.md` (two-job "lethal trifecta" threat model)

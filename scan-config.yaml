@@ -449,8 +449,7 @@ suppressions:
 fix_loop:
   enabled: false
 
-  # PR labels (gates the privilege boundary)
-  label: "ai-autofix"                     # opt-in: only labelled PRs are auto-fixed
+  # Label applied when the loop needs human review
   human_review_label: "needs-human-review"  # applied on cap/gate/failure
 
   # Agent limits
@@ -484,8 +483,8 @@ fix_loop:
     - ".env"
     - "LICENSE"
 
-  # Centralized, SHA-pinned claude-code-action reference. Its bundled CLI must be past
-  # CLI 1.0.93, the fix for CVE-2025-66032 / GHSA-xq4m-mc3c-vvg3. All consumers inherit this pin.
+  # Mirror of the action pin in the reusable workflow; required when enabled,
+  # but not read at run time. Consumers inherit the action from their platform release.
   claude_code_action_ref: "anthropics/claude-code-action@d5726de019ec4498aa667642bc3a80fca83aa102"  # v1.0.148
 
   # Authoritative re-verification command in JOB B (apply-and-push). Derive from
@@ -495,8 +494,3 @@ fix_loop:
   # point it at a checked-in script under a gated path, e.g. "bash scripts/ci-build-verify.sh",
   # so it can't be altered in-PR without tripping the gate. See docs/SECURITY-MODEL.md §7.1.
   build_verify_cmd: ""
-
-  # Secrets the consumer must provide (verified, never stored, by setup-scan-fix).
-  required_secrets:
-    - "AUTOFIX_TOKEN"      # Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.
-    - "ANTHROPIC_API_KEY"  # or CLAUDE_CODE_OAUTH_TOKEN

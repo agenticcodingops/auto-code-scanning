@@ -264,9 +264,9 @@ Both layers are driven by **one file, `scan-config.yaml`**:
 - `languages.*` — enable Terraform / `csharp` / `typescript` / `sql` scanning; the
   `csharp` block carries `build.solution` / `build.working_dir` so the dotnet path is
   solved by config, never hardcoded.
-- `fix_loop.*` — `enabled`, `label`, `human_review_label`, `max_turns`,
+- `fix_loop.*` — `enabled`, `human_review_label`, `max_turns`,
   `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`,
-  `build_verify_cmd`, `required_secrets`.
+  `build_verify_cmd`. `claude_code_action_ref` is a schema-required mirror, not read at run time.
 
 One-command onboarding installs the runner (Lefthook by default), the in-session
 `.claude` bundle, and the caller workflows:
