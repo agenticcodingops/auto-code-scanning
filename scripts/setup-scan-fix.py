@@ -200,7 +200,7 @@ def main(argv) -> int:
                 else:
                     warn(f"secret {need} MISSING — create it (this script never stores secrets):")
                     if need == "AUTOFIX_TOKEN":
-                        print("    Fine-grained PAT (Contents RW + Pull-requests RW, THIS repo only):")
+                        print("    Fine-grained PAT (Contents: Read and write, this repository only; Metadata read is automatic. Do not add Workflows access: fixes to workflow files are meant to fail.):")
                         print("      gh secret set AUTOFIX_TOKEN")
                     else:
                         print("      gh secret set ANTHROPIC_API_KEY   # or CLAUDE_CODE_OAUTH_TOKEN")

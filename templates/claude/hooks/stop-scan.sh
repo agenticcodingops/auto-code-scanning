@@ -30,7 +30,7 @@ for cand in scripts/scan-and-fix.sh scan-and-fix.sh .scanning/scripts/scan-and-f
     [[ -f "${cand}" ]] && { scan_script="${cand}"; break; }
 done
 if [[ -z "${scan_script}" ]]; then
-    echo "Stop hook: scan-and-fix.sh not found; skipping (install via setup-scanning)." >&2
+    echo "Stop hook: scan-and-fix.sh not found; skipping (install via setup-scan-fix)." >&2
     exit 0
 fi
 

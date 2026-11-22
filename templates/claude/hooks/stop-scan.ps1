@@ -24,7 +24,7 @@ foreach ($cand in @('scripts/scan-and-fix.ps1', 'scan-and-fix.ps1', '.scanning/s
     if (Test-Path $cand) { $scanScript = $cand; break }
 }
 if (-not $scanScript) {
-    [Console]::Error.WriteLine("Stop hook: scan-and-fix.ps1 not found; skipping (install via setup-scanning).")
+    [Console]::Error.WriteLine("Stop hook: scan-and-fix.ps1 not found; skipping (install via setup-scan-fix).")
     exit 0
 }
 

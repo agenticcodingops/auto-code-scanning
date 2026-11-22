@@ -2,7 +2,7 @@
 # scan-config.yaml — STARTER tier
 # Lowest friction: secrets + formatters + CRITICAL only. Fix-loop OFF.
 # Goal: near-zero friction so autonomous agents never hit a reason to bypass.
-# setup-scanning toggles `enabled:` per the languages you pick.
+# setup-scan-fix toggles `enabled:` per the languages you pick.
 # ============================================================================
 schema_version: "1.0"
 

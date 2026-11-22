@@ -178,7 +178,7 @@ For unfixable findings, the agent can:
 ## In-Session Self-Correction (Claude Code bundle)
 
 The **core feature for autonomous Claude Code loops** is the in-session bundle in
-`templates/claude/`. `setup-scanning` / `setup-scan-fix` copies it into a consumer
+`templates/claude/`. `setup-scan-fix` copies it into a consumer
 repo as `.claude/settings.json` + `.claude/hooks/`. It scans the agent's own edits
 *as it makes them* so Claude fixes findings **in the same session**, before anything
 is committed — no PR round-trip required.
