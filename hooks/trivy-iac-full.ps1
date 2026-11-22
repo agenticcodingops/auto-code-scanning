@@ -55,10 +55,11 @@ $trivyArgs += @('--', $dir)
         try {
             $json = $result.Output | ConvertFrom-Json
             $misconfigs = $json.Results | ForEach-Object { $_.Misconfigurations } | Where-Object { $_ }
-            $totalCritical += @($misconfigs | Where-Object { $_.Severity -eq 'CRITICAL' }).Count
-            $totalHigh += @($misconfigs | Where-Object { $_.Severity -eq 'HIGH' }).Count
-            $totalMedium += @($misconfigs | Where-Object { $_.Severity -eq 'MEDIUM' }).Count
-            $totalLow += @($misconfigs | Where-Object { $_.Severity -eq 'LOW' }).Count
+            $counts = Get-ScannerSeverityCounts -Findings @($misconfigs) -Tool trivy
+            $totalCritical += $counts.CRITICAL
+            $totalHigh += $counts.HIGH
+            $totalMedium += $counts.MEDIUM
+            $totalLow += $counts.LOW
         } catch {
             $totalCritical += 1
         }

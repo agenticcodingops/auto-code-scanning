@@ -85,9 +85,10 @@ foreach ($dir in $scanDirs) {
             $issues = $json.issues
             if ($issues) {
                 # Severity mapping: error -> HIGH, warning -> MEDIUM, notice -> LOW
-                $totalHigh += @($issues | Where-Object { $_.rule.severity -eq 'error' }).Count
-                $totalMedium += @($issues | Where-Object { $_.rule.severity -eq 'warning' }).Count
-                $totalLow += @($issues | Where-Object { $_.rule.severity -eq 'notice' }).Count
+                $counts = Get-ScannerSeverityCounts -Findings @($issues) -Tool tflint
+                $totalHigh += $counts.HIGH
+                $totalMedium += $counts.MEDIUM
+                $totalLow += $counts.LOW
             }
         } catch {
             $totalHigh += 1

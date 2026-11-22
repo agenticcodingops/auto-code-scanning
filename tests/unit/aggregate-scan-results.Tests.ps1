@@ -5,6 +5,12 @@ BeforeAll {
     $ScriptRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $ScriptPath = Join-Path $ScriptRoot "scripts" "aggregate-scan-results.ps1"
     $ScriptContent = Get-Content $ScriptPath -Raw
+    . (Join-Path $ScriptRoot 'hooks/lib/common.ps1')
+    $ast = [Management.Automation.Language.Parser]::ParseInput($ScriptContent, [ref]$null, [ref]$null)
+    $mapping = $ast.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-NormalizedSeverity'
+    }, $true)
+    . ([scriptblock]::Create($mapping.Extent.Text))
 }
 
 Describe "aggregate-scan-results.ps1" {
@@ -41,22 +47,34 @@ Describe "aggregate-scan-results.ps1" {
         }
 
         It "Should map Trivy severities correctly" {
-            $ScriptContent | Should -Match 'return "CRITICAL"'
-            $ScriptContent | Should -Match 'return "HIGH"'
-            $ScriptContent | Should -Match 'return "MEDIUM"'
-            $ScriptContent | Should -Match 'return "LOW"'
+            foreach ($level in @('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')) {
+                Get-NormalizedSeverity $level 'trivy' | Should -Be $level
+            }
+            Get-NormalizedSeverity 'UNKNOWN' 'trivy' | Should -Be 'LOW'
+        }
+
+        It "Should map Checkov severities correctly" {
+            foreach ($raw in @($null, '')) {
+                Get-NormalizedSeverity $raw 'checkov' | Should -Be 'HIGH'
+            }
+            foreach ($raw in @('INFO', 'NONE', 'other')) {
+                Get-NormalizedSeverity $raw 'checkov' | Should -Be 'MEDIUM'
+            }
         }
 
         It "Should map tflint severities correctly" {
-            $ScriptContent | Should -Match '"error"\s*\{\s*return "HIGH"'
-            $ScriptContent | Should -Match '"warning"\s*\{\s*return "MEDIUM"'
-            $ScriptContent | Should -Match '"notice"\s*\{\s*return "LOW"'
+            Get-NormalizedSeverity 'error' 'tflint' | Should -Be 'HIGH'
+            Get-NormalizedSeverity 'warning' 'tflint' | Should -Be 'MEDIUM'
+            foreach ($raw in @('info', 'notice')) {
+                Get-NormalizedSeverity $raw 'tflint' | Should -Be 'LOW'
+            }
+            Get-NormalizedSeverity '' 'tflint' | Should -Be 'MEDIUM'
         }
 
         It "Should map Gitleaks to HIGH" {
-            $ScriptContent | Should -Match '"gitleaks"'
-            $ScriptContent | Should -Match 'return "HIGH"'
+            Get-NormalizedSeverity '' 'gitleaks' | Should -Be 'HIGH'
         }
+
     }
 
     Describe "Cross-Tool Deduplication" {

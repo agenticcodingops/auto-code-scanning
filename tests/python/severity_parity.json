@@ -1,0 +1,1736 @@
+{
+  "captured_from": "ecbd20a (unmodified lane branch)",
+  "cases": {
+    "checkov": [
+      {
+        "value": null,
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "missing": true,
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": null,
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "INFO",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "NONE",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "other",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "high",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "low",
+        "ci_bucket": "LOW",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "LOW",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": 5,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": 5,
+        "exits": {
+          "ci": [
+            "crash",
+            "crash"
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": [
+          "HIGH"
+        ],
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": [
+          "HIGH"
+        ],
+        "exits": {
+          "ci": [
+            "crash",
+            "crash"
+          ],
+          "scan": [
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash",
+            "crash"
+          ]
+        }
+      },
+      {
+        "value": "CRITICAL",
+        "ci_bucket": "CRITICAL",
+        "scan_bucket": "CRITICAL",
+        "ps_bucket": "CRITICAL",
+        "sh_bucket": "CRITICAL",
+        "baseline_bucket": "CRITICAL",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "value": "HIGH",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "MEDIUM",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "LOW",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "trivy": [
+      {
+        "value": null,
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "missing": true,
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": null,
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "INFO",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "NONE",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "other",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "high",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "low",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": 5,
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": 5,
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": [
+          "HIGH"
+        ],
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "LOW",
+        "baseline_bucket": [
+          "HIGH"
+        ],
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "CRITICAL",
+        "ci_bucket": "CRITICAL",
+        "scan_bucket": "CRITICAL",
+        "ps_bucket": "CRITICAL",
+        "sh_bucket": "CRITICAL",
+        "baseline_bucket": "CRITICAL",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "value": "HIGH",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "MEDIUM",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "LOW",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "UNKNOWN",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "tflint": [
+      {
+        "value": null,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "missing": true,
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": null,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "INFO",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "LOW",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "NONE",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "other",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "high",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "low",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": 5,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": 5,
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": [
+          "HIGH"
+        ],
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": [
+          "HIGH"
+        ],
+        "exits": {
+          "ci": [
+            "crash",
+            "crash"
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "CRITICAL",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "HIGH",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "MEDIUM",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "LOW",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "error",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "warning",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "info",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      },
+      {
+        "value": "notice",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": []
+        }
+      }
+    ],
+    "snyk": [
+      {
+        "value": null,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "missing": true,
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": null,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "INFO",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "NONE",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "other",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "high",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "HIGH",
+        "baseline_bucket": "HIGH",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": "low",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "LOW",
+        "baseline_bucket": "LOW",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "value": 5,
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": 5,
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": [
+          "HIGH"
+        ],
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": [
+          "HIGH"
+        ],
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "CRITICAL",
+        "ci_bucket": "CRITICAL",
+        "scan_bucket": "CRITICAL",
+        "ps_bucket": "CRITICAL",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "HIGH",
+        "ci_bucket": "HIGH",
+        "scan_bucket": "HIGH",
+        "ps_bucket": "HIGH",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "MEDIUM",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "LOW",
+        "ci_bucket": "LOW",
+        "scan_bucket": "LOW",
+        "ps_bucket": "LOW",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            1,
+            1
+          ],
+          "scan": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      {
+        "value": "critical",
+        "ci_bucket": "CRITICAL",
+        "scan_bucket": "CRITICAL",
+        "ps_bucket": "CRITICAL",
+        "sh_bucket": "CRITICAL",
+        "baseline_bucket": "CRITICAL",
+        "exits": {
+          "ci": [
+            0,
+            1
+          ],
+          "scan": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "value": "medium",
+        "ci_bucket": "MEDIUM",
+        "scan_bucket": "MEDIUM",
+        "ps_bucket": "MEDIUM",
+        "sh_bucket": "MEDIUM",
+        "baseline_bucket": "MEDIUM",
+        "exits": {
+          "ci": [
+            0,
+            0
+          ],
+          "scan": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ]
+  },
+  "hook_exits": {
+    "checkov": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "checkov-strict": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "trivy-iac-full": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "trivy-secrets": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "tflint": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "snyk-iac": {
+      "0": 0,
+      "1": 1,
+      "2": 1,
+      "3": 1
+    }
+  }
+}

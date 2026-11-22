@@ -44,8 +44,8 @@ class TestSeverityMapping:
     def test_checkov_high_maps_to_high(self):
         assert scan.map_checkov_severity("HIGH") == "HIGH"
 
-    def test_checkov_none_maps_to_medium(self):
-        assert scan.map_checkov_severity(None) == "MEDIUM"
+    def test_checkov_none_maps_to_high(self):
+        assert scan.map_checkov_severity(None) == "HIGH"
 
 
 class TestRemediationUrls:

@@ -19,14 +19,14 @@ print_snyk_iac_findings() {
     fi
 
     local findings
-    findings="$(echo "${json}" | jq -r '
+    findings="$(echo "${json}" | jq -r "$SCAN_SEVERITY_JQ"'
         [.infrastructureAsCodeIssues[]? |
-         {severity: (.severity // "unknown"), id: (.id // .publicId // ""),
+         {severity: (.severity | normalized("snyk")), id: (.id // .publicId // ""),
           title: (.title // .iacDescription.issue // ""),
           file: (.targetFile // .path // ""),
           line: (.lineNumber // 0), resolve: (.resolve // .iacDescription.resolve // "")}] |
-        sort_by(if .severity == "critical" then 0 elif .severity == "high" then 1
-                elif .severity == "medium" then 2 else 3 end) |
+        sort_by(if .severity == "CRITICAL" then 0 elif .severity == "HIGH" then 1
+                elif .severity == "MEDIUM" then 2 else 3 end) |
         .[] |
         "  \(.severity | ascii_upcase)  \(.id)  \(.file):\(.line)\n    \(.title)\(if .resolve != "" then "\n    Fix: \(.resolve)" else "" end)"
     ' 2>/dev/null)" || true
@@ -100,18 +100,11 @@ for dir in "${scan_dirs[@]}"; do
 
     if [[ ${exit_code} -eq 1 ]]; then
         # Parse findings from JSON output
-        if command -v jq >/dev/null 2>&1; then
-            local_critical="$(echo "${output}" | jq '[.infrastructureAsCodeIssues[]? | select(.severity == "critical")] | length' 2>/dev/null || echo 0)"
-            local_high="$(echo "${output}" | jq '[.infrastructureAsCodeIssues[]? | select(.severity == "high")] | length' 2>/dev/null || echo 0)"
-            local_medium="$(echo "${output}" | jq '[.infrastructureAsCodeIssues[]? | select(.severity == "medium")] | length' 2>/dev/null || echo 0)"
-            local_low="$(echo "${output}" | jq '[.infrastructureAsCodeIssues[]? | select(.severity == "low")] | length' 2>/dev/null || echo 0)"
-            total_critical=$((total_critical + local_critical))
-            total_high=$((total_high + local_high))
-            total_medium=$((total_medium + local_medium))
-            total_low=$((total_low + local_low))
-        else
-            total_high=$((total_high + 1))
-        fi
+        read -r local_critical local_high local_medium local_low < <(scanner_severity_counts "${output}" snyk)
+        total_critical=$((total_critical + local_critical))
+        total_high=$((total_high + local_high))
+        total_medium=$((total_medium + local_medium))
+        total_low=$((total_low + local_low))
         # Surface the parsed findings (file, severity, title, fix) before failing.
         print_snyk_iac_findings "${output}"
         overall_exit=1

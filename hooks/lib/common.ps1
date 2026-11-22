@@ -776,7 +776,7 @@ function Show-TrivyIacFindings {
             $target = $result.Target
             foreach ($misconfig in $result.Misconfigurations) {
                 $findings += [PSCustomObject]@{
-                    Severity   = $misconfig.Severity
+                    Severity   = Get-ScannerSeverity -Severity $misconfig.Severity -Tool trivy
                     ID         = $misconfig.ID
                     Title      = $misconfig.Title
                     Resolution = $misconfig.Resolution
@@ -818,7 +818,7 @@ function Show-TrivySecretFindings {
             $target = $result.Target
             foreach ($secret in $result.Secrets) {
                 $findings += [PSCustomObject]@{
-                    Severity  = $secret.Severity
+                    Severity  = Get-ScannerSeverity -Severity $secret.Severity -Tool trivy
                     RuleID    = $secret.RuleID
                     Title     = $secret.Title
                     Target    = $target
@@ -857,7 +857,7 @@ function Show-CheckovFindings {
 
         $findings = @()
         foreach ($check in $failedChecks) {
-            $sev = if ($check.severity) { $check.severity } else { 'UNKNOWN' }
+            $sev = Get-ScannerSeverity -Severity $check.severity -Tool checkov
             $findings += [PSCustomObject]@{
                 Severity  = $sev
                 ID        = $check.check_id
@@ -902,7 +902,7 @@ function Show-TflintFindings {
         $findings = @()
         foreach ($issue in $parsed.issues) {
             $findings += [PSCustomObject]@{
-                Severity = $issue.rule.severity
+                Severity = Get-ScannerSeverity -Severity $issue.rule.severity -Tool tflint
                 Name     = $issue.rule.name
                 Message  = $issue.message
                 File     = $issue.range.filename
@@ -914,7 +914,7 @@ function Show-TflintFindings {
         if ($findings.Count -gt 0) {
             Write-HookLog ""
             foreach ($f in $findings | Sort-Object @{Expression={
-                switch ($f.Severity) { 'error' {0} 'warning' {1} default {2} }
+                switch ($f.Severity) { 'HIGH' {0} 'MEDIUM' {1} default {2} }
             }}) {
                 Write-HookLog "  $($f.Severity.ToUpper())  $($f.Name)  $($f.File):$($f.Start)-$($f.End)"
                 Write-HookLog "    $($f.Message)"
@@ -924,4 +924,58 @@ function Show-TflintFindings {
     } catch {
         # Silently skip if JSON parsing fails
     }
+}
+
+# Reporting only: scanner status remains the hook's exit-code authority.
+function Get-ScannerSeverity {
+    param($Severity, [string]$Tool)
+    $value = [string]$Severity
+    switch ($Tool) {
+        'checkov' {
+            if (-not $value) { return 'HIGH' }
+            switch ($value) {
+                'CRITICAL' { return 'CRITICAL' }
+                'HIGH' { return 'HIGH' }
+                'MEDIUM' { return 'MEDIUM' }
+                'LOW' { return 'LOW' }
+                default { return 'MEDIUM' }
+            }
+        }
+        'tflint' {
+            switch ($value) {
+                'error' { return 'HIGH' }
+                'warning' { return 'MEDIUM' }
+                'info' { return 'LOW' }
+                'notice' { return 'LOW' }
+                default { return 'MEDIUM' }
+            }
+        }
+        'snyk' {
+            switch ($value) {
+                'critical' { return 'CRITICAL' }
+                'high' { return 'HIGH' }
+                'medium' { return 'MEDIUM' }
+                'low' { return 'LOW' }
+                default { return 'MEDIUM' }
+            }
+        }
+        default {
+            switch ($value) {
+                'CRITICAL' { return 'CRITICAL' }
+                'HIGH' { return 'HIGH' }
+                'MEDIUM' { return 'MEDIUM' }
+                default { return 'LOW' }
+            }
+        }
+    }
+}
+
+function Get-ScannerSeverityCounts {
+    param([object[]]$Findings, [string]$Tool)
+    $counts = @{ CRITICAL = 0; HIGH = 0; MEDIUM = 0; LOW = 0 }
+    foreach ($finding in $Findings) {
+        $raw = if ($Tool -eq 'tflint') { $finding.rule.severity } else { $finding.severity }
+        $counts[(Get-ScannerSeverity -Severity $raw -Tool $Tool)]++
+    }
+    return $counts
 }

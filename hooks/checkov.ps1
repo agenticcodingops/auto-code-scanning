@@ -47,10 +47,11 @@ try {
                 $json = $outputText | ConvertFrom-Json
                 $failedChecks = $json.results.failed_checks
                 if ($failedChecks) {
-                    $totalCritical += @($failedChecks | Where-Object { $_.severity -eq 'CRITICAL' }).Count
-                    $totalHigh += @($failedChecks | Where-Object { $_.severity -eq 'HIGH' }).Count
-                    $totalMedium += @($failedChecks | Where-Object { $_.severity -eq 'MEDIUM' }).Count
-                    $totalLow += @($failedChecks | Where-Object { $_.severity -eq 'LOW' -or $null -eq $_.severity }).Count
+                    $counts = Get-ScannerSeverityCounts -Findings @($failedChecks) -Tool checkov
+                    $totalCritical += $counts.CRITICAL
+                    $totalHigh += $counts.HIGH
+                    $totalMedium += $counts.MEDIUM
+                    $totalLow += $counts.LOW
                 }
             } catch {
                 $totalCritical += 1
