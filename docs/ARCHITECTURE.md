@@ -59,20 +59,22 @@ flowchart LR
 
 ## 3. The seam: `scan-config.yaml`
 
-Everything keys off one file, validated against `schemas/scan-config.schema.json` (by a
-hook *and* in CI). It is the only thing a consumer must understand.
+Project settings live in one file, validated against `schemas/scan-config.schema.json` by the
+`validate-scan-config` hook. Which hooks run and what they block on is not set here: that is the
+hook manifest, each hook's own threshold and the workflow inputs.
 
 ```mermaid
 flowchart TD
     cfg["scan-config.yaml"]
-    cfg --> g["global<br/>local_hooks_enabled · blocking_severities · exclude_paths"]
-    cfg --> langs["languages.*<br/>enabled · file_patterns · build · tools"]
-    cfg --> ci["ci<br/>sarif.category_prefix · fail_on"]
-    cfg --> sup["suppressions<br/>file · max_duration_days"]
+    cfg --> g["global<br/>local_hooks_enabled"]
+    cfg --> langs["languages.*<br/>enabled · build"]
+    cfg --> ci["ci<br/>sarif.category_prefix"]
+    cfg --> sup["suppressions<br/>file"]
     cfg --> fl["fix_loop<br/>enabled · allowlist_paths · gated_paths<br/>build_verify_cmd · claude_code_action_ref"]
 
-    langs -. read by .-> hooks["local hooks<br/>(hooks/dispatcher.sh)"]
-    langs -. read by .-> cireuse["reusable CI workflows"]
+    langs -. build read by .-> hooks["local hooks<br/>(hooks/dispatcher.sh)"]
+    langs -. enabled read by .-> cireuse["reusable CI workflows"]
+    ci -. read by .-> cireuse
     fl -. read by .-> fixloop["autonomous-fix.yml"]
     g  -. read by .-> hooks
     sup -. read by .-> cireuse
@@ -81,10 +83,12 @@ flowchart TD
 
 Key fields:
 
-- **`global.local_hooks_enabled`** — the off-switch. `false` makes every local hook exit 0
+- **`global.local_hooks_enabled`** — the off-switch. `false` skips the local scanner hooks;
+  configuration validation still runs, and a push reads the value from the pushed object
   (CI and the fix-loop are unaffected). See [LOCAL-HOOKS-TOGGLE](LOCAL-HOOKS-TOGGLE.md).
-- **`global.blocking_severities`** — which severities fail a commit / CI check (others are
-  reported but non-blocking).
+- **`languages.<lang>.enabled`** — selects hosted Semgrep languages (`csharp`, `typescript`)
+  and the C# on-demand scan, and tells setup verification what to check. It does not switch
+  local hooks on or off.
 - **`languages.<lang>.build`** — e.g. the .NET `solution` + `working_dir` so the dotnet hooks
   know what to format/build. Resolved **relative to `working_dir`**.
 - **`fix_loop.*`** — drives LAYER B (see §6).

@@ -122,7 +122,7 @@ repos:
       - id: trivy-iac-critical
       - id: trivy-secrets
       - id: gitleaks
-      # v2.0.0 app-code hooks (enable the matching languages.* in scan-config.yaml):
+      # v2.0.0 app-code hooks (listing them here turns them on):
       - id: semgrep-csharp
       - id: semgrep-typescript
       - id: eslint
@@ -167,7 +167,7 @@ This repository follows Semantic Versioning (SemVer):
 
 ### What Is NOT a Breaking Change
 
-- Adding new hooks (consumers must opt in by enabling the matching `languages.*`)
+- Adding new hooks (consumers opt in through their hook manifest)
 - Adding optional parameters to scripts
 - Adding fields to JSON schemas (additive)
 - Changing tool version minimums (documented in release notes)
@@ -209,7 +209,7 @@ shows nothing. When you move to `v2.1.0` or later:
 - In the current workflow, Checkov findings without a severity count as HIGH, and a
   TFLint rule at `error` level also counts as HIGH. Active HIGH findings block when
   `fail-on-findings` is true. See the `Parse Checkov findings` block,
-  `tflint_severity_map` and `FAIL_ON_FINDINGS` in
+  `normalize_severity` and `FAIL_ON_FINDINGS` as used in
   [aggregate_scan.py](../scripts/aggregate_scan.py). The **2.1.0** changelog entry
   describes the older MEDIUM default for Checkov.
 - Checkov uses the platform's `configs/<cloud>/.checkov.yaml` as its base config; the

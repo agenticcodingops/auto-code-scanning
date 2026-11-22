@@ -19,7 +19,7 @@ in code written by AI coding agents, without each repository building its own se
 The platform has two layers:
 
 - **Layer A: scanning** (always on). Local Git hooks and reusable CI workflows run the
-  scanners and block on findings at or above the severities you choose.
+  scanners, and each one blocks at its own documented threshold.
 - **Layer B: the AI fix loop** (opt-in, off by default). On a pull request you label,
   an AI agent proposes a minimal fix. Separate jobs build it without secrets and check
   it before anything is pushed.
@@ -73,14 +73,14 @@ flowchart LR
 
 ### Choose a tier
 
-| Tier | Blocks | Application code | Fix loop |
-| --- | --- | --- | --- |
-| **starter** | CRITICAL | formatters and secrets | off |
-| **standard** (recommended) | CRITICAL, HIGH | adds Semgrep static analysis | wired, off |
-| **strict** | CRITICAL, HIGH, MEDIUM | adds the Roslyn build and the full pre-push set | on (still needs the PR label) |
+| Tier | pre-commit hook set | Fix loop |
+| --- | --- | --- |
+| **starter** | Trivy secrets, file hygiene, `terraform fmt` | off |
+| **standard** (recommended) | adds Gitleaks, CRITICAL IaC, TFLint, `terraform validate` | wired, off |
+| **strict** | adds full IaC, strict Checkov, suppression validation | on (still needs the PR label) |
 
-`templates/scan-config/{starter,standard,strict}.yaml` supply these defaults. The
-runner manifest you install chooses the actual local hooks. See
+Lefthook, the default runner, installs the same hooks, application-code hooks
+included, for every tier. A tier does not change CI thresholds. See
 [tier selection](docs/SETUP-GUIDE.md#2-choose-a-tier-and-runner) and the
 [tier upgrade guide](docs/TIER-UPGRADE-GUIDE.md).
 

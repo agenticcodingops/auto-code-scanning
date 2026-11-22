@@ -238,8 +238,8 @@ but never fail it. How each tool's severity is mapped, in `scripts/aggregate_sca
 |---|---|
 | Trivy | Trivy's own severity. |
 | Checkov | The report's `severity`, or HIGH when it has none. Missing severity metadata does not weaken the gate. |
-| TFLint | Rule severity `error` becomes HIGH, `warning` MEDIUM, `notice` LOW (`tflint_severity_map`). A TFLint rule at `error` level counts toward the gate. |
-| Snyk | `critical`, `high`, `medium`, `low` map to the same level (`snyk_severity_map`). |
+| TFLint | Rule severity `error` becomes HIGH, `warning` MEDIUM, `info` and `notice` LOW (`normalize_severity`). A TFLint rule at `error` level counts toward the gate. |
+| Snyk | `critical`, `high`, `medium`, `low` map to the same level (`normalize_severity`). |
 
 #### Scanner health and secret findings
 

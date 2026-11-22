@@ -129,15 +129,15 @@ team needs a smaller initial set or stricter policy. The runner manifests and
 `scan-config.yaml` are separate: changing a language's `enabled` flag does not
 remove commands from the installed manifest.
 
-| Tier | Configuration defaults | Terraform pre-commit template |
+| Tier | `fix_loop.enabled` | Terraform pre-commit template |
 |---|---|---|
-| starter | CRITICAL threshold; formatters; Semgrep disabled | Secrets with Trivy, private-key detection, basic hygiene, Terraform formatting |
-| standard | CRITICAL/HIGH; Semgrep enabled; Checkov/TFLint configured | Adds Gitleaks, Trivy IaC, Terraform validation and push TFLint |
-| strict | CRITICAL/HIGH/MEDIUM; build enabled; fix-loop setting enabled | Adds full push IaC, strict Checkov, suppression validation and terraform-docs |
+| starter | false | Secrets with Trivy, private-key detection, basic hygiene, Terraform formatting |
+| standard | false | Adds Gitleaks, Trivy IaC, Terraform validation and push TFLint |
+| strict | true | Adds full push IaC, strict Checkov, suppression validation and terraform-docs |
 
 Lefthook installs the **same manifest for every tier**: secret gates, file-triggered
 language/formatter hooks, and push Checkov, TFLint and .NET build. The tier does not
-rewrite that manifest or make every wrapper read its severity setting. In particular,
+rewrite that manifest or set any threshold: each wrapper has its own. In particular,
 Trivy's `trivy-iac-critical` hook is CRITICAL-only. The pre-commit tier templates are
 Terraform-focused; add application hooks deliberately using [the hook reference](HOOK-REFERENCE.md).
 See [tier upgrades](TIER-UPGRADE-GUIDE.md) for exact template differences.
@@ -384,7 +384,7 @@ python "$PLATFORM/scripts/setup-scan-fix.py" --languages terraform --cloud-provi
 
 For application code, replace the language/provider arguments with
 `--languages csharp,typescript`. These arguments render a new config only. If
-`scan-config.yaml` exists, edit the relevant `languages.<name>.enabled` and build/tool
+`scan-config.yaml` exists, edit the relevant `languages.<name>.enabled` and build
 settings explicitly, preserving reviewed settings; do not assume setup enabled them.
 Use `--force` only after reviewing what replacing the entire config would change.
 With hosted automatic language detection, merge reviewed language enablement into

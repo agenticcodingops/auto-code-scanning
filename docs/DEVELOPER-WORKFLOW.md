@@ -339,9 +339,9 @@ The cloud-specific templates (`templates/aws/`, `templates/azure/`, `templates/g
 
 | Tier | Hooks | Best for | Setup command |
 | ---- | ----- | -------- | ------------- |
-| **starter** | trivy-secrets, gitleaks, trivy-iac-critical | New adopters, minimal friction | `--tier starter` |
-| **standard** | All starter + terraform_validate, terraform_tflint, snyk-iac (optional) | Most teams | `--tier standard` |
-| **strict** | All standard + trivy-iac-full, checkov-strict, validate-suppressions, snyk-iac (optional) | Security-sensitive projects | `--tier strict` |
+| **starter** | trivy-secrets, detect-private-key, terraform_fmt, file hygiene | New adopters, minimal friction | `--tier starter` |
+| **standard** | All starter + gitleaks, trivy-iac-critical, terraform_validate, tflint, check-json, snyk-iac (optional) | Most teams | `--tier standard` |
+| **strict** | All standard + trivy-iac-full, checkov-strict, validate-suppressions, terraform_docs, snyk-iac (optional) | Security-sensitive projects | `--tier strict` |
 
 Do not upgrade tiers by just re-running setup with `--force`: `--hooks-runner` defaults
 to `lefthook`, so omitting it silently switches an existing pre-commit consumer's runner.
