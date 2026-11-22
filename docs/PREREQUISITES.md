@@ -49,7 +49,7 @@ always checks Trivy, the hook manager, Python and Git. It skips Terraform, TFLin
 Checkov and `SCAN_TFLINT_CONFIG` only when all three are true: `scan-config.yaml` sets
 `languages.terraform.enabled: false`, it enables another language (choose one with
 `--languages` at setup), and no `.tf` or `.tf.json` file is untracked and not ignored, or in
-the index, a local branch tip or a tag. Otherwise it requires them. The commit and push hooks
+the index, `HEAD`, a local branch tip or a tag. Otherwise it requires them. The commit and push hooks
 need those tools when `.tf` or `.tf.json` files change.
 
 **Note 2: Terraform-only repositories that use Lefthook need Prettier.** The Lefthook

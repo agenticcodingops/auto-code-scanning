@@ -235,8 +235,8 @@ Use your runner and tier. Common failures:
 - **`Checkov NOT FOUND`, `tflint NOT FOUND`, `Terraform NOT FOUND`, or `Trusted external
   tflint configuration NOT FOUND` in an application-only repository.** The verifier
   skips them only when `scan-config.yaml` disables Terraform and enables another
-  language, and no `.tf` or `.tf.json` file is untracked and not ignored, or in the index, a local
-  branch tip or a tag. Its `Terraform remains in scope` line says which condition
+  language, and no `.tf` or `.tf.json` file is untracked and not ignored, or in the index,
+  `HEAD`, a local branch tip or a tag. Its `Terraform remains in scope` line says which condition
   failed. Fix that, or install the tools and provision the config as in
   [step 5](SETUP-GUIDE.md#5-install-local-hooks).
 - **`Cannot verify template hooks`.** The verifier compares your `lefthook.yml` or

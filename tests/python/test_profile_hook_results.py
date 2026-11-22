@@ -86,7 +86,8 @@ if sys.argv[5] == 'checkov':
     assert data['summary']['pre_push_within_target'] is False
     expected_subtotal = sum(h['average_seconds'] for h in data['hooks']
                             if h['stage'] == 'pre-push' and h['succeeded'])
-    assert data['summary']['pre_push_total'] == round(expected_subtotal, 2)
+    # .NET and Python round midpoints differently, so allow half a displayed unit.
+    assert data['summary']['pre_push_total'] == pytest.approx(expected_subtotal, rel=0, abs=0.005000001)
     assert 'Failed hooks: 1' in result.stdout
     assert '[INCOMPLETE]' in result.stdout
     for hook in data['hooks']:
