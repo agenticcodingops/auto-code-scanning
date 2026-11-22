@@ -5,6 +5,7 @@ BeforeAll {
     $ScriptRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $ScriptPath = Join-Path $ScriptRoot "scripts" "aggregate-scan-results.ps1"
     $ScriptContent = Get-Content $ScriptPath -Raw
+    $global:_CommonPS1Loaded = $false  # load again when Pester re-runs in the same session
     . (Join-Path $ScriptRoot 'hooks/lib/common.ps1')
     $ast = [Management.Automation.Language.Parser]::ParseInput($ScriptContent, [ref]$null, [ref]$null)
     $mapping = $ast.Find({ param($node)

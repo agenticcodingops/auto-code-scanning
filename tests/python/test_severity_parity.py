@@ -102,7 +102,7 @@ def ci_run(folder, monkeypatch, tool, rows, fail=True, secrets=False):
     output = folder / '.scan-results/aggregated.json'
     output.unlink(missing_ok=True)
     code = exit_of(lambda: runpy.run_path(str(ROOT / 'scripts/aggregate_scan.py')))
-    return code, json.loads(output.read_text()) if output.exists() else None
+    return code, json.loads(output.read_text(encoding='utf-8')) if output.exists() else None
 
 
 def scan_run(folder, monkeypatch, tool, rows, levels):
@@ -113,12 +113,16 @@ def scan_run(folder, monkeypatch, tool, rows, levels):
     output = folder / 'scan.json'
     output.unlink(missing_ok=True)
     code = exit_of(scan.main)
-    return code, json.loads(output.read_text()) if output.exists() else None
+    return code, json.loads(output.read_text(encoding='utf-8')) if output.exists() else None
 
 
-def assert_summary(data):
+def assert_summary(data, expected=None):
     summary = data.get('summary', data)
     assert sum(summary['by_severity'].values()) == summary['total_findings']
+    if expected is None:  # reports that list their findings
+        expected = {level: sum(finding['severity'] == level for finding in data['findings'])
+                    for level in LEVELS}
+    assert summary['by_severity'] == expected
 
 
 def test_python_paths(tmp_path, monkeypatch, capsys):
@@ -135,7 +139,7 @@ def test_python_paths(tmp_path, monkeypatch, capsys):
                 if data and data['scan_complete']:
                     assert data['findings'][0]['severity'] == row['ci_bucket']
                     assert_summary(data)
-                    gate = Path(os.environ['GITHUB_OUTPUT']).read_text().splitlines()[-4:]
+                    gate = Path(os.environ['GITHUB_OUTPUT']).read_text(encoding='utf-8').splitlines()[-4:]
                     assert gate == [f'findings-count=1',
                                     f'critical-count={int(row["ci_bucket"] == "CRITICAL")}',
                                     f'high-count={int(row["ci_bucket"] == "HIGH")}',
@@ -151,6 +155,10 @@ def test_python_paths(tmp_path, monkeypatch, capsys):
                             assert data['findings'][0]['severity'] == row['scan_bucket']
             assert actual == row['exits'], (tool, row, actual)
             capsys.readouterr()
+
+
+def ps_path(path):
+    return "'" + path.as_posix().replace("'", "''") + "'"
 
 
 def ps_run(command, folder, env=None):
@@ -195,13 +203,13 @@ def test_powershell_aggregator(tmp_path, size):
     for tool, rows in TABLE['cases'].items():
         selected[tool] = rows if size == 'many' else rows[:size] if tool == 'checkov' else []
         (tmp_path / f'{tool}-fixture.json').write_text(json.dumps(report(tool, selected[tool])), encoding='utf-8')
-    result = ps_run(f"& '{ROOT.as_posix()}/scripts/aggregate-scan-results.ps1' -OutputPath '{tmp_path.as_posix()}' | Out-Null", tmp_path)
+    result = ps_run(f"& {ps_path(ROOT / 'scripts/aggregate-scan-results.ps1')} -OutputPath {ps_path(tmp_path)} | Out-Null", tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     data = json.loads(next(tmp_path.glob('unified-results-*.json')).read_text(encoding='utf-8-sig'))
     assert isinstance(data['findings'], list)
     assert_summary(data)
     assert data['summary']['total_findings'] == sum(map(len, selected.values()))
-    jsonschema.validate(data, json.loads((ROOT / 'schemas/unified-results.schema.json').read_text()))
+    jsonschema.validate(data, json.loads((ROOT / 'schemas/unified-results.schema.json').read_text(encoding='utf-8')))
     for finding in data['findings']:
         index = int(finding['file'].split('-')[0][1:])
         assert finding['severity'] == selected[finding['tool']][index]['ps_bucket']
@@ -290,6 +298,9 @@ def test_normalization_preserves_baseline_and_suppression_matches(tmp_path):
             apply_exceptions([normalized], tmp_path, tmp_path)
             for field in ('fingerprint', 'baseline', 'suppressed'):
                 assert normalized[field] == old[field], (tool, raw, field)
+            # Equality alone would pass if neither finding ever matched.
+            assert normalized['fingerprint'] and normalized['baseline'], (tool, raw)
+            assert normalized['suppressed'] == (row['ci_bucket'] not in ('HIGH', 'CRITICAL')), (tool, raw)
 
 
 @pytest.mark.parametrize('tool', ['checkov', 'trivy', 'tflint'])
@@ -313,7 +324,7 @@ def test_create_baseline_stores_and_counts_normalized_severity(tmp_path, tool):
     env = dict(os.environ, PATH=str(tmp_path / 'tools') + os.pathsep + os.environ['PATH'],
                PARITY_REPORT=json.dumps(payload), SCAN_TFLINT_CONFIG=str(config),
                SCAN_TFLINT_PLUGIN_DIR=str(tmp_path / 'plugins'))
-    result = ps_run(f"& '{ROOT.as_posix()}/scripts/create-baseline.ps1' -Tool {tool} -CloudProvider aws -Force", consumer, env)
+    result = ps_run(f"& {ps_path(ROOT / 'scripts/create-baseline.ps1')} -Tool {tool} -CloudProvider aws -Force", consumer, env)
     assert result.returncode == 0, result.stdout + result.stderr
     data = json.loads((consumer / '.scan-baseline/baseline.json').read_text(encoding='utf-8-sig'))
     assert [entry['severity'] for entry in data['entries']] == [row['baseline_bucket'] for row in rows]
@@ -333,7 +344,7 @@ def test_create_baseline_still_fails_without_a_tflint_severity(tmp_path, row):
     env = dict(os.environ, PATH=str(tmp_path / 'tools') + os.pathsep + os.environ['PATH'],
                PARITY_REPORT=json.dumps(report('tflint', [row])), SCAN_TFLINT_CONFIG=str(config),
                SCAN_TFLINT_PLUGIN_DIR=str(tmp_path / 'plugins'))
-    result = ps_run(f"& '{ROOT.as_posix()}/scripts/create-baseline.ps1' -Tool tflint -CloudProvider aws -Force",
+    result = ps_run(f"& {ps_path(ROOT / 'scripts/create-baseline.ps1')} -Tool tflint -CloudProvider aws -Force",
                     consumer, env)
     assert result.returncode != 0, result.stdout + result.stderr
     assert 'tflintreportedafindingwithoutaseverity' in error_text(result)
@@ -368,7 +379,7 @@ def test_hook_summary_and_exit(tmp_path, shell, hook, tool):
                PARITY_REPORT=json.dumps(payload), SCAN_HOOK_ID='parity')
     path = ROOT / f'hooks/{hook}.{shell}'
     command = ([executable, str(path)] if shell == 'sh' else
-               [executable, '-NoProfile', '-Command', f"& '{path.as_posix()}'; exit $LASTEXITCODE"])
+               [executable, '-NoProfile', '-Command', f"& {ps_path(path)}; exit $LASTEXITCODE"])
     for status in (0, 1, 2, 3):
         output_file = consumer / '.scanning/last-scan.json'
         output_file.unlink(missing_ok=True)
@@ -382,13 +393,15 @@ def test_hook_summary_and_exit(tmp_path, shell, hook, tool):
         if status == (2 if tool == 'tflint' else 1):
             data = json.loads(output_file.read_text(encoding='utf-8-sig'))
             AGENT_SCHEMA.validate(data)
-            assert_summary(data)
             buckets = {level: sum(row['ps_bucket' if shell == 'ps1' else 'sh_bucket'] == level for row in rows)
                        for level in LEVELS}
+            assert_summary(data, buckets)  # hook reports omit the findings themselves
             summary = (f"{len(rows)} findings ({buckets['CRITICAL']} critical, {buckets['HIGH']} high, "
                        f"{buckets['MEDIUM']} medium, {buckets['LOW']} low)")
             assert summary in result.stdout, result.stdout + result.stderr
             assert data['summary']['total_findings'] == len(rows)
+            if shell == 'sh' and not shutil.which('jq'):
+                continue  # Bash prints detail rows only with jq; the counts above work without it
             for index, row in enumerate(rows):
                 rule = {'checkov': f'CKV_TEST_{index}', 'trivy': f'AVD-TEST-{index}',
                         'tflint': f'terraform_test_{index}', 'snyk': f'SNYK-{index}'}[tool]
@@ -453,9 +466,9 @@ def test_partly_vendored_library_fails_loudly(tmp_path, script):
                        encoding='utf-8')
     (tmp_path / 'checkov-fixture.json').write_text(
         json.dumps(report('checkov', [{'value': 'HIGH'}])), encoding='utf-8')
-    arguments = (f"-OutputPath '{tmp_path.as_posix()}'" if script.startswith('aggregate')
+    arguments = (f"-OutputPath {ps_path(tmp_path)}" if script.startswith('aggregate')
                  else '-Tool trivy -CloudProvider aws -Force')
-    result = ps_run(f"& '{(package / 'scripts' / script).as_posix()}' {arguments}", tmp_path)
+    result = ps_run(f"& {ps_path(package / 'scripts' / script)} {arguments}", tmp_path)
     assert result.returncode != 0, 'a partly vendored install must not report a result'
     assert 're-vendorhooks/lib/common.ps1' in error_text(result)
 
