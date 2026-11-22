@@ -243,7 +243,7 @@ jobs:
   test-scripts:
     name: Test Scripts
     runs-on: ubuntu-latest
-    # The Python suite alone takes 10 to 14.5 minutes; 15 cancelled healthy runs (#160).
+    # Retain the #160 headroom while measuring the parallel Python suite (#165).
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -255,12 +255,12 @@ jobs:
 
       - name: Install Python test dependencies
         run: |
-          pip install pytest==9.2.0 pytest-cov==7.1.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
+          pip install pytest==9.2.0 pytest-cov==7.1.0 pytest-xdist==3.8.0 PyYAML==6.0.3 jsonschema==4.26.0 pre-commit==4.7.0
 
       - name: Run Python tests
         run: |
           if [ -d "tests/python" ]; then
-            pytest tests/python/ -v --tb=short
+            pytest tests/python/ -n auto --dist worksteal -v --tb=short
           else
             echo "No Python tests found (tests/python/ not yet created)"
           fi

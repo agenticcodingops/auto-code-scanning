@@ -146,7 +146,8 @@ def prepare_hook_repo(tmp_path):
     repo = tmp_path / 'repo'; repo.mkdir()
     subprocess.run(['git','init','-q'],cwd=repo,check=True)
     hooks = tmp_path / 'installed-hooks'
-    shutil.copytree(ROOT / 'hooks', hooks)
+    # Copy source inputs only; another worker may be publishing bytecode here.
+    shutil.copytree(ROOT / 'hooks', hooks, ignore=shutil.ignore_patterns('__pycache__'))
     for script in hooks.rglob('*.sh'):
         script.write_text(script.read_text(encoding='utf-8'), encoding='utf-8', newline='\n')
     return repo, hooks

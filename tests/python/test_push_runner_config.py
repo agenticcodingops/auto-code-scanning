@@ -36,6 +36,7 @@ def test_runner_configuration_rejects_incomplete_template(package, source):
 
 @pytest.mark.parametrize('default', ['empty', 'missing'])
 @pytest.mark.parametrize('shell', ['sh', 'ps1'])
+@pytest.mark.usefixtures('isolated_pre_commit_home')
 def test_saved_runner_alternate_config_runs_adapted_and_other_hooks(consumer, package, scanner, default, shell):
     if not shutil.which('pre-commit'):
         pytest.skip('pre-commit unavailable')

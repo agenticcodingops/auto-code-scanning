@@ -1,4 +1,5 @@
 """Shared pytest fixtures for security scanning tests."""
+import compileall
 import importlib.util
 import sys
 from pathlib import Path
@@ -35,10 +36,28 @@ _import_hyphenated("validate_scan_config", "validate-scan-config.py")
 _import_hyphenated("checkov_consumer_options", "checkov-consumer-options.py")
 
 
+def pytest_configure(config):
+    """Compile shared sources on the controller, before any worker starts.
+
+    Setup tests copy hooks/ and scripts/ from this checkout. If a worker publishes
+    bytecode there during a copy, the copy can meet a vanished temporary file.
+    """
+    if hasattr(config, "workerinput"):
+        return
+    for folder in ("hooks", "scripts"):
+        compileall.compile_dir(REPO_ROOT / folder, quiet=1)
+
+
 @pytest.fixture
 def repo_root():
     """Return the repository root path."""
     return REPO_ROOT
+
+
+@pytest.fixture
+def isolated_pre_commit_home(tmp_path, monkeypatch):
+    """Keep real runner installs/runs out of other workers' and user caches."""
+    monkeypatch.setenv("PRE_COMMIT_HOME", str(tmp_path / "pre-commit-cache"))
 
 
 @pytest.fixture
