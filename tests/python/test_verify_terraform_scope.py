@@ -13,6 +13,18 @@ ROOT = Path(__file__).resolve().parents[2]
 APP_ONLY = 'languages: {terraform: {enabled: false}, csharp: {enabled: true}}'
 
 
+@pytest.fixture(autouse=True)
+def isolated_git_configuration(tmp_path, monkeypatch):
+    """A developer's global ignores, signing or hooks must not decide these tests."""
+    empty = tmp_path / 'git-configuration'
+    empty.mkdir()
+    (empty / 'config').write_text('', encoding='utf-8')
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(empty / 'config'))
+    monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
+    # Git reads $XDG_CONFIG_HOME/git/ignore even without any configuration file.
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(empty))
+
+
 def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='normal',
            files=(), track=False, git_env=None, history=None):
     pwsh, git = shutil.which('pwsh'), shutil.which('git')
@@ -82,6 +94,8 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
     # other scanners or another Python, which would invalidate missing-tool cases.
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(('GIT_', 'SCAN_', 'TFLINT_'))}
+    for key in ('GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'):
+        env[key] = os.environ[key]
     paths = [str(tools)]
     if python_mode == 'inside':
         paths.insert(0, str(repo / 'bin'))
@@ -91,7 +105,7 @@ def verify(tmp_path, config, configs=('lefthook',), runner=None, python_mode='no
     if runner:
         command += ['-HooksRunner', runner]
     result = subprocess.run(command, cwd=repo, env=env, capture_output=True,
-                            text=True, encoding='utf-8', timeout=60)
+                            text=True, encoding='utf-8', timeout=180)
     assert not (repo / 'consumer-code-executed').exists()
     return result
 

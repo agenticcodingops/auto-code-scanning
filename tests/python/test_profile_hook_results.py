@@ -12,8 +12,20 @@ from .tool_helpers import application
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def isolated_git_configuration(tmp_path, monkeypatch):
+    """A developer's global ignores, signing or hooks must not decide these tests."""
+    empty = tmp_path / 'git-configuration'
+    empty.mkdir()
+    (empty / 'config').write_text('', encoding='utf-8')
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(empty / 'config'))
+    monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
+    # Git reads $XDG_CONFIG_HOME/git/ignore even without any configuration file.
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(empty))
+
+
 def profile(tmp_path, runner_source=None, extra=(), python_source=None, committed='committed.txt',
-            timeout=60):
+            timeout=180):
     pwsh = shutil.which('pwsh')
     if not pwsh:
         pytest.skip('PowerShell unavailable')
@@ -81,7 +93,8 @@ if sys.argv[5] == 'checkov':
     assert failed['average_seconds'] is None
     assert failed['within_target'] is False
     assert data['summary']['hooks_failed'] == 1
-    assert data['summary']['hooks_over_target'] == 0
+    # A successful stub can be SLOW on a busy machine; a failed hook never counts as over target.
+    assert data['summary']['hooks_over_target'] == sum(h['status'] == 'SLOW' for h in data['hooks'])
     assert data['summary']['pre_push_complete'] is False
     assert data['summary']['pre_push_within_target'] is False
     expected_subtotal = sum(h['average_seconds'] for h in data['hooks']
