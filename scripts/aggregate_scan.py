@@ -5,7 +5,7 @@ import hashlib
 import sys
 from datetime import datetime, timezone
 from scan_policy import apply_exceptions, scanner_path, checkov_checks
-from scan_reports import load_report
+from scan_reports import load_report, normalize_severity, count_by_severity
 from pathlib import Path
 
 findings = []
@@ -41,7 +41,7 @@ for result in trivy_results:
         findings.append({
             "tool": "trivy",
             "rule_id": vuln.get("AVDID") or vuln.get("ID", ""),
-            "severity": vuln.get("Severity", "UNKNOWN").upper(),
+            "severity": normalize_severity(vuln.get("Severity", "UNKNOWN").upper(), "trivy"),
             "title": vuln.get("Title", ""),
             "message": vuln.get("Message", ""),
             "file": scanner_path(result.get("Target", ""), "trivy", ".", os.environ.get("TERRAFORM_DIRECTORY", ".")),
@@ -75,7 +75,7 @@ for result in checkov_results:
         findings.append({
             "tool": "checkov",
             "rule_id": check_id,
-            "severity": severity,
+            "severity": normalize_severity(severity, "checkov"),
             "title": check.get("check_id", ""),
             "message": check.get("check_result", {}).get("message", check.get("name", "")),
             "file": scanner_path(check.get("file_path", ""), "checkov", ".", os.environ.get("TERRAFORM_DIRECTORY", ".")),
@@ -91,14 +91,13 @@ for result in checkov_results:
         })
 
 # Parse TFLint findings
-tflint_severity_map = {"error": "HIGH", "warning": "MEDIUM", "notice": "LOW"}
 for issue in tflint_data.get("issues", []):
     rule_name = issue.get("rule", {}).get("name", "")
     tflint_sev = issue.get("rule", {}).get("severity", "warning")
     findings.append({
         "tool": "tflint",
         "rule_id": rule_name,
-        "severity": tflint_severity_map.get(tflint_sev, "MEDIUM"),
+        "severity": normalize_severity(tflint_sev, "tflint"),
         "title": rule_name,
         "message": issue.get("message", ""),
         "file": issue.get("range", {}).get("filename", ""),
@@ -114,7 +113,6 @@ for issue in tflint_data.get("issues", []):
     })
 
 # Parse Snyk IaC findings
-snyk_severity_map = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
 for issue in [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetFile", ""))
               for doc in (snyk_data if isinstance(snyk_data, list) else [snyk_data])
               for issue in doc.get("infrastructureAsCodeIssues", [])]:
@@ -124,7 +122,7 @@ for issue in [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetF
     findings.append({
         "tool": "snyk",
         "rule_id": issue_id,
-        "severity": snyk_severity_map.get(snyk_sev, "MEDIUM"),
+        "severity": normalize_severity(snyk_sev, "snyk"),
         "title": issue.get("title", ""),
         "message": issue.get("iacDescription", {}).get("issue", issue.get("title", "")),
         "file": target_file,
@@ -142,7 +140,7 @@ for issue in [dict(issue, targetFile=issue.get("targetFile") or doc.get("targetF
 for result in trivy_secrets.get("Results", []):
     for secret in result.get("Secrets", []):
         findings.append(dict(tool="trivy", rule_id=secret["RuleID"],
-                             severity=secret["Severity"].upper(), title=secret.get("Title", "Secret"),
+                             severity=normalize_severity(secret["Severity"].upper(), "trivy"), title=secret.get("Title", "Secret"),
                              message="Secret detected", file=result["Target"],
                              line=secret.get("StartLine", 0), end_line=secret.get("EndLine", 0),
                              resource="", detected_by=["trivy"]))
@@ -163,11 +161,7 @@ baseline_filtered = sum(bool(f.get("baseline")) for f in findings)
 active = [f for f in findings if not f["suppressed"] and not f["baseline"]]
 
 # Count by severity
-severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-for f in active:
-    sev = f["severity"]
-    if sev in severity_counts:
-        severity_counts[sev] += 1
+severity_counts = count_by_severity(active)
 
 total = len(active)
 critical = severity_counts["CRITICAL"]

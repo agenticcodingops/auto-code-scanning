@@ -183,7 +183,7 @@ dynamic module sources and ambiguous definitions remain active.
 To retain all source inline policy during a reviewed migration, trusted
 IaC callers can explicitly set `allow-inline-checkov-skips: true` (default
 `false`). Explicit caller skip lists and the platform's reviewed cloud
-configuration remain supported. IaC findings without severity are treated as
+configuration remain supported. Checkov findings without severity are treated as
 HIGH so missing metadata cannot weaken the gate.
 
 Enabled scanner job failures, missing or invalid reports, parser errors and

@@ -50,18 +50,11 @@ for dir in "${scan_dirs[@]}"; do
 
     if [[ ${exit_code} -eq 1 ]]; then
         # Parse findings from JSON output
-        if command -v jq >/dev/null 2>&1; then
-            local_critical="$(echo "${output}" | jq '[.results?.failed_checks[]? | select(.severity == "CRITICAL")] | length' 2>/dev/null || echo 0)"
-            local_high="$(echo "${output}" | jq '[.results?.failed_checks[]? | select(.severity == "HIGH")] | length' 2>/dev/null || echo 0)"
-            local_medium="$(echo "${output}" | jq '[.results?.failed_checks[]? | select(.severity == "MEDIUM")] | length' 2>/dev/null || echo 0)"
-            local_low="$(echo "${output}" | jq '[.results?.failed_checks[]? | select(.severity == "LOW" or .severity == null)] | length' 2>/dev/null || echo 0)"
-            total_critical=$((total_critical + local_critical))
-            total_high=$((total_high + local_high))
-            total_medium=$((total_medium + local_medium))
-            total_low=$((total_low + local_low))
-        else
-            total_critical=$((total_critical + 1))
-        fi
+        read -r local_critical local_high local_medium local_low < <(scanner_severity_counts "${output}" checkov)
+        total_critical=$((total_critical + local_critical))
+        total_high=$((total_high + local_high))
+        total_medium=$((total_medium + local_medium))
+        total_low=$((total_low + local_low))
         # Show actionable details so developers know what to fix
         print_checkov_findings "${output}"
         overall_exit=1

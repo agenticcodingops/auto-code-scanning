@@ -72,10 +72,11 @@ foreach ($dir in $scanDirs) {
             $json = $outputText | ConvertFrom-Json
             $issues = $json.infrastructureAsCodeIssues
             if ($issues) {
-                $totalCritical += @($issues | Where-Object { $_.severity -eq 'critical' }).Count
-                $totalHigh += @($issues | Where-Object { $_.severity -eq 'high' }).Count
-                $totalMedium += @($issues | Where-Object { $_.severity -eq 'medium' }).Count
-                $totalLow += @($issues | Where-Object { $_.severity -eq 'low' }).Count
+                $counts = Get-ScannerSeverityCounts -Findings @($issues) -Tool snyk
+                $totalCritical += $counts.CRITICAL
+                $totalHigh += $counts.HIGH
+                $totalMedium += $counts.MEDIUM
+                $totalLow += $counts.LOW
 
                 # Show actionable details (file/severity/title) so developers know
                 # what to fix before the hook blocks the push.
@@ -94,7 +95,7 @@ foreach ($dir in $scanDirs) {
                     }
                     if ([string]::IsNullOrWhiteSpace($file)) { $file = $topTargetFile }
                     $loc = if ($issue.lineNumber) { "$($file):$($issue.lineNumber)" } else { $file }
-                    Write-HookLog "  $(($issue.severity).ToUpper())  $($issue.id)  $loc"
+                    Write-HookLog "  $(Get-ScannerSeverity -Severity $issue.severity -Tool snyk)  $($issue.id)  $loc"
                     Write-HookLog "    $($issue.title)"
                 }
                 Write-HookLog ""

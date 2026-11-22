@@ -58,6 +58,10 @@ param(
 )
 
 . "$PSScriptRoot/../hooks/lib/common.ps1"
+if (-not (Get-Command Get-ScannerSeverity -CommandType Function -ErrorAction SilentlyContinue)) {
+    # Parser error handling would otherwise turn the missing helper into an empty result.
+    throw 'hooks/lib/common.ps1 is older than this script: re-vendor hooks/lib/common.ps1 from the same release'
+}
 Assert-SafeTree $OutputPath
 
 # Ensure output directory exists
@@ -110,19 +114,15 @@ function Get-NormalizedSeverity {
         [string]$Tool = ""
     )
 
+    if ($Tool -in @('checkov', 'trivy', 'tflint', 'snyk')) {
+        return Get-ScannerSeverity -Severity $Severity -Tool $Tool
+    }
+
     # Tool-specific mappings first
     switch ($Tool.ToLower()) {
         "gitleaks" {
             # All secrets are HIGH severity
             return "HIGH"
-        }
-        "tflint" {
-            switch ($Severity.ToLower()) {
-                "error"   { return "HIGH" }
-                "warning" { return "MEDIUM" }
-                "notice"  { return "LOW" }
-                default   { return "MEDIUM" }
-            }
         }
         "psscriptanalyzer" {
             switch ($Severity.ToLower()) {
@@ -150,18 +150,9 @@ function Get-NormalizedSeverity {
                 default   { return "LOW" }
             }
         }
-        "snyk" {
-            switch ($Severity.ToLower()) {
-                "critical" { return "CRITICAL" }
-                "high"     { return "HIGH" }
-                "medium"   { return "MEDIUM" }
-                "low"      { return "LOW" }
-                default    { return "MEDIUM" }
-            }
-        }
     }
 
-    # Generic mapping for Trivy and Checkov (direct mapping)
+    # Generic fallback for other tool names
     switch ($Severity.ToUpper()) {
         { $_ -in @("CRITICAL", "CRIT") } { return "CRITICAL" }
         { $_ -in @("HIGH", "ERROR") } { return "HIGH" }
@@ -288,13 +279,13 @@ function Get-CheckovFindings {
 
         foreach ($check in $checkovResults.results.failed_checks) {
             $ruleId = $check.check_id
-            $severity = Get-NormalizedSeverity ($check.severity ?? "MEDIUM") "checkov"
+            $severity = Get-NormalizedSeverity $check.severity "checkov"
             $findings += @{
                 id = [guid]::NewGuid().ToString()
                 tool = "checkov"
                 rule_id = $ruleId
                 severity = $severity
-                original_severity = $check.severity ?? "MEDIUM"
+                original_severity = $check.severity
                 title = $check.check_name
                 description = $check.check_name
                 message = $check.guideline ?? $check.check_name
@@ -555,7 +546,7 @@ $unifiedResults.tools_executed = $toolsExecuted
 # Apply cross-tool deduplication
 Write-Host "Deduplicating cross-tool findings..." -ForegroundColor Yellow
 $preDedupCount = $allFindings.Count
-$dedupedFindings = Invoke-CrossToolDeduplication $allFindings
+$dedupedFindings = @(Invoke-CrossToolDeduplication $allFindings)
 $dedupCount = $preDedupCount - $dedupedFindings.Count
 if ($dedupCount -gt 0) {
     Write-Host "  Merged $dedupCount duplicate findings across tools" -ForegroundColor Gray
@@ -564,6 +555,14 @@ if ($dedupCount -gt 0) {
 # Remove internal category field from output
 foreach ($finding in $dedupedFindings) {
     $finding.Remove("category")
+    foreach ($key in @($finding.Keys)) {
+        if ($null -eq $finding[$key] -or ($key -eq 'line' -and $finding[$key] -lt 1)) {
+            $finding.Remove($key)
+        }
+    }
+    if ($finding.ContainsKey('original_severity') -and $finding.original_severity -isnot [string]) {
+        $finding.Remove('original_severity')
+    }
 }
 
 # Add findings to results
