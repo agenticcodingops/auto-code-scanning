@@ -24,8 +24,12 @@ Describe "profile-hook-performance.ps1" {
 
     Describe "Parameters" {
 
-        It "Should accept FixtureDir parameter" {
-            $ScriptContent | Should -Match '\$FixtureDir'
+        It "Should expose only the supported profiling parameters" {
+            $parameters = (Get-Command $ScriptPath).Parameters
+            $parameters.ContainsKey('FixtureDir') | Should -BeFalse
+            $parameters.ContainsKey('Iterations') | Should -BeTrue
+            $parameters.ContainsKey('OutputPath') | Should -BeTrue
+            $parameters.ContainsKey('ShowVerbose') | Should -BeTrue
         }
     }
 
