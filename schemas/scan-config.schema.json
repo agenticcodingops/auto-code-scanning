@@ -107,7 +107,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Selects hosted Semgrep languages (csharp, typescript) and the C# on-demand scan, and tells setup verification what to check. Does not switch local hooks on or off: the hook manifest and file types decide those."
+          "description": "Selects hosted Semgrep languages (csharp, typescript) and the C# on-demand scan, and tells setup verification what to check. A non-empty languages input on the calling workflow overrides it for hosted Semgrep. Does not switch local hooks on or off: the hook manifest and file types decide those."
         },
         "description": { "type": "string", "deprecated": true, "description": "Ignored: nothing reads it." },
         "file_patterns": {

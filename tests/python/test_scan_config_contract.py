@@ -140,9 +140,11 @@ def test_ignored_keys_keep_their_type_checks(path, bad):
 @pytest.mark.parametrize('example,languages', [('app-repo', 'csharp,typescript'), ('terraform-repo', 'terraform')])
 def test_examples_equal_renderer_output(tmp_path, example, languages):
     out = tmp_path / 'scan-config.yaml'
-    subprocess.run([sys.executable, str(ROOT / 'scripts/render-scan-config.py'), '--tier', 'starter',
-                    '--languages', languages, '--templates-dir', str(ROOT / 'templates/scan-config'),
-                    '--out', str(out)], check=True, capture_output=True)
+    result = subprocess.run([sys.executable, str(ROOT / 'scripts/render-scan-config.py'), '--tier', 'starter',
+                             '--languages', languages, '--templates-dir', str(ROOT / 'templates/scan-config'),
+                             '--out', str(out)], capture_output=True, text=True, encoding='utf-8',
+                            errors='replace')
+    assert result.returncode == 0, result.stdout + result.stderr
     shipped = (ROOT / 'examples' / example / 'scan-config.yaml').read_bytes()
     assert out.read_bytes().replace(b'\r\n', b'\n') == shipped.replace(b'\r\n', b'\n')
 
@@ -171,7 +173,7 @@ def test_disabled_language_does_not_switch_its_local_hook_off(tmp_path, hook, to
                 'config = pathlib.Path("scan-config.yaml")\n'
                 f'pathlib.Path({str(seen)!r}).write_bytes(config.read_bytes() if config.exists() else b"")\n'
                 'sys.exit(1)\n')
-    env =dict(os.environ, SCAN_CONFIG_FILE=config.as_posix(),
+    env = dict(os.environ, SCAN_CONFIG_FILE=config.as_posix(),
                PATH=str(tmp_path / 'tools') + os.pathsep + os.environ['PATH'])
     env.pop('SCAN_ALLOW_TOOL_ERRORS', None)
     result = subprocess.run([bash, (ROOT / 'hooks/dispatcher.sh').as_posix(), hook], cwd=consumer, env=env,

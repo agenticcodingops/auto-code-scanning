@@ -1,8 +1,8 @@
 # ============================================================================
 # scan-config.yaml — STARTER tier
-# Smallest pre-commit hook set. Fix-loop OFF.
-# The tier picks the pre-commit hook set (auto-code-scanning docs/TIER-UPGRADE-GUIDE.md)
-# and fix_loop.enabled.
+# Smallest hook set for the pre-commit runner. Fix-loop OFF.
+# The tier sets fix_loop.enabled and, with --hooks-runner pre-commit, the hook set
+# (auto-code-scanning docs/TIER-UPGRADE-GUIDE.md).
 # Lefthook installs the same hooks for every tier.
 # ============================================================================
 schema_version: "1.0"
@@ -21,8 +21,9 @@ global:
 #   you call, and local hooks run whatever is on PATH (auto-code-scanning docs/VERSION-PINNING.md).
 #
 # `enabled` selects the languages hosted Semgrep scans (csharp, typescript) and the C#
-# on-demand scan, and tells setup verification what to check. It does not switch local
-# hooks on or off.
+# on-demand scan, and tells setup verification what to check. A non-empty `languages`
+# input on the calling workflow overrides it for hosted Semgrep. It does not switch
+# local hooks on or off.
 languages:
   terraform:
     enabled: true

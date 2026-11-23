@@ -73,7 +73,7 @@ flowchart LR
 
 ### Choose a tier
 
-| Tier | pre-commit hook set | Fix loop |
+| Tier | Hooks with `--hooks-runner pre-commit` | Fix loop |
 | --- | --- | --- |
 | **starter** | Trivy secrets, file hygiene, `terraform fmt` | off |
 | **standard** (recommended) | adds Gitleaks, CRITICAL IaC, TFLint, `terraform validate` | wired, off |

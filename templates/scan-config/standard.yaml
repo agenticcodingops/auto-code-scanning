@@ -1,9 +1,9 @@
 # ============================================================================
 # scan-config.yaml — STANDARD tier (recommended)
-# Adds Gitleaks, CRITICAL IaC, TFLint and terraform validate to the pre-commit set.
+# Adds Gitleaks, CRITICAL IaC and terraform validate at commit, and TFLint at push.
 # Fix-loop wired but OFF (flip fix_loop.enabled + add the ai-autofix label).
-# The tier picks the pre-commit hook set (auto-code-scanning docs/TIER-UPGRADE-GUIDE.md)
-# and fix_loop.enabled.
+# The tier sets fix_loop.enabled and, with --hooks-runner pre-commit, the hook set
+# (auto-code-scanning docs/TIER-UPGRADE-GUIDE.md).
 # Lefthook installs the same hooks for every tier.
 # ============================================================================
 schema_version: "1.0"
@@ -22,8 +22,9 @@ global:
 #   you call, and local hooks run whatever is on PATH (auto-code-scanning docs/VERSION-PINNING.md).
 #
 # `enabled` selects the languages hosted Semgrep scans (csharp, typescript) and the C#
-# on-demand scan, and tells setup verification what to check. It does not switch local
-# hooks on or off.
+# on-demand scan, and tells setup verification what to check. A non-empty `languages`
+# input on the calling workflow overrides it for hosted Semgrep. It does not switch
+# local hooks on or off.
 languages:
   terraform:
     enabled: false
