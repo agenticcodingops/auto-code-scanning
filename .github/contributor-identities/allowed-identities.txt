@@ -1,0 +1,20 @@
+# Identities that may author, commit or co-author on main. One address per line,
+# matched exactly and case-insensitively; lines starting with '#' are ignored.
+# GitHub lists every author and co-author on main as a contributor, so add only an
+# organisation member or a bot this repository's own workflows use.
+# Read by check.py and the Contributor Identities workflow; see CONTRIBUTING.md.
+
+# Organisation members
+hassan.abbas@agenticcodingops.com
+vibecoddingops@outlook.com
+340677216+agenticcodingops-orchestrator@users.noreply.github.com
+
+# GitHub's committer on every merge made on github.com
+noreply@github.com
+
+# Bots the repository's workflows use: release PRs, dependency updates, scanner fixes
+337425099+agenticcodingops-release[bot]@users.noreply.github.com
+49699333+dependabot[bot]@users.noreply.github.com
+support@semgrep.com
+# The autonomous-fix workflow's commits (.github/workflows/autonomous-fix.yml)
+autofix@auto-code-scanning.invalid

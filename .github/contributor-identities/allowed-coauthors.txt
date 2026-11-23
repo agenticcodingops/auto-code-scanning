@@ -1,0 +1,12 @@
+# Tools the maintainer allows as co-authors only (decision of 2026-11-22): they may
+# not author or commit. One address per line, matched exactly and case-insensitively;
+# lines starting with '#' are ignored. Each one can appear as a contributor if it
+# co-authors a commit on main. See CONTRIBUTING.md.
+# Code review
+136622811+coderabbitai[bot]@users.noreply.github.com
+# Semgrep
+63493438+semgrep-app[bot]@users.noreply.github.com
+170460994+semgrep-bot@users.noreply.github.com
+# SonarCloud (SonarQube Cloud)
+39514782+sonarqubecloud[bot]@users.noreply.github.com
+39168408+sonarcloud@users.noreply.github.com
