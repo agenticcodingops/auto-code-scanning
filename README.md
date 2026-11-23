@@ -12,7 +12,7 @@ it, and again in GitHub Actions on every pull request. One file, `scan-config.ya
 says which languages and tools are on. The aim is to catch problems early, including
 in code written by AI coding agents, without each repository building its own setup.
 
-> Pin to a released tag (currently `v3.1.4`) or a commit SHA, **never `@main`**. <!-- x-release-please-version -->
+> Pin to a released tag (currently `v3.1.5`) or a commit SHA, **never `@main`**. <!-- x-release-please-version -->
 
 ## What it enforces
 
@@ -89,14 +89,14 @@ included, for every tier. A tier does not change CI thresholds. See
 Pinning is a two-step story:
 
 1. The shipped templates pin the current release **tag**:
-   for example `uses: …/reusable-scan.yml@v3.1.4` in a caller workflow and <!-- x-release-please-version -->
-   `rev: v3.1.4` in a pre-commit configuration. <!-- x-release-please-version -->
+   for example `uses: …/reusable-scan.yml@v3.1.5` in a caller workflow and <!-- x-release-please-version -->
+   `rev: v3.1.5` in a pre-commit configuration. <!-- x-release-please-version -->
 2. After setup, replace each tag with the full 40-character **commit SHA** that tag
    points to, and pass the same SHA as `scanning-repo-ref` (or `scanning_repo_ref` for
    the fix loop). A SHA cannot be moved; a tag could be.
 
 [VERSION-PINNING](docs/VERSION-PINNING.md) shows how to find the SHA and how to upgrade.
-Only exact version tags such as `v3.1.4` are published. There is no floating major tag <!-- x-release-please-version -->
+Only exact version tags such as `v3.1.5` are published. There is no floating major tag <!-- x-release-please-version -->
 such as `v3`, so `@v3` does not resolve.
 
 ## How it works

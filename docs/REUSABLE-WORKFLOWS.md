@@ -2,7 +2,7 @@
 
 Use this reference when writing or reviewing a caller workflow.
 
-The current release is `v3.1.4`. <!-- x-release-please-version -->
+The current release is `v3.1.5`. <!-- x-release-please-version -->
 
 Sources are named by **job and step**, as they appear in the workflow file and in the
 Actions log (for example "the `aggregate` job's `Aggregate and filter results` step").
