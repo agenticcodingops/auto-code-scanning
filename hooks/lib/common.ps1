@@ -94,10 +94,10 @@ function Get-HookExitCode {
     param(
         [Parameter(Mandatory)]
         [AllowNull()]
-        $ToolExitCode
+        [Nullable[int]]$ToolExitCode
     )
 
-    # An [int] parameter would turn a missing exit code into 0, which is a pass.
+    # A plain [int] parameter would turn a missing exit code into 0, which is a pass.
     if ($null -eq $ToolExitCode) { $ToolExitCode = -1 }
     switch ([int]$ToolExitCode) {
         0 { return 0 }
