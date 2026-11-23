@@ -115,10 +115,8 @@ the commands in [Getting started: keep the settings for new terminals](SETUP-GUI
   use your Actions minutes. How many depends on repository size, how many directories
   hold Terraform, which languages and optional jobs (such as Snyk) you enable, and how
   often you push. Measure your own first runs; this project publishes no estimate.
-- **Local hook time.** `scan-config.yaml` declares time targets under
-  `global.performance` (`pre_commit_max_seconds`, `pre_push_max_seconds`,
-  `per_hook_max_seconds`), and [the hook reference](HOOK-REFERENCE.md#performance-targets)
-  lists them per stage. The hooks do not enforce them: a slow hook is not stopped. This
+- **Local hook time.** [The hook reference](HOOK-REFERENCE.md#performance-targets)
+  lists time targets per stage. The hooks do not enforce them: a slow hook is not stopped. This
   repository's own CI checks its hooks against the per-hook target on its test fixtures.
 - **First runs download data.** Trivy downloads its checks bundle and TFLint downloads
   its rulesets on first use, so the first commit or push is slower than later ones.

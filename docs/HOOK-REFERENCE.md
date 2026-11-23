@@ -312,9 +312,10 @@ shared tool availability checks, staged-file selection for commit scanners,
 as both `.sh` and `.ps1` and is registered in `.pre-commit-hooks.yaml` and the
 default Lefthook manifest.
 
-The corresponding language plugins in `scan-config.yaml` (`languages.csharp`,
-`languages.typescript`, `languages.sql`) ship **disabled by default** — enable
-them per repo (e.g. `setup-scan-fix.py --languages csharp`).
+These hooks run whenever the manifest installs them and matching files change.
+`languages.<name>.enabled` in `scan-config.yaml` does not switch them on or off: it
+selects hosted Semgrep languages (`csharp`, `typescript`) and the C# on-demand scan,
+and tells setup verification what to check.
 
 ### C# / .NET
 

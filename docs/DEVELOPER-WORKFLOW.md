@@ -337,11 +337,16 @@ The cloud-specific templates (`templates/aws/`, `templates/azure/`, `templates/g
 
 ## Choosing a Tier
 
-| Tier | Hooks | Best for | Setup command |
+| Tier | Hooks (pre-commit runner) | Best for | Setup command |
 | ---- | ----- | -------- | ------------- |
-| **starter** | trivy-secrets, gitleaks, trivy-iac-critical | New adopters, minimal friction | `--tier starter` |
-| **standard** | All starter + terraform_validate, terraform_tflint, snyk-iac (optional) | Most teams | `--tier standard` |
-| **strict** | All standard + trivy-iac-full, checkov-strict, validate-suppressions, snyk-iac (optional) | Security-sensitive projects | `--tier strict` |
+| **starter** | trivy-secrets, detect-private-key, terraform_fmt, file hygiene | New adopters, minimal friction | `--tier starter` |
+| **standard** | All starter + gitleaks, trivy-iac-critical, terraform_validate, tflint, check-json, snyk-iac (optional) | Most teams | `--tier standard` |
+| **strict** | All standard + trivy-iac-full, checkov-strict, validate-suppressions, terraform_docs, snyk-iac (optional) | Security-sensitive projects | `--tier strict` |
+
+These hook lists come from `templates/<tier>/pre-commit-config.yaml` and apply only with
+`--hooks-runner pre-commit`. Lefthook, the default runner, installs the same hooks for
+every tier, application-code hooks included; with it, `--tier` picks only the
+`scan-config.yaml` template.
 
 Do not upgrade tiers by just re-running setup with `--force`: `--hooks-runner` defaults
 to `lefthook`, so omitting it silently switches an existing pre-commit consumer's runner.

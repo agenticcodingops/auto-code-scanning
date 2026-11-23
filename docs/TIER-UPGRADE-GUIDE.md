@@ -48,13 +48,13 @@ pre-commit, add them deliberately from [the hook reference](HOOK-REFERENCE.md).
 
 ### What the `scan-config.yaml` tier settings change
 
-The three `scan-config.yaml` templates differ in `global.blocking_severities`,
-`ci.fail_on`, the per-tool `enabled` flags, `global.performance`, the suppression
-settings and `fix_loop.enabled`. In release v3.1.2 the hooks and CI workflows **do not
-read** the severity settings (`blocking_severities`, `severity_levels`, `ci.fail_on`),
-the per-tool `enabled` flags or `global.performance`. Each hook has its own fixed threshold (for example
-`trivy-iac-critical` blocks CRITICAL only), and the Terraform CI gate always counts
-CRITICAL and HIGH. What the tier settings do change:
+Apart from comments, the three `scan-config.yaml` templates differ only in
+`fix_loop.enabled`. Configs from earlier releases can also carry severity settings
+(`blocking_severities`, `severity_levels`, `ci.fail_on`), per-tool settings and
+`global.performance`. These are still accepted, and **nothing reads them**: each hook has
+its own fixed threshold (for example `trivy-iac-critical` blocks CRITICAL only), and the
+Terraform CI gate always counts CRITICAL and HIGH. The settings that matter when you
+change tier:
 
 - `languages.<name>.enabled` decides which languages the **CI** app-code scan covers
   (`csharp`, `typescript`). It does not stop local Lefthook hooks from running on

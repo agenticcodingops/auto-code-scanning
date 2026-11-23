@@ -261,8 +261,9 @@ The full threat model and the split-job rationale are in
 
 Both layers are driven by **one file, `scan-config.yaml`**:
 
-- `languages.*` — enable Terraform / `csharp` / `typescript` / `sql` scanning; the
-  `csharp` block carries `build.solution` / `build.working_dir` so the dotnet path is
+- `languages.*` — `enabled` selects hosted Semgrep for `csharp` / `typescript` and the C#
+  on-demand scan, and scopes setup verification; it does not switch local hooks on or off.
+  The `csharp` block carries `build.solution` / `build.working_dir` so the dotnet path is
   solved by config, never hardcoded.
 - `fix_loop.*` — `enabled`, `human_review_label`, `max_turns`,
   `max_iterations`, `allowlist_paths`, `gated_paths`, `claude_code_action_ref`,

@@ -9,31 +9,22 @@ scanning changed.
 
 ## 1. Enable a language
 
-In `scan-config.yaml`, flip `enabled` and (for C#) point at your solution:
+`enabled` turns on hosted Semgrep for `csharp` and `typescript` and the C# on-demand scan. It
+does not switch local hooks on or off: those follow the hook manifest and file types. `build`
+tells the local hooks where the project is. In `scan-config.yaml`:
 
 ```yaml
 languages:
   csharp:
     enabled: true
-    file_patterns: ["**/*.cs", "**/*.csproj", "**/*.slnx"]
     build:
       solution: "App.slnx"       # relative to working_dir; "" => auto-detect first .sln/.slnx match
       working_dir: "api"         # run dotnet from here
-    tools:
-      semgrep_csharp: { enabled: true, args: ["--config=p/csharp", "--error", "--metrics=off"], stage: pre-commit }
-      dotnet_format:  { enabled: true, args: ["--verify-no-changes", "--no-restore"], stage: pre-commit }
-      dotnet_build:   { enabled: true, args: ["/p:AnalysisMode=AllEnabledByDefault"], stage: pre-push }
   typescript:
     enabled: true
     build: { working_dir: "mobile" }      # monorepo subdir with package.json
-    tools:
-      eslint:   { enabled: true, args: ["--fix"], stage: pre-commit }
-      prettier: { enabled: true, args: ["--write"], stage: pre-commit }
-      semgrep_typescript: { enabled: true, args: ["--config=p/typescript", "--error", "--metrics=off"], stage: pre-commit }
   sql:
-    enabled: true
-    tools:
-      sqlfluff: { enabled: true, stage: pre-commit }
+    enabled: true                # read only by setup verification; CI has no SQL scan
 ```
 
 For a new config, `setup-scan-fix --languages csharp,typescript,sql` renders the

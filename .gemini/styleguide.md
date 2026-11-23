@@ -7,7 +7,7 @@ This styleguide defines the architectural conventions, security boundaries, and 
 ## 1. Architecture & Core Principles
 
 - **Single Source of Truth (`scan-config.yaml`)**:
-  - Scanning configuration across all four enforcement layers (pre-commit, pre-push, in-session agent hooks, and CI reusable workflows) must derive from `scan-config.yaml`.
+  - `scan-config.yaml` holds only keys that code reads, plus `schema_version` and `fix_loop.claude_code_action_ref`, which the schema requires (the second only when the fix loop is enabled), and the informational `ci.required_checks`. Hook selection, thresholds and scanner arguments belong to the hook manifests, the hooks and the workflow inputs.
   - Schema adherence is mandatory: changes to configuration structures must validate against `schemas/scan-config.schema.json`.
 - **Defense in Depth**:
   - Local hooks shift enforcement left for developer velocity, but **CI is the authoritative gatekeeper**.
