@@ -134,6 +134,15 @@ def test_missing_identity_list_is_an_error(repo, tmp_path):
     assert _check(path, empty).returncode == 2
 
 
+@pytest.mark.parametrize("missing", ["allowed-identities.txt", "allowed-coauthors.txt"])
+def test_either_missing_list_is_an_error(repo, missing):
+    path, lists = repo
+    (lists / missing).unlink()
+    result = _check(path, lists)
+    assert result.returncode == 2
+    assert missing in result.stderr
+
+
 def test_bad_revision_is_an_error(repo):
     path, lists = repo
     assert _check(path, lists, ("no-such-revision",)).returncode == 2

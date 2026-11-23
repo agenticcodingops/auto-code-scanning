@@ -88,11 +88,13 @@ def main(argv=None):
 
     identities = load(args.lists / "allowed-identities.txt")
     coauthors = load(args.lists / "allowed-coauthors.txt")
-    if identities is None:
-        print(f"error: {args.lists / 'allowed-identities.txt'} is missing", file=sys.stderr)
-        return 2
+    for name, loaded in (("allowed-identities.txt", identities),
+                         ("allowed-coauthors.txt", coauthors)):
+        if loaded is None:
+            print(f"error: {args.lists / name} is missing", file=sys.stderr)
+            return 2
     try:
-        found = list(findings(args.revs, identities, coauthors or set()))
+        found = list(findings(args.revs, identities, coauthors))
     except subprocess.CalledProcessError as exc:
         print(f"error: git log failed: {exc.stderr.decode('utf-8', 'replace').strip()}",
               file=sys.stderr)
