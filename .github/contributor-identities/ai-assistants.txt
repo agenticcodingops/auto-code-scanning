@@ -9,12 +9,13 @@
 # Read by check.py, check_text.py and the Contributor Identities workflow; see
 # CONTRIBUTING.md.
 #
-# Names that are also common human names (Claude, Jules, Devin, Kiro) match only
-# as the whole name, with an assistant suffix (Claude Code, claude-agent,
-# ClaudeCodeBot, kiro-agent[bot]) or as the assistant's own account. So a person
-# called Claude Martin, Jean-Claude Dupont or Jules Verne passes, and so does an
-# address such as claude.martin@ or jules@. A suffix after a space counts only
-# for Claude and only when it is not also a surname (Claude Code, not Claude Dev).
+# Names that are also common human names (Claude, Jules, Devin, Kiro, Cline)
+# match only as the whole name, with an assistant suffix (Claude Code,
+# claude-agent, ClaudeCodeBot, kiro-agent[bot]) or as the assistant's own
+# account. So a person called Claude Martin, Jean-Claude Dupont, Jules Verne or
+# Ernest Cline passes, and so does an address such as claude.martin@, jules@ or
+# cline@. A suffix after a space counts only for Claude and only when it is not
+# also a surname (Claude Code, not Claude Dev).
 #
 # Boundaries are letters only: (?<![a-z]) and (?![a-z]). Python's \b counts '_'
 # and digits as word characters, so \bcodex\b would let codex_cli, codex2 or
@@ -23,7 +24,9 @@
 # ClaudeCodeBot) are matched however many follow one another.
 
 # Vendors and assistants, in the name or the address
-(?<![a-z])(?:anthropic|codex|cursor|gemini|grok|xai|aider)(?:code|bot|agent|ai|cli|assistant|connector|dev|app)*(?![a-z])
+(?<![a-z])(?:anthropic|codex|cursor|gemini|grok|xai|aider|windsurf|codeium|opencode)(?:code|bot|agent|ai|cli|assistant|connector|dev|app)*(?![a-z])
+# Amazon Q Developer and its accounts: Amazon Q, amazon-q-developer[bot], amazonq@.
+(?<![a-z])amazon[-_ .]?q(?:[-_ .]?(?:developer|dev|bot|agent|cli))*(?![a-z])
 # Names that never occur inside an ordinary word: match anywhere
 openai
 chatgpt
@@ -32,15 +35,15 @@ antigravity
 
 # Assistants whose name is also a person's name.
 # The whole name (never an address, which holds '@'): Claude, Kiro Agent, claude2.
-^(?:claude|jules|devin|kiro)(?:[-_ ]?(?:code|bot|agent|ai|cli|assistant))*(?:[-_ .]?\d[\d.]*)?$
+^(?:claude|jules|devin|kiro|cline)(?:[-_ ]?(?:code|bot|agent|ai|cli|assistant))*(?:[-_ .]?\d[\d.]*)?$
 # With at least one suffix, in a name or an address: claude-code, ClaudeCodeBot,
 # kiro_agent@example.org, jules.bot@example.org.
-(?<![a-z])(?:claude|jules|devin|kiro)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))+(?![a-z])
+(?<![a-z])(?:claude|jules|devin|kiro|cline)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))+(?![a-z])
 # Claude with a suffix after a space, inside a longer name: Claude Code Bot.
 (?<![a-z])claude(?:\s+(?:code|bot|agent|ai|cli|assistant|connector))+(?![a-z])
 # GitHub app and bot accounts, also inside a noreply address: claude[bot],
 # 123+kiro-agent[bot]@users.noreply.github.com.
-(?<![a-z])(?:claude|jules|devin|kiro)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))*\[bot\]
+(?<![a-z])(?:claude|jules|devin|kiro|cline)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))*\[bot\]
 google-labs-jules
 devin-ai-integration
 @devin\.ai$

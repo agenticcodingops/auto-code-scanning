@@ -48,6 +48,9 @@ ALLOWED = [
     ("Claude Dev", "cdev@example.org"),
     ("Jules Verne", "12345+jules@users.noreply.github.com"),
     ("Devin Aiken", "devin.aiken@example.org"),
+    ("Ernest Cline", "cline@example.org"),
+    ("Patsy Cline", "patsy.cline@example.org"),
+    ("Amazon Quality Team", "quality@amazon.example"),
 ]
 
 # Identities that must fail, by name, by address, or both.
@@ -95,6 +98,18 @@ ASSISTANTS = [
     ("kiro-agent[bot]", "bot@example.org"),
     ("Dev", "123+jules-bot@users.noreply.github.com"),
     ("Dev", "456+claude-code[bot]@users.noreply.github.com"),
+    # Other established assistants, by name and by address.
+    ("Amazon Q Developer", "amazon-q-developer@example.org"),
+    ("amazon-q-developer[bot]", "208079219+amazon-q-developer[bot]@users.noreply.github.com"),
+    ("Dev", "amazonq@example.org"),
+    ("Cline", "cline@example.org"),
+    ("cline-bot", "bot@example.org"),
+    ("Dev", "123+cline[bot]@users.noreply.github.com"),
+    ("Windsurf", "windsurf@example.org"),
+    ("Dev", "cascade@windsurf.com"),
+    ("Codeium", "bot@example.org"),
+    ("OpenCode", "opencode@example.org"),
+    ("opencode-agent[bot]", "bot@example.org"),
 ]
 
 # Co-authored-by lines that name only a model.
@@ -270,5 +285,6 @@ def test_shipped_deny_list_names_every_assistant_in_the_policy():
                 for line in lines if line and not line.startswith("#")]
     for name in ("Claude", "Anthropic", "Codex", "OpenAI", "ChatGPT", "Copilot", "Cursor",
                  "Gemini", "Grok", "Antigravity", "Jules", "Kiro", "Devin", "Aider",
+                 "Amazon Q Developer", "Cline", "Windsurf", "Codeium", "OpenCode",
                  "Opus", "Sonnet", "Haiku", "Fable", "GPT-5"):
         assert any(pattern.search(name) for pattern in patterns), name
