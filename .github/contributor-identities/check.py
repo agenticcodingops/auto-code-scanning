@@ -96,7 +96,7 @@ def main(argv=None):
     try:
         found = list(findings(args.revs, identities, coauthors))
     except subprocess.CalledProcessError as exc:
-        print(f"error: git log failed: {exc.stderr.decode('utf-8', 'replace').strip()}",
+        print(f"error: git failed: {exc.stderr.decode('utf-8', 'replace').strip()}",
               file=sys.stderr)
         return 2
     for line in found:

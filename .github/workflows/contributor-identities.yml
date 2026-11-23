@@ -60,7 +60,9 @@ jobs:
           status=0
           python3 -I .github/contributor-identities/check.py "$revs" || status=$?
           echo "::$token::"
-          if [ "$status" -ne 0 ]; then
+          if [ "$status" -eq 1 ]; then
             echo "::error::A commit identity would list a non-member as a contributor. See CONTRIBUTING.md, \"Commit identities\"."
+          elif [ "$status" -ne 0 ]; then
+            echo "::error::The identity check could not run (exit $status): a list file is missing or git could not read the commits. See the log above."
           fi
           exit "$status"
