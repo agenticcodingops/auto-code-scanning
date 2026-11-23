@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.5](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.4...v3.1.5) (2026-11-23)
+
+
+### Bug Fixes
+
+* block PowerShell hooks when a scanner crashes or reports no exit code ([#180](https://github.com/agenticcodingops/auto-code-scanning/issues/180)) ([9b54cb3](https://github.com/agenticcodingops/auto-code-scanning/commit/9b54cb3bf9e7188105f4c413e8c1fe5724468410))
+
 ## [3.1.4](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.3...v3.1.4) (2026-11-23)
 
 
