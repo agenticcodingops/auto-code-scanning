@@ -3,9 +3,9 @@
 
 GitHub lists every author and every co-author (a ``Co-authored-by`` line) of a
 commit on the default branch as a contributor. The maintainer's rule is that
-only organisation members, and the bots this repository's own workflows use,
-may appear there. This script reports any other identity, an AI tool's for
-example. It changes nothing and blocks nothing by itself.
+only organisation members, the bots this repository's own workflows use, and
+the tools the maintainer approves may appear there. This script reports any
+identity missing from the approved lists below, an AI assistant's for example. It changes nothing and blocks nothing by itself.
 
 Lists, one address per line, ``#`` comments allowed, matched exactly and
 case-insensitively:

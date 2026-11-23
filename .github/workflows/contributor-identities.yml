@@ -2,8 +2,9 @@
 # CONTRIBUTOR IDENTITIES
 # auto-code-scanning
 #
-# Reports commits whose author, committer or co-author is not an organisation
-# member or a bot this repository's workflows use. GitHub lists every author and
+# Reports commits whose author, committer or co-author is not on the approved
+# lists: organisation members, this repository's workflow bots and the tools the
+# maintainer approves. GitHub lists every author and
 # co-author on main as a contributor. Lists and script:
 # .github/contributor-identities/. Policy: CONTRIBUTING.md, "Commit identities".
 #
