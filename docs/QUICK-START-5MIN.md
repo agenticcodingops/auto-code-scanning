@@ -4,7 +4,7 @@ This is the shortest honest path to a first scanned commit and a first CI scan. 
 takes a few minutes plus tool downloads. [Getting started](SETUP-GUIDE.md) explains
 every step and option; use it when something here does not fit your case.
 
-> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v3.1.3`. <!-- x-release-please-version -->
+> **Pin consumers to a release tag or commit SHA, never `@main`.** The current release is `v3.1.4`. <!-- x-release-please-version -->
 
 The commands use Bash (macOS, Linux or Git Bash). [Getting started](SETUP-GUIDE.md)
 has the PowerShell version of each one.
@@ -33,7 +33,7 @@ Keep this clone; you run the verifier and later upgrades from it.
 ```bash
 PLATFORM="$HOME/tools/auto-code-scanning"
 git -c core.autocrlf=false clone https://github.com/agenticcodingops/auto-code-scanning.git "$PLATFORM"
-git -C "$PLATFORM" checkout --detach "v3.1.3^{commit}"  # x-release-please-version
+git -C "$PLATFORM" checkout --detach "v3.1.4^{commit}"  # x-release-please-version
 SCAN_SHA="$(git -C "$PLATFORM" rev-parse HEAD)"; echo "$SCAN_SHA"
 python "$PLATFORM/scripts/install-scanner.py" trivy
 python "$PLATFORM/scripts/install-scanner.py" tflint
