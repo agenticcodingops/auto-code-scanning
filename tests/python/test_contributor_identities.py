@@ -1,10 +1,12 @@
 """Tests for .github/contributor-identities/check.py.
 
 Each test builds a throwaway repository with real commits and runs the shipped
-script against it, with list files written for the test.
+script against it. Most tests use the shipped deny list; the error cases write
+their own.
 """
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,10 +16,59 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 LISTS = REPO_ROOT / ".github" / "contributor-identities"
 SCRIPT = LISTS / "check.py"
+DENY_LIST = "ai-assistants.txt"
 
-MEMBER = "dev@example.org"
-BOT = "1+release[bot]@users.noreply.github.com"
-REVIEW_TOOL = "2+review[bot]@users.noreply.github.com"
+MEMBER = ("Dev", "dev@example.org")
+
+# Identities that must pass: people and the bots K1 allows.
+ALLOWED = [
+    ("Unlisted Person", "someone@unrelated.example"),
+    ("Jules Verne", "jules@example.org"),
+    ("Devin Smith", "devin.smith@example.org"),
+    ("coderabbitai[bot]", "136622811+coderabbitai[bot]@users.noreply.github.com"),
+    ("semgrep-app[bot]", "63493438+semgrep-app[bot]@users.noreply.github.com"),
+    ("Semgrep", "support@semgrep.com"),
+    ("sonarqubecloud[bot]", "39514782+sonarqubecloud[bot]@users.noreply.github.com"),
+    ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com"),
+    ("agenticcodingops-release[bot]",
+     "337425099+agenticcodingops-release[bot]@users.noreply.github.com"),
+    ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com"),
+    ("auto-code-scanning-autofix[bot]", "autofix@auto-code-scanning.invalid"),
+    ("GitHub", "noreply@github.com"),
+]
+
+# Identities that must fail, by name, by address, or both.
+ASSISTANTS = [
+    ("Claude", "noreply@anthropic.com"),
+    ("claude[bot]", "209825114+claude[bot]@users.noreply.github.com"),
+    ("Claude", "dev@example.org"),
+    ("Dev", "noreply@anthropic.com"),
+    ("chatgpt-codex-connector[bot]",
+     "199175422+chatgpt-codex-connector[bot]@users.noreply.github.com"),
+    ("Codex", "codex@example.org"),
+    ("Dev", "codex@openai.com"),
+    ("Copilot", "198982749+Copilot@users.noreply.github.com"),
+    ("Cursor Agent", "cursoragent@cursor.com"),
+    ("gemini-code-assist[bot]", "176961590+gemini-code-assist[bot]@users.noreply.github.com"),
+    ("Grok", "grok@example.org"),
+    ("Jules", "jules@example.org"),
+    ("google-labs-jules[bot]", "161369871+google-labs-jules[bot]@users.noreply.github.com"),
+    ("devin-ai-integration[bot]",
+     "158243242+devin-ai-integration[bot]@users.noreply.github.com"),
+    ("Kiro", "kiro@example.org"),
+    ("aider (gpt-4o)", "noreply@aider.chat"),
+    ("Antigravity", "agent@example.org"),
+]
+
+# Co-authored-by lines that name only a model.
+MODEL_COAUTHORS = [
+    "Co-authored-by: Opus 5.5 <dev@example.org>",
+    "Co-authored-by: Sonnet <bot@example.org>",
+    "Co-authored-by: Haiku 4 <bot@example.org>",
+    "Co-authored-by: Fable <bot@example.org>",
+    "Co-authored-by: GPT-5 <bot@example.org>",
+    "Co-authored-by: gpt 4.1 <bot@example.org>",
+]
 
 
 def _git(repo, *args, author=MEMBER, committer=MEMBER):
@@ -25,8 +76,8 @@ def _git(repo, *args, author=MEMBER, committer=MEMBER):
     env.update({
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_AUTHOR_NAME": "A", "GIT_AUTHOR_EMAIL": author,
-        "GIT_COMMITTER_NAME": "C", "GIT_COMMITTER_EMAIL": committer,
+        "GIT_AUTHOR_NAME": author[0], "GIT_AUTHOR_EMAIL": author[1],
+        "GIT_COMMITTER_NAME": committer[0], "GIT_COMMITTER_EMAIL": committer[1],
     })
     return subprocess.run(["git", *args], cwd=repo, env=env, check=True,
                           capture_output=True, text=True).stdout.strip()
@@ -38,150 +89,147 @@ def repo(tmp_path):
     path.mkdir()
     _git(path, "init", "-q")
     _git(path, "commit", "-q", "--allow-empty", "-m", "base")
-    lists = tmp_path / "lists"
-    lists.mkdir()
-    (lists / "allowed-identities.txt").write_text(
-        f"# members\n{MEMBER.upper()}\n{BOT}\n", encoding="utf-8")
-    (lists / "allowed-coauthors.txt").write_text(f"{REVIEW_TOOL}\n", encoding="utf-8")
-    return path, lists
+    return path
 
 
 def _commit(path, message, **identity):
     _git(path, "commit", "-q", "--allow-empty", "-m", message, **identity)
 
 
-def _check(path, lists, revs=("HEAD^!",)):
+def _check(path, lists=LISTS, revs=("HEAD^!",)):
     return subprocess.run([sys.executable, "-I", str(SCRIPT), "--lists", str(lists), *revs],
-                          cwd=path, capture_output=True, text=True)
+                          cwd=path, capture_output=True, text=True, check=False)
 
 
-def test_member_commit_passes(repo):
-    path, lists = repo
-    _commit(path, f"fix: x\n\nCo-authored-by: Dev <{MEMBER}>")
-    assert _check(path, lists).returncode == 0
+def _id(identity):
+    return f"{identity[0]} <{identity[1]}>"
 
 
-def test_workflow_bot_may_author(repo):
-    path, lists = repo
-    _commit(path, "chore: release", author=BOT)
-    assert _check(path, lists).returncode == 0
-
-
+@pytest.mark.parametrize("identity", ALLOWED, ids=_id)
 @pytest.mark.parametrize("role", ["author", "committer"])
-def test_unlisted_author_or_committer_is_reported(repo, role):
-    path, lists = repo
-    _commit(path, "fix: x", **{role: "agent@tool.example"})
-    result = _check(path, lists)
+def test_non_assistant_may_author_or_commit(repo, role, identity):
+    _commit(repo, "fix: x", **{role: identity})
+    result = _check(repo)
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("identity", ALLOWED, ids=_id)
+def test_non_assistant_may_coauthor(repo, identity):
+    _commit(repo, f"fix: x\n\nCo-authored-by: {_id(identity)}")
+    result = _check(repo)
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("identity", ASSISTANTS, ids=_id)
+@pytest.mark.parametrize("role", ["author", "committer"])
+def test_assistant_author_or_committer_is_reported(repo, role, identity):
+    _commit(repo, "fix: x", **{role: identity})
+    result = _check(repo)
     assert result.returncode == 1
-    assert f"{role} agent@tool.example" in result.stdout
+    assert f"{role} {identity[0]} <{identity[1]}> is an AI assistant" in result.stdout
 
 
-def test_review_tool_may_coauthor_but_not_author(repo):
-    path, lists = repo
-    _commit(path, f"fix: x\n\nCo-authored-by: R <{REVIEW_TOOL}>")
-    assert _check(path, lists).returncode == 0
-    _commit(path, "fix: y", author=REVIEW_TOOL)
-    assert _check(path, lists).returncode == 1
+@pytest.mark.parametrize("identity", ASSISTANTS, ids=_id)
+def test_assistant_coauthor_is_reported(repo, identity):
+    _commit(repo, f"fix: x\n\nCo-authored-by: {_id(identity)}")
+    result = _check(repo)
+    assert result.returncode == 1
+    assert "co-author is an AI assistant" in result.stdout
+
+
+@pytest.mark.parametrize("line", MODEL_COAUTHORS)
+def test_model_name_coauthor_is_reported(repo, line):
+    _commit(repo, f"fix: x\n\n{line}")
+    result = _check(repo)
+    assert result.returncode == 1
+    assert "co-author is an AI assistant" in result.stdout
 
 
 @pytest.mark.parametrize("line", [
-    "Co-authored-by: Assistant <noreply@assistant.example>",
-    "co-authored-by: Agent <agent@tool.example>",
-    "CO-AUTHORED-BY: Agent <agent@tool.example>",
-    "Coauthored-by: Agent <agent@tool.example>",
-    "   Co-authored-by: Agent <agent@tool.example>",
-    "Co-authored-by: No Address",
-    f"Co-authored-by: Dev <x{MEMBER}>",
-    f"Co-authored-by: Dev <{MEMBER}.evil>",
+    "co-authored-by: Claude <noreply@anthropic.com>",
+    "CO-AUTHORED-BY: Claude <noreply@anthropic.com>",
+    "Coauthored-by: Claude <noreply@anthropic.com>",
+    "   Co-authored-by: Claude <noreply@anthropic.com>",
+    "Co-authored-by: Claude",
+    "Co-authored-by: Dev <noreply@ANTHROPIC.com>",
 ])
-def test_unapproved_coauthor_is_reported(repo, line):
-    path, lists = repo
-    _commit(path, f"fix: x\n\n{line}")
-    result = _check(path, lists)
-    assert result.returncode == 1
-    assert "co-author is not approved" in result.stdout
+def test_coauthor_variants_are_reported(repo, line):
+    _commit(repo, f"fix: x\n\n{line}")
+    assert _check(repo).returncode == 1
+
+
+@pytest.mark.parametrize("message", [
+    "docs: document the Claude hook and the Codex review",
+    "fix: x\n\nThe Copilot and Gemini reviews asked for this; see CLAUDE.md.",
+    "fix: x\n\nSigned-off-by: Claude <noreply@anthropic.com>",
+    "fix: x\n\nGenerated with an assistant",
+    "fix: x\n\nCo-authored-by: Claudette Dupont <claudette@example.org>",
+    "fix: x\n\nCo-authored-by: No Address",
+])
+def test_free_text_and_sign_off_are_not_checked(repo, message):
+    """Only identities and Co-authored-by lines are read, never the message text."""
+    _commit(repo, message)
+    result = _check(repo)
+    assert result.returncode == 0, result.stdout
 
 
 def test_crlf_message_is_read(repo):
-    path, lists = repo
-    _commit(path, f"fix: x\r\n\r\nCo-authored-by: Dev <{MEMBER}>\r\n")
-    assert _check(path, lists).returncode == 0
+    _commit(repo, "fix: x\r\n\r\nCo-authored-by: Claude <noreply@anthropic.com>\r\n")
+    assert _check(repo).returncode == 1
 
 
 def test_range_reports_every_commit(repo):
-    path, lists = repo
-    _commit(path, "fix: a", author="one@tool.example")
-    _commit(path, "fix: b", author="two@tool.example")
-    result = _check(path, lists, ("HEAD~2..HEAD",))
+    _commit(repo, "fix: a", author=("Codex", "codex@example.org"))
+    _commit(repo, "fix: b", author=("Claude", "claude@example.org"))
+    result = _check(repo, revs=("HEAD~2..HEAD",))
     assert result.returncode == 1
-    assert "one@tool.example" in result.stdout and "two@tool.example" in result.stdout
+    assert "codex@example.org" in result.stdout and "claude@example.org" in result.stdout
 
 
 @pytest.mark.parametrize("separator", ["\x1e", "\x1f", "\x1d"])
 def test_control_bytes_in_a_message_hide_no_other_commit(repo, separator):
-    path, lists = repo
-    _commit(path, "fix: older", author="agent@tool.example")
-    _commit(path, f"fix: newer\n\npayload{separator}tail")
-    result = _check(path, lists, ("HEAD~2..HEAD",))
+    _commit(repo, "fix: older", author=("Codex", "codex@example.org"))
+    _commit(repo, f"fix: newer\n\npayload{separator}tail")
+    result = _check(repo, revs=("HEAD~2..HEAD",))
     assert result.returncode == 1, result.stderr
-    assert "author agent@tool.example" in result.stdout
+    assert "author Codex <codex@example.org>" in result.stdout
 
 
-def test_missing_identity_list_is_an_error(repo, tmp_path):
-    path, _ = repo
+def test_missing_deny_list_is_an_error(repo, tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
-    assert _check(path, empty).returncode == 2
-
-
-@pytest.mark.parametrize("missing", ["allowed-identities.txt", "allowed-coauthors.txt"])
-def test_either_missing_list_is_an_error(repo, missing):
-    path, lists = repo
-    (lists / missing).unlink()
-    result = _check(path, lists)
+    result = _check(repo, lists=empty)
     assert result.returncode == 2
-    assert missing in result.stderr
+    assert DENY_LIST in result.stderr
+
+
+def test_deny_list_without_patterns_is_an_error(repo, tmp_path):
+    lists = tmp_path / "lists"
+    lists.mkdir()
+    (lists / DENY_LIST).write_text("# only a comment\n\n", encoding="utf-8")
+    assert _check(repo, lists=lists).returncode == 2
+
+
+def test_invalid_pattern_is_an_error(repo, tmp_path):
+    lists = tmp_path / "lists"
+    lists.mkdir()
+    (lists / DENY_LIST).write_text("\\bclaude\\b\n(unclosed\n", encoding="utf-8")
+    result = _check(repo, lists=lists)
+    assert result.returncode == 2
+    assert ":2:" in result.stderr
 
 
 def test_bad_revision_is_an_error(repo):
-    path, lists = repo
-    assert _check(path, lists, ("no-such-revision",)).returncode == 2
+    assert _check(repo, revs=("no-such-revision",)).returncode == 2
 
 
-def test_shipped_lists_cover_the_current_workflows():
-    identities = (LISTS / "allowed-identities.txt").read_text(encoding="utf-8").lower()
-    for address in (
-        "noreply@github.com",
-        "340677216+agenticcodingops-orchestrator@users.noreply.github.com",
-        "337425099+agenticcodingops-release[bot]@users.noreply.github.com",
-        "49699333+dependabot[bot]@users.noreply.github.com",
-        "support@semgrep.com",
-        "autofix@auto-code-scanning.invalid",
-        "136622811+coderabbitai[bot]@users.noreply.github.com",
-    ):
-        assert address in identities.splitlines(), address
-
-
-def test_shipped_coauthor_list_holds_only_the_allowed_tools():
-    lines = [line.strip().lower() for line in
-             (LISTS / "allowed-coauthors.txt").read_text(encoding="utf-8").splitlines()]
-    addresses = [line for line in lines if line and not line.startswith("#")]
-    assert addresses
-    assert all(any(tool in a for tool in ("semgrep", "sonar")) for a in addresses)
-
-
-def test_coderabbit_authored_commit_passes_the_shipped_lists(repo):
-    """Regression: CodeRabbit's coding agent authors and commits its own PRs."""
-    path, _ = repo
-    coderabbit = "136622811+coderabbitai[bot]@users.noreply.github.com"
-    _commit(path, "fix: x", author=coderabbit, committer=coderabbit)
-    assert _check(path, LISTS).returncode == 0
-
-
-def test_shipped_identity_list_names_no_assistant():
-    """The maintainer still keeps AI assistants such as Claude or Codex off main."""
-    lines = [line.strip().lower() for line in
-             (LISTS / "allowed-identities.txt").read_text(encoding="utf-8").splitlines()]
-    addresses = [line for line in lines if line and not line.startswith("#")]
-    for name in ("claude", "anthropic", "codex", "openai", "chatgpt", "copilot", "gemini"):
-        assert not any(name in a for a in addresses), name
+def test_shipped_deny_list_names_every_assistant_in_the_policy():
+    """Each assistant and model family the policy names is matched by some pattern."""
+    lines = [line.strip() for line in
+             (LISTS / DENY_LIST).read_text(encoding="utf-8").splitlines()]
+    patterns = [re.compile(line, re.IGNORECASE)
+                for line in lines if line and not line.startswith("#")]
+    for name in ("Claude", "Anthropic", "Codex", "OpenAI", "ChatGPT", "Copilot", "Cursor",
+                 "Gemini", "Grok", "Antigravity", "Jules", "Kiro", "Devin", "Aider",
+                 "Opus", "Sonnet", "Haiku", "Fable", "GPT-5"):
+        assert any(pattern.search(name) for pattern in patterns), name
