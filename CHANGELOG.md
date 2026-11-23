@@ -8,6 +8,18 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.4](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.3...v3.1.4) (2026-11-23)
+
+
+### Bug Fixes
+
+* block incomplete ESLint and Prettier scans (missing working_dir or runner) ([#173](https://github.com/agenticcodingops/auto-code-scanning/issues/173)) ([db1c9dc](https://github.com/agenticcodingops/auto-code-scanning/commit/db1c9dc1c0a4bb854a9452b8cdf5645a357f5a06))
+* correct app-only setup verification, safe-write line endings and hook profiling ([#168](https://github.com/agenticcodingops/auto-code-scanning/issues/168)) ([a804ed3](https://github.com/agenticcodingops/auto-code-scanning/commit/a804ed3b9fe8e4d1d0263d9e1cdc70adf6733ca2))
+* describe blocking on tool errors correctly in hook comments and messages ([#175](https://github.com/agenticcodingops/auto-code-scanning/issues/175)) ([38c7169](https://github.com/agenticcodingops/auto-code-scanning/commit/38c7169253487d561499523b071f9385f7a0c25a))
+* report fix-loop state, retire ignored keys, neutralise bot attribution and accept either credential ([#172](https://github.com/agenticcodingops/auto-code-scanning/issues/172)) ([1ec385d](https://github.com/agenticcodingops/auto-code-scanning/commit/1ec385dc47da0f7295837c8e3cf06b9391d53e6b))
+* ship only scan-config keys that something reads and document what enabled controls ([#174](https://github.com/agenticcodingops/auto-code-scanning/issues/174)) ([0fcfb83](https://github.com/agenticcodingops/auto-code-scanning/commit/0fcfb83295b06fab58a37ce2689ca114d9ad49b9))
+* use one severity mapping in every scan path ([#170](https://github.com/agenticcodingops/auto-code-scanning/issues/170)) ([3feaf2c](https://github.com/agenticcodingops/auto-code-scanning/commit/3feaf2cd0f7058534668aac57b834b8110fe7539))
+
 ## [3.1.3](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.2...v3.1.3) (2026-11-19)
 
 

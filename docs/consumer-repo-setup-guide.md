@@ -3,7 +3,7 @@
 For installation, use [Getting started](SETUP-GUIDE.md). This page covers controls
 and maintenance after adoption; it does not define a second setup path.
 
-> **This guide uses the current release, `v3.1.3`.** <!-- x-release-please-version -->
+> **This guide uses the current release, `v3.1.4`.** <!-- x-release-please-version -->
 
 ## Branch protection
 
