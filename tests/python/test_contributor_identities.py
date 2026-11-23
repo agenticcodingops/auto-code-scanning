@@ -35,6 +35,12 @@ ALLOWED = [
     ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com"),
     ("auto-code-scanning-autofix[bot]", "autofix@auto-code-scanning.invalid"),
     ("GitHub", "noreply@github.com"),
+    # An assistant's name inside a longer ordinary word is not the assistant.
+    ("Claudette Dupont", "claudette@example.org"),
+    ("Dev", "grants@philanthropic.example"),
+    ("Cursory Reader", "reader@example.org"),
+    ("Grokking Team", "team@example.org"),
+    ("Opuscule Press", "press@example.org"),
 ]
 
 # Identities that must fail, by name, by address, or both.
@@ -58,6 +64,19 @@ ASSISTANTS = [
     ("Kiro", "kiro@example.org"),
     ("aider (gpt-4o)", "noreply@aider.chat"),
     ("Antigravity", "agent@example.org"),
+    # Joined to other text by '_', a digit or nothing: Python's  misses these.
+    ("claude_code", "cc@example.org"),
+    ("ClaudeCode", "dev@example.org"),
+    ("Dev", "claude_agent@example.org"),
+    ("claude2", "bot@example.org"),
+    ("Codex_Bot", "a@example.org"),
+    ("codexbot", "a@example.org"),
+    ("openai_bot", "bot@example.org"),
+    ("gemini_cli", "bot@example.org"),
+    ("GeminiCLI", "bot@example.org"),
+    ("GitHubCopilot", "bot@example.org"),
+    ("Kiro Agent", "agent@example.org"),
+    ("Dev", "bot@chatgpt.example"),
 ]
 
 # Co-authored-by lines that name only a model.
@@ -68,6 +87,8 @@ MODEL_COAUTHORS = [
     "Co-authored-by: Fable <bot@example.org>",
     "Co-authored-by: GPT-5 <bot@example.org>",
     "Co-authored-by: gpt 4.1 <bot@example.org>",
+    "Co-authored-by: claude_opus_4 <bot@example.org>",
+    "Co-authored-by: sonnet4 <bot@example.org>",
 ]
 
 

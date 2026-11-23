@@ -10,38 +10,32 @@
 #
 # Names that are also common human names (Jules, Devin, Kiro) match only as a
 # whole name or as the assistant's own account, so a person called Jules passes.
+#
+# Boundaries are letters only: (?<![a-z]) and (?![a-z]). Python's \b counts '_'
+# and digits as word characters, so \bclaude\b would let claude_code, claude2 or
+# Codex_Bot through. A name is still not matched inside a longer word (Claudette,
+# philanthropic, cursory), and the common run-together suffixes (ClaudeCode,
+# codexbot, geminicli) are listed explicitly.
 
-# Vendors and assistants, as a whole word in the name or the address
-\bclaude\b
-\banthropic\b
-\bcodex\b
-\bopenai\b
-\bchatgpt\b
-\bcopilot\b
-\bcursor\b
-\bcursoragent\b
-\bgemini\b
-\bgrok\b
-\bxai\b
-\bantigravity\b
-\baider\b
+# Vendors and assistants, in the name or the address
+(?<![a-z])(?:claude|anthropic|codex|cursor|gemini|grok|xai|aider)(?:code|bot|agent|ai|cli|assistant|connector|dev|app)?(?![a-z])
+# Names that never occur inside an ordinary word: match anywhere
+openai
+chatgpt
+copilot
+antigravity
 
 # Assistants whose name is also a person's name
-^jules$
+^(?:jules|devin|kiro)(?:[-_ ]?(?:bot|agent|ai|assistant|cli))?$
 google-labs-jules
-\bjules\[bot\]
-^devin$
+(?<![a-z])jules\[bot\]
 devin-ai-integration
-\bdevin\[bot\]
+(?<![a-z])devin\[bot\]
 @devin\.ai$
 @cognition\.ai$
-^kiro$
-\bkiro\[bot\]
+(?<![a-z])kiro\[bot\]
 @kiro\.dev$
 
 # Model names
-\bopus\b
-\bsonnet\b
-\bhaiku\b
-\bfable\b
-\bgpt[-_ .]?\d
+(?<![a-z])(?:opus|sonnet|haiku|fable)(?![a-z])
+(?<![a-z])gpt[-_ .]?\d
