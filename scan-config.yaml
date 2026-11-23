@@ -2,8 +2,9 @@
 # auto-code-scanning: this repository's own config, and the reference copy.
 # Consumers generate theirs with scripts/setup-scan-fix from
 # templates/scan-config/<tier>.yaml. Every key below has a reader, except
-# ci.required_checks (informational) and two keys the schema requires:
-# schema_version and fix_loop.claude_code_action_ref (a mirror of the workflow's pin).
+# ci.required_checks (informational) and two keys the schema requires: schema_version,
+# and fix_loop.claude_code_action_ref when the fix loop is enabled (a mirror of the
+# workflow's pin).
 # ============================================================================
 schema_version: "1.0"
 
