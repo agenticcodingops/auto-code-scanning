@@ -6,34 +6,45 @@
 # One Python regular expression per line, matched case-insensitively with
 # re.search against the name and, separately, the address of each author,
 # committer and Co-authored-by line. Lines starting with '#' are ignored.
-# Read by check.py and the Contributor Identities workflow; see CONTRIBUTING.md.
+# Read by check.py, check_text.py and the Contributor Identities workflow; see
+# CONTRIBUTING.md.
 #
-# Names that are also common human names (Jules, Devin, Kiro) match only as a
-# whole name or as the assistant's own account, so a person called Jules passes.
+# Names that are also common human names (Claude, Jules, Devin, Kiro) match only
+# as the whole name, with an assistant suffix (Claude Code, claude-agent,
+# ClaudeCodeBot, kiro-agent[bot]) or as the assistant's own account. So a person
+# called Claude Martin, Jean-Claude Dupont or Jules Verne passes, and so does an
+# address such as claude.martin@ or jules@. A suffix after a space counts only
+# for Claude and only when it is not also a surname (Claude Code, not Claude Dev).
 #
 # Boundaries are letters only: (?<![a-z]) and (?![a-z]). Python's \b counts '_'
-# and digits as word characters, so \bclaude\b would let claude_code, claude2 or
+# and digits as word characters, so \bcodex\b would let codex_cli, codex2 or
 # Codex_Bot through. A name is still not matched inside a longer word (Claudette,
-# philanthropic, cursory), and the common run-together suffixes (ClaudeCode,
-# codexbot, geminicli) are listed explicitly.
+# philanthropic, cursory). Run-together suffixes (CodexBot, geminicli,
+# ClaudeCodeBot) are matched however many follow one another.
 
 # Vendors and assistants, in the name or the address
-(?<![a-z])(?:claude|anthropic|codex|cursor|gemini|grok|xai|aider)(?:code|bot|agent|ai|cli|assistant|connector|dev|app)?(?![a-z])
+(?<![a-z])(?:anthropic|codex|cursor|gemini|grok|xai|aider)(?:code|bot|agent|ai|cli|assistant|connector|dev|app)*(?![a-z])
 # Names that never occur inside an ordinary word: match anywhere
 openai
 chatgpt
 copilot
 antigravity
 
-# Assistants whose name is also a person's name
-^(?:jules|devin|kiro)(?:[-_ ]?(?:bot|agent|ai|assistant|cli))?$
+# Assistants whose name is also a person's name.
+# The whole name (never an address, which holds '@'): Claude, Kiro Agent, claude2.
+^(?:claude|jules|devin|kiro)(?:[-_ ]?(?:code|bot|agent|ai|cli|assistant))*(?:[-_ .]?\d[\d.]*)?$
+# With at least one suffix, in a name or an address: claude-code, ClaudeCodeBot,
+# kiro_agent@example.org, jules.bot@example.org.
+(?<![a-z])(?:claude|jules|devin|kiro)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))+(?![a-z])
+# Claude with a suffix after a space, inside a longer name: Claude Code Bot.
+(?<![a-z])claude(?:\s+(?:code|bot|agent|ai|cli|assistant|connector))+(?![a-z])
+# GitHub app and bot accounts, also inside a noreply address: claude[bot],
+# 123+kiro-agent[bot]@users.noreply.github.com.
+(?<![a-z])(?:claude|jules|devin|kiro)(?:[-_.]?(?:code|bot|agent|ai|cli|assistant|connector|dev|app))*\[bot\]
 google-labs-jules
-(?<![a-z])jules\[bot\]
 devin-ai-integration
-(?<![a-z])devin\[bot\]
 @devin\.ai$
 @cognition\.ai$
-(?<![a-z])kiro\[bot\]
 @kiro\.dev$
 
 # Model names

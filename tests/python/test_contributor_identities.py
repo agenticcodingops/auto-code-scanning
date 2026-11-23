@@ -41,6 +41,13 @@ ALLOWED = [
     ("Cursory Reader", "reader@example.org"),
     ("Grokking Team", "team@example.org"),
     ("Opuscule Press", "press@example.org"),
+    # People who share a name with an assistant, in the name and the address.
+    ("Claude Martin", "claude.martin@example.org"),
+    ("Jean-Claude Dupont", "jean-claude@example.org"),
+    ("Claude Dupont", "claude@example.org"),
+    ("Claude Dev", "cdev@example.org"),
+    ("Jules Verne", "12345+jules@users.noreply.github.com"),
+    ("Devin Aiken", "devin.aiken@example.org"),
 ]
 
 # Identities that must fail, by name, by address, or both.
@@ -77,6 +84,17 @@ ASSISTANTS = [
     ("GitHubCopilot", "bot@example.org"),
     ("Kiro Agent", "agent@example.org"),
     ("Dev", "bot@chatgpt.example"),
+    # Several suffixes in a row, and assistant accounts inside noreply addresses.
+    ("ClaudeCodeBot", "automation@example.org"),
+    ("Automation", "claudecodebot@example.org"),
+    ("Claude Code", "dev@example.org"),
+    ("Claude Code Bot", "dev@example.org"),
+    ("CodexBotAgent", "a@example.org"),
+    ("Dev", "codex-cli-bot@example.org"),
+    ("Dev", "123+kiro-agent[bot]@users.noreply.github.com"),
+    ("kiro-agent[bot]", "bot@example.org"),
+    ("Dev", "123+jules-bot@users.noreply.github.com"),
+    ("Dev", "456+claude-code[bot]@users.noreply.github.com"),
 ]
 
 # Co-authored-by lines that name only a model.
