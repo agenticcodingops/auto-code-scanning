@@ -16,3 +16,5 @@ noreply@github.com
 337425099+agenticcodingops-release[bot]@users.noreply.github.com
 49699333+dependabot[bot]@users.noreply.github.com
 support@semgrep.com
+# The autonomous-fix workflow's commits (.github/workflows/autonomous-fix.yml)
+autofix@auto-code-scanning.invalid

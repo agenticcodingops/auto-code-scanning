@@ -117,6 +117,16 @@ def test_range_reports_every_commit(repo):
     assert "one@tool.example" in result.stdout and "two@tool.example" in result.stdout
 
 
+@pytest.mark.parametrize("separator", ["\x1e", "\x1f", "\x1d"])
+def test_control_bytes_in_a_message_hide_no_other_commit(repo, separator):
+    path, lists = repo
+    _commit(path, "fix: older", author="agent@tool.example")
+    _commit(path, f"fix: newer\n\npayload{separator}tail")
+    result = _check(path, lists, ("HEAD~2..HEAD",))
+    assert result.returncode == 1, result.stderr
+    assert "author agent@tool.example" in result.stdout
+
+
 def test_missing_identity_list_is_an_error(repo, tmp_path):
     path, _ = repo
     empty = tmp_path / "empty"
@@ -137,6 +147,7 @@ def test_shipped_lists_cover_the_current_workflows():
         "337425099+agenticcodingops-release[bot]@users.noreply.github.com",
         "49699333+dependabot[bot]@users.noreply.github.com",
         "support@semgrep.com",
+        "autofix@auto-code-scanning.invalid",
     ):
         assert address in identities.splitlines(), address
 

@@ -27,7 +27,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 COAUTHOR = re.compile(r"^\s*co-?authored-?by\s*:(.*)$", re.IGNORECASE)
 ADDRESS = re.compile(r"<([^<>]*)>\s*$")
-FIELD, RECORD = "\x1f", "\x1e"
 
 
 def load(path):
@@ -42,18 +41,24 @@ def load(path):
     return addresses
 
 
+def _git(args, cwd):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                          check=True).stdout.decode("utf-8", "replace")
+
+
 def commits(revs, cwd=None):
-    """Yield (sha, author email, committer email, message) for each commit."""
-    fmt = f"--format=%H{FIELD}%ae{FIELD}%ce{FIELD}%B{RECORD}"
-    out = subprocess.run(
-        ["git", "log", "--no-show-signature", fmt, *revs, "--"],
-        cwd=cwd, capture_output=True, check=True,
-    ).stdout.decode("utf-8", "replace")
-    for record in out.split(RECORD):
-        record = record.strip("\n")
-        if record:
-            sha, author, committer, message = record.split(FIELD, 3)
-            yield sha, author, committer, message
+    """Yield (sha, author email, committer email, message) for each commit.
+
+    Each commit is read on its own, so no byte in a message can be mistaken for
+    a separator between commits. The two addresses are split on NUL, which an
+    address cannot contain.
+    """
+    for sha in _git(["rev-list", *revs, "--"], cwd).split():
+        author, committer = _git(
+            ["show", "-s", "--no-show-signature", "--format=%ae%x00%ce", sha],
+            cwd).rstrip("\n").split("\0", 1)
+        message = _git(["show", "-s", "--no-show-signature", "--format=%B", sha], cwd)
+        yield sha, author, committer, message
 
 
 def findings(revs, identities, coauthors, cwd=None):
