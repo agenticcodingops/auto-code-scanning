@@ -59,8 +59,8 @@ try {
             # Show actionable details so developers know what to fix
             Show-CheckovFindings -JsonOutput ($output -join "`n")
             $overallExit = 1
-        } elseif ($exitCode -ge 2) {
-            # Exit 2 or higher is a tool error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
+        } elseif ($exitCode -ne 0) {
+            # Any exit but 0 or 1 is a tool error, including crashes and missing codes: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
             $null = Get-HookExitCode -ToolExitCode $exitCode
         }
     }
