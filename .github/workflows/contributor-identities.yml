@@ -7,9 +7,8 @@
 # co-author on main as a contributor. Lists and script:
 # .github/contributor-identities/. Policy: CONTRIBUTING.md, "Commit identities".
 #
-# Advisory: this is not a required check, so a finding never blocks a merge,
-# a release or a scanner fix. It reads commits only and executes nothing from
-# them.
+# The main ruleset requires this check, so a finding blocks the merge. It reads
+# commits only and executes nothing from them.
 # ============================================================================
 
 name: Contributor Identities
