@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatcher.sh — OS-detecting dispatcher for pre-commit hooks
 # Routes to .sh (Unix) or .ps1 (Windows) based on OS detection
-# Usage: hooks/dispatcher.sh <hook-id> [args...]
+# Usage: bash hooks/dispatcher.sh <hook-id> [args...]
 
 set -euo pipefail
 
@@ -55,11 +55,11 @@ case "${OSTYPE:-}" in
             exec powershell -NoProfile -ExecutionPolicy Bypass -File "${SCRIPT_DIR}/${HOOK_ID}.ps1" "$@"
         else
             # Fallback to bash on Windows if no PowerShell
-            exec "${SCRIPT_DIR}/${HOOK_ID}.sh" "$@"
+            exec "$BASH" "${SCRIPT_DIR}/${HOOK_ID}.sh" "$@"
         fi
         ;;
     *)
         # Unix (Linux, macOS, etc.)
-        exec "${SCRIPT_DIR}/${HOOK_ID}.sh" "$@"
+        exec "$BASH" "${SCRIPT_DIR}/${HOOK_ID}.sh" "$@"
         ;;
 esac

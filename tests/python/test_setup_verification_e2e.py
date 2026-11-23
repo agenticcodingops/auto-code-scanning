@@ -107,8 +107,8 @@ def test_template_validation_rejects_incomplete_config(tmp_path, runner, damage)
     if damage == 'malformed':
         text = 'invalid: ['
     elif runner == 'lefthook':
-        text = text.replace('run: hooks/dispatcher.sh trivy-secrets',
-                            '# run: hooks/dispatcher.sh trivy-secrets' if damage == 'comment' else
+        text = text.replace('run: bash hooks/dispatcher.sh trivy-secrets',
+                            '# run: bash hooks/dispatcher.sh trivy-secrets' if damage == 'comment' else
                             'run: echo removed')
     else:
         text = text.replace('- id: trivy-secrets',
