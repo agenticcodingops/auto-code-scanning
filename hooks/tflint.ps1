@@ -96,11 +96,9 @@ foreach ($dir in $scanDirs) {
         # Show actionable details so developers know what to fix
         Show-TflintFindings -JsonOutput ($output -join "`n")
         $overallExit = 1
-    } elseif ($exitCode -ge 3) {
-        # Exit 3 or higher is a runtime error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
-        $null = Get-HookExitCode -ToolExitCode 2
-    } elseif ($exitCode -eq 1) {
-        # Exit 1 is a config error: blocks unless SCAN_ALLOW_TOOL_ERRORS=1
+    } elseif ($exitCode -ne 0) {
+        # Any exit but 0 or 2 is a tool error, including crashes and missing codes: blocks unless SCAN_ALLOW_TOOL_ERRORS=1.
+        # TFLint reports config errors as 1, which the helper would read as findings.
         $null = Get-HookExitCode -ToolExitCode 2
     }
 }

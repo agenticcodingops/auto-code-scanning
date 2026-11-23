@@ -89,14 +89,17 @@ function Write-HookVerbose {
 # Classify a tool exit code:
 #   exit 0 = no findings (pass)
 #   exit 1 = security findings found (block)
-#   exit 2+ = infrastructure error (block; explicit local opt-in warns + allows)
+#   any other code, or none = infrastructure error (block; explicit local opt-in warns + allows)
 function Get-HookExitCode {
     param(
         [Parameter(Mandatory)]
-        [int]$ToolExitCode
+        [AllowNull()]
+        [Nullable[int]]$ToolExitCode
     )
 
-    switch ($ToolExitCode) {
+    # A plain [int] parameter would turn a missing exit code into 0, which is a pass.
+    if ($null -eq $ToolExitCode) { $ToolExitCode = -1 }
+    switch ([int]$ToolExitCode) {
         0 { return 0 }
         1 { return 1 }
         default {
