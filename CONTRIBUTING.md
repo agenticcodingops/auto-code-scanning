@@ -266,6 +266,21 @@ not block review. The test, lint and self-test jobs run without secrets.
 - Write a revert as `revert: <subject of the reverted commit>`. Git's default
   `Revert "…"` message is not a Conventional Commit, and the release tooling ignores it.
 
+### Commit identities
+
+GitHub lists every author and every co-author (`Co-authored-by` line) of a commit on
+`main` as a contributor. Only members of the organisation, and the bots this
+repository's own workflows use, may appear there.
+
+- Commit under your own identity. Do not add a `Co-authored-by` line for an AI tool
+  or assistant, and do not let one author or push a commit.
+- The Contributor Identities workflow reports any author, committer or co-author not
+  listed in `.github/contributor-identities/allowed-identities.txt`. Only CodeRabbit,
+  Semgrep and SonarCloud may also appear as co-authors, through `allowed-coauthors.txt`.
+- The check is advisory: it is not required, so it never blocks a merge, a release or
+  a scanner fix. Treat a red result as something to fix before the next merge.
+- Add an address to a list only for a new organisation member or a new workflow bot.
+
 How releases are cut, and what consumers must do to pick one up, is in
 [the maintainer guide](docs/MAINTAINERS.md).
 

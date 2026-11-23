@@ -1,0 +1,66 @@
+# ============================================================================
+# CONTRIBUTOR IDENTITIES
+# auto-code-scanning
+#
+# Reports commits whose author, committer or co-author is not an organisation
+# member or a bot this repository's workflows use. GitHub lists every author and
+# co-author on main as a contributor. Lists and script:
+# .github/contributor-identities/. Policy: CONTRIBUTING.md, "Commit identities".
+#
+# Advisory: this is not a required check, so a finding never blocks a merge,
+# a release or a scanner fix. It reads commits only and executes nothing from
+# them.
+# ============================================================================
+
+name: Contributor Identities
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  identities:
+    name: Contributor identities
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check commit identities
+        env:
+          # Event values reach the script only through env, never via ${{ }} in run.
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            revs="$BASE_SHA..$HEAD_SHA"
+          elif [ -n "$(printf '%s' "$BEFORE" | tr -d 0)" ] \
+              && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            revs="$BEFORE..$AFTER"
+          else
+            echo "::warning::No usable before-SHA; checking the pushed commit only."
+            revs="$AFTER^!"
+          fi
+
+          # Commit text is printed below; stop the runner reading it as commands.
+          token=$(openssl rand -hex 16)
+          echo "::stop-commands::$token"
+          status=0
+          python3 -I .github/contributor-identities/check.py "$revs" || status=$?
+          echo "::$token::"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::A commit identity would list a non-member as a contributor. See CONTRIBUTING.md, \"Commit identities\"."
+          fi
+          exit "$status"
