@@ -157,6 +157,7 @@ def test_shipped_lists_cover_the_current_workflows():
         "49699333+dependabot[bot]@users.noreply.github.com",
         "support@semgrep.com",
         "autofix@auto-code-scanning.invalid",
+        "136622811+coderabbitai[bot]@users.noreply.github.com",
     ):
         assert address in identities.splitlines(), address
 
@@ -166,4 +167,21 @@ def test_shipped_coauthor_list_holds_only_the_allowed_tools():
              (LISTS / "allowed-coauthors.txt").read_text(encoding="utf-8").splitlines()]
     addresses = [line for line in lines if line and not line.startswith("#")]
     assert addresses
-    assert all(any(tool in a for tool in ("coderabbit", "semgrep", "sonar")) for a in addresses)
+    assert all(any(tool in a for tool in ("semgrep", "sonar")) for a in addresses)
+
+
+def test_coderabbit_authored_commit_passes_the_shipped_lists(repo):
+    """Regression: CodeRabbit's coding agent authors and commits its own PRs."""
+    path, _ = repo
+    coderabbit = "136622811+coderabbitai[bot]@users.noreply.github.com"
+    _commit(path, "fix: x", author=coderabbit, committer=coderabbit)
+    assert _check(path, LISTS).returncode == 0
+
+
+def test_shipped_identity_list_names_no_assistant():
+    """The maintainer still keeps AI assistants such as Claude or Codex off main."""
+    lines = [line.strip().lower() for line in
+             (LISTS / "allowed-identities.txt").read_text(encoding="utf-8").splitlines()]
+    addresses = [line for line in lines if line and not line.startswith("#")]
+    for name in ("claude", "anthropic", "codex", "openai", "chatgpt", "copilot", "gemini"):
+        assert not any(name in a for a in addresses), name
