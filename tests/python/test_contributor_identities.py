@@ -167,7 +167,7 @@ def test_shipped_coauthor_list_holds_only_the_allowed_tools():
              (LISTS / "allowed-coauthors.txt").read_text(encoding="utf-8").splitlines()]
     addresses = [line for line in lines if line and not line.startswith("#")]
     assert addresses
-    assert all(any(tool in a for tool in ("coderabbit", "semgrep", "sonar")) for a in addresses)
+    assert all(any(tool in a for tool in ("semgrep", "sonar")) for a in addresses)
 
 
 def test_coderabbit_authored_commit_passes_the_shipped_lists(repo):
