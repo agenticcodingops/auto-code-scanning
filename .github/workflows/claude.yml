@@ -63,8 +63,11 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
+          # The action already starts mention runs in acceptEdits at this pin. From v1.0.276 its
+          # default is auto mode, where a classifier decides the calls no rule covers; with
+          # acceptEdits stated here (the last mode given wins), edits in the checkout run and such
+          # a call is denied. Keep it when the pin moves.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          claude_args: --permission-mode acceptEdits
 

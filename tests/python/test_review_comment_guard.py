@@ -218,6 +218,17 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertIn("--setting-sources user", review_arguments())
         self.assertEqual([a for a in review_arguments() if a.startswith("--setting-sources")], ["--setting-sources user"])
 
+    def test_the_review_states_the_permission_mode_the_guard_was_measured_in(self):
+        # From action v1.0.276 a run with a prompt starts in auto mode, and the last mode given wins, so exactly one
+        # mode is allowed and it must be the default mode the guard was measured in.
+        self.assertEqual([a for a in review_arguments() if "--permission-mode" in a], ["--permission-mode default"])
+
+    def test_the_mention_workflow_states_accept_edits(self):
+        # The mention workflow's only claude_args. The action appends it after its own flags, so it decides the mode.
+        text = (WORKFLOW.parent / "claude.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
+        lines = [line.strip() for line in text.split("\n") if line.strip().startswith("claude_args:")]
+        self.assertEqual(lines, ["claude_args: --permission-mode acceptEdits"])
+
     def test_nothing_in_the_settings_can_switch_hooks_off(self):
         # The settings the workflow itself writes are the user settings, so --setting-sources user does not protect
         # against a switch placed in them. Only these two keys are allowed at the root, and the environment may
