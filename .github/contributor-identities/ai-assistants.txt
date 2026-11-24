@@ -6,7 +6,7 @@
 # One Python regular expression per line, matched case-insensitively with
 # re.search against the name and, separately, the address of each author,
 # committer and Co-authored-by line. Lines starting with '#' are ignored.
-# Read by check.py, check_text.py and the Contributor Identities workflow; see
+# Read by check.py in the Contributor Identities workflow; see
 # CONTRIBUTING.md.
 #
 # Names that are also common human names (Claude, Jules, Devin, Kiro, Cline)
