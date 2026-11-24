@@ -8,6 +8,13 @@ The entries from 2.1.0 down were written by hand, based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and keep that format.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.6](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.5...v3.1.6) (2026-11-23)
+
+
+### Bug Fixes
+
+* run Lefthook shell hooks through Bash ([#179](https://github.com/agenticcodingops/auto-code-scanning/issues/179)) ([83dc151](https://github.com/agenticcodingops/auto-code-scanning/commit/83dc151f65f4f63f888607927729645c270f0b04))
+
 ## [3.1.5](https://github.com/agenticcodingops/auto-code-scanning/compare/v3.1.4...v3.1.5) (2026-11-23)
 
 
