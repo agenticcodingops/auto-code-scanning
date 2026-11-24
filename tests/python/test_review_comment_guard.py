@@ -59,11 +59,16 @@ def indent_of(line):
 
 
 def review_block(key):
-    """The text of a multi-line input (`key: |`) in the `with:` mapping of the review step, de-indented.
+    """A multi-line input of the review step."""
+    return input_block(key, "Run Claude Code Review", TEXT)
+
+
+def input_block(key, name, text):
+    """The text of a multi-line input (`key: |`) in the `with:` mapping of the named step, de-indented.
 
     This is what the action actually receives. The key must be a direct child of that step's `with:`: the same key
     under `env:`, in another step, or in a comment is not an input of the action and does not count."""
-    step = step_text("Run Claude Code Review").split("\n")
+    step = step_text(name, text).split("\n")
     with_line = next(i for i, line in enumerate(step) if re.match(r"\s+with:\s*$", line))
     mapping = []
     for line in step[with_line + 1:]:
@@ -93,11 +98,11 @@ def review_arguments():
     return [line.strip() for line in review_block("claude_args").split("\n") if line.strip() and not line.strip().startswith("#")]
 
 
-def step_text(name):
+def step_text(name, text=TEXT):
     """The text of one workflow step, from its `- name:` line to the next step."""
-    start = TEXT.index("- name: " + name)
-    end = TEXT.find("\n      - name:", start + 1)
-    return TEXT[start:end if end != -1 else len(TEXT)]
+    start = text.index("- name: " + name)
+    end = text.find("\n      - name:", start + 1)
+    return text[start:end if end != -1 else len(text)]
 
 
 def step_run_block(name):
@@ -224,10 +229,12 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertEqual([a for a in review_arguments() if "--permission-mode" in a], ["--permission-mode default"])
 
     def test_the_mention_workflow_states_accept_edits(self):
-        # The mention workflow's only claude_args. The action appends it after its own flags, so it decides the mode.
+        # The action appends the step's claude_args input after its own flags, so that input decides the mode. Read
+        # it from the step's `with:` mapping: the same text under `env:` or in a comment would not reach the action.
         text = (WORKFLOW.parent / "claude.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
-        lines = [line.strip() for line in text.split("\n") if line.strip().startswith("claude_args:")]
-        self.assertEqual(lines, ["claude_args: --permission-mode acceptEdits"])
+        arguments = [line.strip() for line in input_block("claude_args", "Run Claude Code", text).split("\n")
+                     if line.strip() and not line.strip().startswith("#")]
+        self.assertEqual([a for a in arguments if "--permission-mode" in a], ["--permission-mode acceptEdits"])
 
     def test_nothing_in_the_settings_can_switch_hooks_off(self):
         # The settings the workflow itself writes are the user settings, so --setting-sources user does not protect
