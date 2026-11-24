@@ -456,7 +456,9 @@ To move to a newer (or different) `claude-code-action` release, change it in eve
 place listed above together, in the same commit, then re-pin consumers to the new tag:
 
 1. Update the `uses:` SHA, the trailing `# vX.Y.Z` comment and the header comment in
-   `.github/workflows/autonomous-fix.yml`.
+   `.github/workflows/autonomous-fix.yml`. Keep `--permission-mode acceptEdits` in that
+   step's `claude_args`: from v1.0.276 the action starts a run with a prompt in auto mode,
+   where a classifier decides the calls no rule covers.
 2. Update `fix_loop.claude_code_action_ref` to the **same** 40-char SHA in
    `scan-config.yaml`, the three files under `templates/scan-config/`, both example
    configs and `FIX-LOOP.md`.

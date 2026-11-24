@@ -815,6 +815,32 @@
       }
     },
     {
+      "id": "review-action",
+      "locations": [
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "pattern": "uses: anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/claude-code-review.yml",
+          "pattern": "uses: anthropics/claude-code-action@[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "pattern": "uses: anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": ".github/workflows/claude.yml",
+          "pattern": "uses: anthropics/claude-code-action@[0-9a-f]{40}\\s*#\\s*v(?P<value>\\d+(?:\\.\\d+)*)"
+        }
+      ],
+      "source": {
+        "type": "github_tags",
+        "repo": "anthropics/claude-code-action"
+      },
+      "precondition": "Re-measure before bumping this pin, and before loosening the guard step above: the\nplugin's `gh pr comment` grant is honoured on every CLI version measured, so the\nPR boundary rests on that guard, not on --allowedTools. Keep the explicit --permission-mode in both workflows (default for the review, acceptEdits for the mention workflow): from v1.0.276 the action starts sessions in auto mode."
+    },
+    {
       "id": "fix-action-mirrors",
       "locations": [
         {
@@ -835,6 +861,14 @@
         },
         {
           "file": "templates/scan-config/strict.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "examples/app-repo/scan-config.yaml",
+          "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
+        },
+        {
+          "file": "examples/terraform-repo/scan-config.yaml",
           "pattern": "anthropics/claude-code-action@(?P<value>[0-9a-f]{40})"
         }
       ],

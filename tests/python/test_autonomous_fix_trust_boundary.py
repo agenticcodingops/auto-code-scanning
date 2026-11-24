@@ -568,6 +568,9 @@ def test_agent_loads_no_repository_config(wf):
     args = agent["with"]["claude_args"]
     assert "--setting-sources user" in args, "load user-level settings only, never the project's"
     assert "--strict-mcp-config" in args, "start only the action's own MCP servers"
+    # From action v1.0.276 a run with a prompt starts in auto mode; the last mode given wins, so state exactly one.
+    modes = re.findall(r"--permission-mode\s+(\S+)", args)
+    assert modes == ["acceptEdits"], modes
     assert '"PreToolUse"' in agent["with"]["settings"]
     assert "disableAllHooks" not in agent["with"]["settings"]
 

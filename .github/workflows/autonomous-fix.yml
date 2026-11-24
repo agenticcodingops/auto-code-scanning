@@ -620,10 +620,16 @@ jobs:
               - Do NOT add or echo secrets/tokens anywhere.
               - Do NOT commit or push; just leave edits in the working tree.
               - Keep the diff small and self-contained.
+          # acceptEdits: the agent's job is to edit the checkout. Edit already covers every file
+          # tool, and the guard above still refuses any write outside the checkout or in .git and
+          # every shell command but the four PR reads, so this adds nothing past the guard. It
+          # keeps the run out of auto mode, which later action versions (v1.0.276 on) start a run
+          # with a prompt in. Keep it when the pin moves.
           claude_args: |
             --max-turns ${{ needs.config.outputs.max_turns }}
             --setting-sources user
             --strict-mcp-config
+            --permission-mode acceptEdits
             --allowedTools "Read,Edit,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ steps.ctx.outputs.pr }}/comments:*),Bash(gh api repos/${{ github.repository }}/issues/${{ steps.ctx.outputs.pr }}/comments:*)"
             --disallowedTools "WebSearch,WebFetch,Bash(git push:*),Bash(git commit:*),Bash(git reset:*),Bash(rm:*),Bash(curl:*),Bash(wget:*),Bash(gh pr merge:*),Bash(gh workflow:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(yarn:*),Bash(pnpm:*),Bash(bun:*),Bash(dotnet:*),Bash(semgrep:*),Bash(make:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(bash:*),Bash(sh:*)"
         continue-on-error: true   # any push attempt would 403 anyway (no write creds)
