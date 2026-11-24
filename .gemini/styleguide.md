@@ -86,6 +86,6 @@ This styleguide defines the architectural conventions, security boundaries, and 
 ## 7. Commit & PR Hygiene
 
 - **Conventional Commits**: Format commit messages using conventional prefixes: `feat:`, `fix:`, `ci:`, `docs:`, `refactor:`, `test:`.
-- **Branding & Metadata Guard**:
-  - Do not include AI assistant names or robot emojis in commit messages, PR titles, or branch names.
-  - Author and committer metadata must strictly match authorized project contributors.
+- **Commit identity**:
+  - An AI assistant must not be a commit's author or committer, and no `Co-authored-by` trailer may name one (see CONTRIBUTING.md, "Commit identities").
+  - Commit messages, PR titles and branch names may name any tool; do not ask authors to reword them.

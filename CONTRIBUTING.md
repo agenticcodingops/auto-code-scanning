@@ -269,20 +269,24 @@ not block review. The test, lint and self-test jobs run without secrets.
 ### Commit identities
 
 GitHub lists every author and every co-author (`Co-authored-by` line) of a commit on
-`main` as a contributor. Only members of the organisation, the bots this
-repository's own workflows use, and the tools the maintainer approves may appear there.
+`main` as a contributor. An AI assistant must never appear there (maintainer's
+policy, 2026-11-23).
 
-- Commit under your own identity. Do not add a `Co-authored-by` line for an AI
-  assistant such as Claude or Codex, and do not let one author or push a commit.
-- CodeRabbit may author and commit: its coding agent opens pull requests under its
-  own identity (maintainer's decision, 2026-11-23).
-- The Contributor Identities workflow reports any author, committer or co-author not
-  listed in `.github/contributor-identities/allowed-identities.txt`. Semgrep and
-  SonarCloud may also appear as co-authors, through `allowed-coauthors.txt`.
-- The `main` ruleset requires this check, so a red result blocks the merge. Fix the
-  commit, or ask the maintainer to approve the identity.
-- Add an address to a list only for a new organisation member, a new workflow bot, or
-  a tool the maintainer approves.
+- An AI assistant such as Claude or Codex, or a model such as Opus or GPT-5, must not
+  be a commit's author or committer, and no `Co-authored-by` line may name one.
+  Agents may push commits made under a human or orchestrator identity.
+- Every other identity passes: people, code-quality bots (CodeRabbit, Semgrep,
+  SonarCloud), Dependabot, the release bot and this repository's workflow bots.
+- Commit subjects and bodies, branch names and PR titles are not checked, so they may
+  name a tool. A `Signed-off-by` line is not contributor credit and is not checked.
+- PR and issue descriptions must not carry AI attribution wording: no
+  `Co-authored-by` line naming an AI assistant and no "Generated with" byline naming
+  one. Other text may name any tool.
+- The Contributor Identities workflow reports any author, committer or co-author that
+  matches a pattern in `.github/contributor-identities/ai-assistants.txt`, by name
+  or by address. The `main` ruleset requires this check, so a red result blocks the
+  merge. Re-commit the change under a permitted identity and drop the trailer.
+- Add a pattern to the list when a new AI assistant can author commits.
 
 How releases are cut, and what consumers must do to pick one up, is in
 [the maintainer guide](docs/MAINTAINERS.md).

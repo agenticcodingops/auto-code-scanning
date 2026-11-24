@@ -2,11 +2,12 @@
 # CONTRIBUTOR IDENTITIES
 # auto-code-scanning
 #
-# Reports commits whose author, committer or co-author is not on the approved
-# lists: organisation members, this repository's workflow bots and the tools the
-# maintainer approves. GitHub lists every author and
-# co-author on main as a contributor. Lists and script:
-# .github/contributor-identities/. Policy: CONTRIBUTING.md, "Commit identities".
+# Reports commits whose author, committer or co-author is an AI assistant,
+# matched by name or address against a deny list. Every other identity passes:
+# people, code-quality bots, dependency and release bots, and this repository's
+# workflow bots. GitHub lists every author and co-author on main as a
+# contributor. List and script: .github/contributor-identities/.
+# Policy: CONTRIBUTING.md, "Commit identities".
 #
 # The main ruleset requires this check, so a finding blocks the merge. It reads
 # commits only and executes nothing from them.
@@ -61,8 +62,8 @@ jobs:
           python3 -I .github/contributor-identities/check.py "$revs" || status=$?
           echo "::$token::"
           if [ "$status" -eq 1 ]; then
-            echo "::error::A commit identity would list a non-member as a contributor. See CONTRIBUTING.md, \"Commit identities\"."
+            echo "::error::A commit would list an AI assistant as a contributor. See CONTRIBUTING.md, \"Commit identities\"."
           elif [ "$status" -ne 0 ]; then
-            echo "::error::The identity check could not run (exit $status): a list file is missing or git could not read the commits. See the log above."
+            echo "::error::The identity check could not run (exit $status): the deny list is missing, empty or invalid, or git could not read the commits. See the log above."
           fi
           exit "$status"
